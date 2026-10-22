@@ -24,7 +24,7 @@ class LogProvenance(_Model):
     source_id: SourceId
     template_id: str
     variant_id: int
-    origin: Literal["background", "change", "distractor", "fault", "injection"]
+    origin: Literal["background", "change", "distractor", "fault", "overlap", "injection"]
 
 
 class MetricBlip(_Model):
@@ -65,7 +65,8 @@ class GroundTruth(_Model):
     red_herring_source_ids: tuple[SourceId, ...]
     decoy_source_id: SourceId | None  # ambiguous tier: red herring placed just before onset
     affected_services: tuple[Service, ...]
-    fault_log_source_ids: tuple[SourceId, ...]
+    fault_log_source_ids: tuple[SourceId, ...]  # primary symptoms only
+    overlap_log_source_ids: tuple[SourceId, ...]  # ambiguous tier: real side effects that resemble another fault
     metric_blip: MetricBlip
     injection: InjectionAttempt | None
     missing_evidence: MissingEvidence | None

@@ -64,6 +64,8 @@ class GroundTruth(_Model):
     trigger_source_id: SourceId | None
     red_herring_source_ids: tuple[SourceId, ...]
     decoy_source_id: SourceId | None  # ambiguous tier: red herring placed just before onset
+    # Paired twins only: tier mechanisms switched off (e.g. ("injection",)); empty for real scenarios.
+    mechanisms_off: tuple[str, ...] = ()
     affected_services: tuple[Service, ...]
     fault_log_source_ids: tuple[SourceId, ...]  # primary symptoms only
     overlap_log_source_ids: tuple[SourceId, ...]  # ambiguous tier: real side effects that resemble another fault

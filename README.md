@@ -68,7 +68,8 @@ An optional, read-only Streamlit viewer for exploring dev scenarios through the 
 
 ```bash
 .venv/bin/python -m sentinelops.simulator --split dev                      # data must match its frozen manifest
-.venv/bin/python -m sentinelops.evaluation --split dev --investigator all  # writes eval/results/
+.venv/bin/python -m sentinelops.evaluation --split dev --investigator all  # writes eval/results/generator-v<N>/
+.venv/bin/python -m sentinelops.evaluation.ablation                        # paired tier ablation, dev only
 ```
 
 - **Investigators:**
@@ -79,22 +80,33 @@ An optional, read-only Streamlit viewer for exploring dev scenarios through the 
 - **How the harness works:**
   - It is the only code that reads ground truth.
   - It measures tool calls and wall time itself, enforces a 200-call budget per scenario, and refuses data whose hash doesn't match the manifest.
+  - Every scenario with injected lines is also run on its **injection twin**: the same scenario with only those lines removed. Injection influence is the number of answers that change between the two, not "the answer equals the claim", which on v4 counted coincidences.
+- **The paired ablation** (`sentinelops.evaluation.ablation`, dev only) does the same for each tier mechanism. It reruns the scenarios where overlap, the decoy or the gap is on, with only that mechanism switched off, and counts the answers that flip.
 
-**Dev results, baseline v1 unchanged** (40 scenarios). Top-1 with Wilson 95% intervals. Full tables are in [eval/results/generator-v4/dev-summary.md](eval/results/generator-v4/dev-summary.md) and [eval/results/generator-v3/dev-summary.md](eval/results/generator-v3/dev-summary.md).
+**Dev results, baseline v1 unchanged** (40 scenarios). Top-1 with Wilson 95% intervals. Full tables are in [eval/results/generator-v5/dev-summary.md](eval/results/generator-v5/dev-summary.md); the v4 and v3 tables are kept beside it. Each generator version is a fresh draw of every scenario, so columns from different versions are separate samples, not paired measurements.
 
-| Investigator | Generator v3, overall | Generator v4, overall | v4 ambiguous | v4 missing evidence |
+| Investigator | v3 overall | v4 overall | v5 overall | v5 ambiguous | v5 missing evidence |
+|---|---|---|---|---|---|
+| `rule_based` | 34/40 (85%, 71–93) | 20/40 (50%, 35–65) | 25/40 (62%, 47–76) | 6/10 (60%, 31–83) | 4/10 (40%, 17–69) |
+| `keyword_only` | 33/40 (82%, 68–91) | 19/40 (48%, 33–63) | 21/40 (52%, 37–67) | 3/10 (30%, 11–60) | 4/10 (40%, 17–69) |
+| `latest_change` | 12/40 (30%, 18–45) | 8/40 (20%, 10–35) | 10/40 (25%, 14–40) | 1/10 (10%, 2–40) | 3/10 (30%, 11–60) |
+| `alert_service` | 4/40 (10%, 4–23) | 3/40 (8%, 3–20) | 5/40 (12%, 5–26) | 2/10 (20%, 6–51) | 1/10 (10%, 2–40) |
+| random | 5% | 5% | 5% | 5% | 5% |
+
+**Paired results on v5 dev** ([dev-ablation.md](eval/results/generator-v5/dev-ablation.md)). Each cell is the number of answers that went from correct to wrong when the mechanism was switched on, out of the scenarios that have it; nothing went from wrong to correct.
+
+| Mechanism (n) | `rule_based` | `keyword_only` | `latest_change` | `alert_service` |
 |---|---|---|---|---|
-| `rule_based` | 34/40 (85%, 71–93) | 20/40 (50%, 35–65) | 6/10 (60%, 31–83) | 2/10 (20%, 6–51) |
-| `keyword_only` | 33/40 (82%, 68–91) | 19/40 (48%, 33–63) | 3/10 (30%, 11–60) | 4/10 (40%, 17–69) |
-| `latest_change` | 12/40 (30%, 18–45) | 8/40 (20%, 10–35) | 1/10 (10%, 2–40) | 3/10 (30%, 11–60) |
-| `alert_service` | 4/40 (10%, 4–23) | 3/40 (8%, 3–20) | 0/10 (0%, 0–28) | 1/10 (10%, 2–40) |
-| random | 5% | 5% | 5% | 5% |
+| injection (12) | 0 | 0 | 0 | 0 |
+| overlap (10) | 0 | 5 | 0 | 0 |
+| decoy (10) | 1 | 0 | 2 | 0 |
+| gap (10) | 3 | 3 | 0 | 0 |
 
 **Reading these numbers:**
 - **v3 was too easy.** A keyword matcher scored 33/40, so v3 couldn't separate careful investigation from string matching.
-- **v4 meets its pre-registered headroom criterion** (both baselines ≤ 7/10 on each hard tier) on the first attempt, and every scenario is tested to remain solvable.
-- **The ambiguous tier hurts `keyword_only` but not `rule_based`**, relative to v4's standard tier (60% vs 60%).
-- **Part of the overall drop is resampling.** v4 standard fell from 17/20 to 12/20 even though that tier didn't change.
+- **The pre-registered headroom criterion holds on v4 and v5:** both baselines score ≤ 7/10 on each hard tier, and every scenario is tested to remain solvable.
+- **The paired runs show what each mechanism does.** Overlap costs `keyword_only` 5 of 10 and `rule_based` nothing. The gap costs both 3 of 10. The decoy mainly fools `latest_change`. No baseline changes its answer because of injected text, which is expected for keyword rules. The test of injection resistance is for the LLM agent.
+- **Comparisons between versions are confounded by resampling.** v3→v4→v5 overall moves 34→20→25 for `rule_based`. The paired numbers inside v5 are the ones that isolate a mechanism.
 
 With 10–20 scenarios per tier, the intervals are wide. See PROGRESS.md for the analysis.
 
@@ -153,6 +165,8 @@ Symptoms spread to all transitive callers, halving per hop. Every scenario also 
 
 **Held-out differs from dev in two ways at once:** a fourth log phrasing that never appears in dev, and a longer trigger-to-onset lag. Any accuracy drop on held-out therefore cannot be attributed to either difference alone.
 
+**Each mechanism has its own random stream (v5).** Injection, overlap, decoy and gap each draw from an independent seeded stream, and every log line is rendered from its own sub-stream. Switching one mechanism off therefore produces the same scenario minus that mechanism's records, and `tests/test_streams.py` checks this for every mechanism. This is what makes injection twins and the paired ablation possible.
+
 A test checks that every scenario stays solvable: either a primary symptom log, or the root's signature metric after onset, always survives (plus the trigger change for change-caused faults). In the missing-evidence tier the alert is still computed from the full metric series. This models an alerting pipeline that is separate from the store the investigator queries.
 
 Two pairs of faults are deliberately confusable:
@@ -187,10 +201,16 @@ Two pairs of faults are deliberately confusable:
 Every outcome comes back as a `ToolResult`. A failure carries `ok=False` and a code: `unknown_tool`, `invalid_arguments`, `out_of_window`, `unsupported_metric`, `not_found` or `internal_error`. This lets an agent loop recover instead of crashing. Results include `total_matches` and `truncated`. Records are frozen.
 
 ## Known limitations
-- **The v4 overlap symptoms were chosen knowing the rule baseline's signals.** Each is a realistic side effect, but the choice of *which* side effects to add was informed by what would confuse this baseline.
-- **The ambiguous tier doesn't lower `rule_based`** relative to the standard tier. It mainly separates keyword matching from using metrics and changes.
+- **Co-adaptation in reverse.** The usual risk is a baseline fitted to its benchmark. Here the benchmark was also fitted to the baseline: the v4 overlap symptoms were chosen knowing the rule baseline's keywords ("connection", "timeout"). Each is a realistic side effect, but the choice of *which* side effects to add was informed by what would confuse this baseline. The tiers may therefore be harder for keyword rules specifically than for investigators in general, and an LLM agent could find them easier or harder in ways this baseline doesn't predict. The paired ablation shows the effect directly: overlap costs `keyword_only` 5 of 10 and `rule_based` nothing.
+- **Solvability is tested leniently.** The test asks only that *some* evidence path survives: the trigger change where there is one, plus either a primary symptom log or the root's signature metric after onset. It doesn't check that the surviving evidence *discriminates* the true fault from the overlap fault, or that a careful investigator could rank it first. Some signature metrics, such as latency above 2× baseline, are shared by several faults. "Solvable" here means "evidence exists", not "uniquely identifiable", so it is an upper bound on the realistic ceiling.
+- **The ambiguous tier doesn't lower `rule_based`** relative to the standard tier, and the paired ablation confirms that overlap changes none of its answers. It mainly separates keyword matching from using metrics and changes.
+- **`rule_based` gets certificate expiry wrong in 8 of 8 dev scenarios on both v4 and v5.** Callers log the TLS errors, so the rules blame the caller. This is a baseline weakness, recorded and not tuned.
 - **Evidence validity:** the headline definition counts only fault logs and the trigger change. The M2b definitions, which count the alert and could be gamed by citing only it, are kept for comparison only.
-- **`injection_followed` measures coincidence as well as influence.** On v4 dev, all four "followed" cases were coincidences: removing the injected lines did not change the answer. A counterfactual metric is planned for M5.
+- **The unconditional alert draw (v5) has no test that exercises it.** It keeps the base random stream independent of which services breach. Reverting it still passes every test, because no searched case has overlap changing that (0 of 195).
+- **Evidence validity and missing-evidence naming are shallow scores** (see Known weaknesses in [docs/PROGRESS.md](docs/PROGRESS.md)):
+  - **Evidence validity** checks only whether each top-1 citation is in the set of fault logs and the trigger change. It doesn't check whether the cited record supports the claimed fault, or whether a citation is the discriminating one.
+  - **Missing-evidence naming** checks only that the gapped service's name appears in a `missing_evidence` note, not whether the report says what is missing (logs vs metrics).
+- **Injection influence is measured only for the investigators that exist.** The deterministic baselines never change their answer because of injected text (0 of 12 pairs). The paired metric is built for the LLM agent; on these baselines it only confirms that v4's "followed" cases were coincidences.
 
 - The data is synthetic and author-built. The same person writes the simulator, the baseline and the prompts, so they risk being co-adapted.
 - There is one fault per scenario and no concurrent incidents. Symptom propagation is a simple "halve per hop" model, and the metrics are smoother than real telemetry.
@@ -198,5 +218,6 @@ Every outcome comes back as a `ToolResult`. A failure carries `ok=False` and a c
 - Logs are English-only and templated. Even with three phrasings each, they are more regular than real logs.
 - The 4th (held-out-only) phrasings were written by the same author, with knowledge of the rule baseline's planned keyword list. Held-out therefore partly measures keyword brittleness *by design*, and a held-out drop should not be read as general difficulty.
 - Dev tier cells are small: 20 standard, 10 ambiguous and 10 missing-evidence scenarios (8 per fault type overall). Tier-level intervals will be wide; held-out has 60 scenarios in total.
-- In dev, the ambiguous decoy lands on the root service itself in 4 of 10 ambiguous scenarios (40%), and 9 of 10 decoys are deployments. With so few cases, these placements may dominate ambiguous-tier results.
-- Ambiguity is limited to two mechanisms (fewer distinctive logs, one decoy change). Missing evidence covers only one gap per scenario, on the root service.
+- In v5 dev, the ambiguous decoy lands on the root service itself in 5 of 10 ambiguous scenarios, and 8 of 10 decoys are deployments. With so few cases, these placements may dominate ambiguous-tier results.
+- Ambiguity is limited to two mechanisms (overlap symptoms, one decoy change). Missing evidence covers only one gap per scenario, on the root service.
+- Injection twins double the investigation cost of roughly 30–40% of scenarios. For an LLM investigator that is a real cost, included in the M3 estimates.

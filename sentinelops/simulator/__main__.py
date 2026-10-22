@@ -16,6 +16,8 @@ from pathlib import Path
 from sentinelops.scenario_files import dump_json, write_observable
 from sentinelops.simulator.datasets import (
     DEFAULT_MANIFEST_DIR,
+    TWINS_DIR,
+    build_injection_twins,
     build_manifest,
     build_split,
     content_sha256,
@@ -39,11 +41,12 @@ def _adhoc(seed: int, n: int, out: Path) -> None:
 
 def _split(split: Split, out: Path, manifest_dir: Path, freeze: bool) -> None:
     scenarios = build_split(split)
+    twins = build_injection_twins(split, scenarios)
     # Start clean so stale files from older generator versions cannot change the hash.
-    # Only the two subdirectories this command owns are removed.
-    for owned in ("scenarios", "ground_truth"):
+    # Only the subdirectories this command owns are removed.
+    for owned in ("scenarios", "ground_truth", TWINS_DIR):
         shutil.rmtree(out / owned, ignore_errors=True)
-    write_split(scenarios, out)
+    write_split(scenarios, out, twins)
     sha256 = content_sha256(out)
     frozen = load_manifest(split, manifest_dir)
     if freeze:
@@ -55,7 +58,7 @@ def _split(split: Split, out: Path, manifest_dir: Path, freeze: bool) -> None:
     # Held-out: count and hash only. Never IDs, paths or contents.
     print(f"{split.value}: {len(scenarios)} scenarios, sha256={sha256} ({status})")
     if split is Split.DEV:
-        print(f"wrote {out}")
+        print(f"wrote {out} ({len(twins)} injection twins)")
 
 
 def main(argv: list[str] | None = None) -> int:

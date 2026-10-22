@@ -15,6 +15,8 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 - Generate data: `.venv/bin/python -m sentinelops.simulator --split dev` (frozen dev split → `data/dev/`), or `--seed 1 --n 5` for ad-hoc scenarios. `data/` is gitignored
 - Never print, open or inspect held-out data (`data/heldout/`). Generating it prints only a count and hash
 - Evaluate on dev: `.venv/bin/python -m sentinelops.evaluation --split dev --investigator all` (writes `eval/results/`). Held-out needs `--final` and runs only at milestone comparisons
+- Paired tier ablation (dev only): `.venv/bin/python -m sentinelops.evaluation.ablation`
+- Viewer against real data: `.venv/bin/python scripts/check_viewer_real_data.py` (renders every page headlessly on `data/dev` and all of `eval/results`; must print `OK`)
 
 ## Invariants (enforced by tests; don't break them)
 - `sentinelops/tools/`, `models.py`, `scenario_files.py`, `report.py` and `sentinelops/baselines/` must never import `sentinelops.simulator`; only the simulator and `sentinelops/evaluation/` read ground truth
@@ -24,6 +26,7 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 - Alert summaries describe symptoms only, never a fault type or cause
 - `template_id`/`variant_id` and other labels live only in ground truth, never in observable files
 - Same seed → byte-identical output; no wall-clock time or hash-order dependence
+- Each difficulty mechanism (injection, overlap, decoy, gap) draws only from its own stream; switching one off changes only its own records (`tests/test_streams.py`). Injection twins live under `<split>/twins/` and are covered by the manifest hash
 - No database service in the simulated system: pool health is a per-service metric (`db_pool_utilization_pct`); scenarios are stored as JSON/JSONL files, not in a DB
 - Tool calls return structured errors (`ok=False`, `error.code`) and never raise
 - Every list tool has a capped `limit` and returns `truncated`; `get_alert`/`get_record` return at most one item
@@ -38,14 +41,16 @@ Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS
 - Done: **M2a** (tiers, split, frozen manifests; merged to `main`, 6ef60fc)
 - Done: **viewer page 1** (M1 scenario explorer; merged to `main`)
 - Done: **M2b** (report contract, rule baseline v1, floors, harness, first dev numbers; merged to `main`)
-- Done, awaiting review: **M2 follow-ups** (get_window, headline evidence validity, missing-evidence naming, generator v4 with both manifests refrozen, M2 viewer page; branch `m2c-benchmark-v4`)
-- Next: user review. M3 does not start until the user says so
+- Done: **M2 follow-ups** (get_window, headline evidence validity, missing-evidence naming, generator v4, M2 viewer page; merged to `main`, 6d9a943)
+- Done: **M2 complete**, including generator v5 (independent mechanism streams, injection twins, paired injection metric, dev paired ablation, viewer fix); merged to `main`
+- Next: **M3 planning approved, not started.** Settle the Ollama install, model size and hosted-model questions before any M3 code
 
 ## Standing rules
 
 ### Working rules (every milestone)
 - Before coding: inspect the repo, explain what will be built and why, list files to create or change, and wait for approval if the design changes anything previously decided.
 - Implement the smallest complete version, add tests, run them, fix failures. Never call something done until tests have actually been run and the output has been shown.
+- Before calling any milestone done, also render the viewer against real data (`scripts/check_viewer_real_data.py`) and show its output. Tests on synthetic fixtures are not enough: the M2 page passed its tests but crashed on the real v5 results folder.
 - After implementing, give: (a) how to run and verify it, (b) a plain-English explanation of each important design decision with alternatives and trade-offs (interview-ready), (c) a critical self-review covering the weakest parts, missing tests, risks and anything misleading. Do not just praise the work.
 - Commit with meaningful messages after each verified milestone, and update and commit `docs/PROGRESS.md`. Never commit secrets or real data.
 - Keep it simple: no FastAPI, Docker, CI, UI, vector DB, multiple agents or extra dependencies until the roadmap says so or it has been justified. Ask before adding any dependency or paid service, with a cost estimate and a free alternative.

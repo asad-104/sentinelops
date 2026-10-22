@@ -214,7 +214,9 @@ def test_result_versions_newest_first_and_dev_only(results_dir: Path) -> None:
     from app.dev_data import dev_result_versions, dev_results
 
     assert dev_result_versions(results_dir) == ["generator-v4", "generator-v3"]
-    assert set(dev_results(results_dir, "generator-v4")) == {"rule_based", "keyword_only", "latest_change", "alert_service"}
+    loaded = dev_results(results_dir, "generator-v4")
+    assert set(loaded.investigators) == {"rule_based", "keyword_only", "latest_change", "alert_service"}
+    assert loaded.skipped == []
     with pytest.raises(ViewerDataError):
         dev_results(results_dir, "../heldout")
 
@@ -249,3 +251,110 @@ def test_m2_page_draws_floors_as_reference_lines(dev_root: tuple[Path, list], re
     at.radio(key="results_metric").set_value("Top-3").run()
     at.selectbox(key="results_version").set_value("generator-v3").run()
     assert not at.exception
+
+
+INVESTIGATORS = ("rule_based", "keyword_only", "latest_change", "alert_service")
+SLICES = ("overall", "standard", "ambiguous", "missing_evidence")
+
+
+def _write_ablation(results_dir: Path) -> dict:
+    """An ablation file in the shape ``sentinelops.evaluation.ablation`` writes, built with its own counter."""
+    from sentinelops.evaluation.ablation import paired_counts
+
+    t, w = ("orders", "bad_deployment"), ("auth", "memory_leak")
+    triples = {"injection": [(t, t, t)] * 12, "overlap": [(t, w, t)] * 3 + [(t, t, t)] * 7,
+               "decoy": [(t, w, w)] * 10, "gap": [(t, w, t)] * 2 + [(t, t, w)] * 8}
+    data = {"split": "dev", "metadata": {"generator_version": "5", "manifest_sha256": "0" * 64,
+                                         "git_commit": "test", "call_budget": 200},
+            "ablation": {m: {name: paired_counts(tr) for name in INVESTIGATORS} for m, tr in triples.items()}}
+    dump_json(results_dir / "dev-ablation.json", data)
+    (results_dir / "dev-ablation.md").write_text("# dev paired ablation\n")
+    (results_dir / "dev-summary.md").write_text("# dev results\n")
+    return data
+
+
+def _assert_m2_page_matches(at, version_dir: Path) -> None:
+    """The results table shows each investigator's k/n exactly as its file states, for every slice."""
+    files = {json.loads(p.read_text())["investigator"]: json.loads(p.read_text())["summary"]
+             for p in version_dir.glob("dev-*.json") if "investigator" in json.loads(p.read_text())}
+    table = next(df.value for df in at.dataframe if "overall" in df.value.columns)
+    assert set(table.index) == set(files)
+    for name, summary in files.items():
+        for slice_ in SLICES:
+            rate = summary["overall" if slice_ == "overall" else "per_tier"]
+            rate = rate["top1"] if slice_ == "overall" else rate[slice_]["top1"]
+            cell = table.loc[name, slice_]
+            assert cell == "n/a" if not rate["n"] else cell.startswith(f"{rate['k']}/{rate['n']} "), (name, slice_)
+
+
+def test_dev_results_skips_non_investigator_files(tmp_path: Path, dev_root: tuple[Path, list]) -> None:
+    from app.dev_data import dev_ablation, dev_results
+
+    version = tmp_path / "generator-v5"
+    _write_results(version, dev_root[1])
+    data = _write_ablation(version)
+    (version / "dev-broken.json").write_text("{not json")
+    loaded = dev_results(tmp_path, "generator-v5")
+    assert set(loaded.investigators) == set(INVESTIGATORS)
+    assert loaded.skipped == ["dev-ablation.json", "dev-broken.json"]
+    assert dev_ablation(tmp_path, "generator-v5") == data
+    assert dev_ablation(tmp_path, "generator-v4") is None
+
+
+def test_m2_page_renders_v5_layout_with_ablation(dev_root: tuple[Path, list], tmp_path: Path,
+                                                 monkeypatch: pytest.MonkeyPatch) -> None:
+    testing = pytest.importorskip("streamlit.testing.v1")
+    from app.dev_data import RESULTS_ENV
+
+    root = tmp_path / "results"
+    _write_results(root / "generator-v5", dev_root[1])
+    ablation = _write_ablation(root / "generator-v5")
+    _write_results(root / "generator-v4", dev_root[1])
+    monkeypatch.setenv(RESULTS_ENV, str(root))
+    at = testing.AppTest.from_file(str(M2_PAGE), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert [h.value for h in at.subheader] == ["Dev tier counts", "Dev results", "Paired ablation"]
+    assert any("dev-ablation.json" in i.value for i in at.info)
+    _assert_m2_page_matches(at, root / "generator-v5")
+    flips = next(df.value for df in at.dataframe if "mechanism" in df.value.columns)
+    for _, row in flips.iterrows():
+        per = ablation["ablation"][row["mechanism"]]
+        assert row["n"] == per["rule_based"]["n"]
+        assert all(row[name] == per[name]["correct_only_without"] for name in INVESTIGATORS)
+    assert "not effect size" in " ".join(c.value for c in at.caption)
+    # Versions without an ablation file show no ablation panel and no skipped-file note.
+    at.selectbox(key="results_version").set_value("generator-v4").run()
+    assert not at.exception and "Paired ablation" not in [h.value for h in at.subheader] and not at.info
+
+
+@pytest.mark.parametrize("version", sorted(p.name for p in (REPO_ROOT / "eval" / "results").glob("generator-v*")))
+def test_m2_page_renders_committed_results(version: str, dev_root: tuple[Path, list],
+                                           monkeypatch: pytest.MonkeyPatch) -> None:
+    """Render against the real eval/results (dev results are committed); numbers must match the files."""
+    testing = pytest.importorskip("streamlit.testing.v1")
+    from app.dev_data import RESULTS_ENV, dev_ablation
+
+    results = REPO_ROOT / "eval" / "results"
+    monkeypatch.setenv(RESULTS_ENV, str(results))
+    at = testing.AppTest.from_file(str(M2_PAGE), default_timeout=60)
+    at.run()
+    at.selectbox(key="results_version").set_value(version).run()
+    assert not at.exception, [e.value for e in at.exception]
+    _assert_m2_page_matches(at, results / version)
+    ablation = dev_ablation(results, version)
+    assert ("Paired ablation" in [h.value for h in at.subheader]) is (ablation is not None)
+
+
+def test_malformed_files_raise_viewer_errors_not_crashes(tmp_path: Path, dev_root: tuple[Path, list]) -> None:
+    from app.dev_data import dev_results
+
+    root, scenarios = dev_root
+    sid = scenarios[0][0].scenario_id
+    (root.parent / "ground_truth" / f"{sid}.json").write_text(json.dumps({"tier": "standard"}))
+    with pytest.raises(ViewerDataError):
+        dev_ground_truth(root, sid)
+    version = tmp_path / "generator-v5"
+    version.mkdir()
+    (version / "dev-old.json").write_text(json.dumps({"split": "dev", "investigator": "x", "summary": {"n": 1}}))
+    assert dev_results(tmp_path, "generator-v5") == ({}, ["dev-old.json"])

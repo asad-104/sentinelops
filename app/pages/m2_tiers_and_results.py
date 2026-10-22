@@ -2,7 +2,8 @@
 
 Reads only dev ground-truth summaries and dev result files (eval/results/
 generator-v<N>/dev-*.json). No scoring happens here: numbers are shown exactly
-as the evaluation harness wrote them.
+as the evaluation harness wrote them. Files that are not investigator results
+are named in a note; the paired-ablation file gets its own panel.
 """
 
 import sys
@@ -16,6 +17,7 @@ import streamlit as st  # noqa: E402
 
 from app.dev_data import (  # noqa: E402
     ViewerDataError,
+    dev_ablation,
     dev_result_versions,
     dev_results,
     dev_scenario_ids,
@@ -57,7 +59,9 @@ if not versions:
 version = st.selectbox("Results for", versions, key="results_version")
 metric_label = st.radio("Metric", list(METRICS), horizontal=True, key="results_metric")
 metric = METRICS[metric_label]
-results = dev_results(results_root(), version)
+results, skipped = dev_results(results_root(), version)
+if skipped:
+    st.info("Not investigator results, so not in the chart or table: " + ", ".join(skipped))
 if BASELINE not in results:
     st.warning(f"{version} has no {BASELINE} results")
     st.stop()
@@ -105,3 +109,15 @@ def _cell(row: pd.Series) -> str:
 table = frame.assign(result=frame.apply(_cell, axis=1))
 st.dataframe(table.pivot(index="investigator", columns="slice", values="result").reindex(columns=order),
              width="stretch")
+
+# Paired ablation (generator v5+): the counts exactly as the ablation run wrote them.
+ablation = dev_ablation(results_root(), version)
+if ablation is not None:
+    st.subheader("Paired ablation")
+    st.caption("Paired counts, n = 10 to 12, shows which mechanism acts on which investigator, not effect size. "
+               "Each cell: answers that went from correct to wrong when the mechanism was switched on.")
+    columns = [n for n in (BASELINE, *FLOORS) if any(n in per for per in ablation["ablation"].values())]
+    flips = [{"mechanism": mechanism, "n": next(iter(per.values()))["n"],
+              **{name: per[name]["correct_only_without"] for name in columns if name in per}}
+             for mechanism, per in ablation["ablation"].items() if per]
+    st.dataframe(pd.DataFrame(flips), hide_index=True, width="stretch")

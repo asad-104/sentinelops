@@ -36,6 +36,10 @@ class GetAlertInput(ToolInput):
     pass
 
 
+class GetWindowInput(ToolInput):
+    pass
+
+
 class SearchLogsInput(TimeWindowInput):
     service: Service | None = None
     min_level: LogLevel | None = None

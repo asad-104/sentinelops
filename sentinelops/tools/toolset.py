@@ -24,6 +24,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, ValidationError
 from sentinelops.models import (
     LEVEL_RANK,
     SCENARIO_ID_PATTERN,
+    ScenarioId,
     Alert,
     ConfigChange,
     Dependency,
@@ -37,6 +38,7 @@ from sentinelops.models import (
 from sentinelops.scenario_files import load_observable
 from sentinelops.tools.inputs import (
     GetAlertInput,
+    GetWindowInput,
     GetDependenciesInput,
     GetMetricsInput,
     GetRecordInput,
@@ -74,7 +76,17 @@ class TimelineEvent(BaseModel):
     description: str
 
 
-ToolItem = LogRecord | MetricPoint | Deployment | ConfigChange | Dependency | Alert | TimelineEvent
+class ScenarioWindow(BaseModel):
+    """The observation window. Contains only fields from the scenario manifest."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    scenario_id: ScenarioId
+    window_start: AwareDatetime
+    window_end: AwareDatetime
+
+
+ToolItem = LogRecord | MetricPoint | Deployment | ConfigChange | Dependency | Alert | TimelineEvent | ScenarioWindow
 
 
 class ToolErrorInfo(BaseModel):
@@ -119,6 +131,7 @@ class ToolSet:
         self._metric_series = {(p.service, p.metric) for p in observable.metrics}
         self._registry: dict[str, tuple[type[ToolInput], Callable[[Any], ToolResult]]] = {
             "get_alert": (GetAlertInput, self.get_alert),
+            "get_window": (GetWindowInput, self.get_window),
             "search_logs": (SearchLogsInput, self.search_logs),
             "get_metrics": (GetMetricsInput, self.get_metrics),
             "list_deployments": (ListChangesInput, self.list_deployments),
@@ -167,6 +180,11 @@ class ToolSet:
             return _error(tool, "internal_error", f"{tool} failed with {type(exc).__name__}")
 
     # Tools
+
+    def get_window(self, params: GetWindowInput | None = None) -> ToolResult:
+        window = ScenarioWindow(scenario_id=self._obs.scenario_id, window_start=self._obs.window_start,
+                                window_end=self._obs.window_end)
+        return _result("get_window", [window], 1)
 
     def get_alert(self, params: GetAlertInput | None = None) -> ToolResult:
         return _result("get_alert", [self._obs.alert], 1)

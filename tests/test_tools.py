@@ -25,7 +25,7 @@ def test_files_round_trip(scenarios_root: Path, small_dataset: list[Scenario]) -
 
 def test_exposes_only_read_tools(toolset: ToolSet) -> None:
     assert set(toolset.tool_names) == {
-        "get_alert", "search_logs", "get_metrics", "list_deployments", "list_config_changes",
+        "get_alert", "get_window", "search_logs", "get_metrics", "list_deployments", "list_config_changes",
         "get_dependencies", "get_timeline", "get_record",
     }
 
@@ -35,6 +35,18 @@ def test_returned_records_are_immutable(toolset: ToolSet) -> None:
     with pytest.raises(ValidationError):
         record.message = "tampered"  # type: ignore[misc]
     assert toolset.call("search_logs", {"limit": 1}).items[0] == record
+
+
+def test_get_window_reveals_only_the_window(toolset: ToolSet, small_dataset: list[Scenario]) -> None:
+    obs, truth = small_dataset[0]
+    window = _ok(toolset.call("get_window")).items[0]
+    assert window.model_dump() == {"scenario_id": obs.scenario_id, "window_start": obs.window_start,
+                                   "window_end": obs.window_end}
+    text = window.model_dump_json().lower()
+    leaked = [v for v in (truth.diagnosis.fault_type.value, truth.tier.value, "onset", "fault", "trigger", "tier")
+              if v in text]
+    assert not leaked
+    assert window.window_start != truth.onset and window.window_end > truth.onset
 
 
 def test_get_alert(toolset: ToolSet, small_dataset: list[Scenario]) -> None:
@@ -87,7 +99,7 @@ def test_changes_and_timeline(toolset: ToolSet, small_dataset: list[Scenario]) -
     assert [e.timestamp for e in timeline] == sorted(e.timestamp for e in timeline)
 
 
-SINGLE_ITEM_TOOLS = {"get_alert", "get_record"}
+SINGLE_ITEM_TOOLS = {"get_alert", "get_window", "get_record"}
 
 
 def test_every_tool_bounds_its_results(toolset: ToolSet, small_dataset: list[Scenario]) -> None:
@@ -105,7 +117,7 @@ def test_every_tool_bounds_its_results(toolset: ToolSet, small_dataset: list[Sce
         assert len(result.items) <= 1
         assert result.truncated == (result.total_matches > 1), name
     record_id = small_dataset[0].observable.logs[0].source_id
-    for name, args in (("get_alert", {}), ("get_record", {"source_id": record_id})):
+    for name, args in (("get_alert", {}), ("get_window", {}), ("get_record", {"source_id": record_id})):
         result = _ok(toolset.call(name, args))
         assert len(result.items) == 1 and result.truncated is False
 

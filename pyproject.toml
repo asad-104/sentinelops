@@ -1,0 +1,13 @@
+[project]
+name = "sentinelops"
+version = "0.1.0"
+description = "Evidence-driven incident investigation agent over simulated e-commerce incidents"
+requires-python = ">=3.11"
+dependencies = ["pydantic>=2.7,<3"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

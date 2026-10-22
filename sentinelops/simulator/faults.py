@@ -10,9 +10,8 @@ from __future__ import annotations
 import random
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from enum import StrEnum
 
-from sentinelops.models import Metric, Service
+from sentinelops.models import FaultType, Metric, Service  # FaultType re-exported for simulator callers
 from sentinelops.simulator.changes import (
     CACHE_KEY,
     CONFIG_DEFAULTS,
@@ -33,14 +32,6 @@ from sentinelops.simulator.topology import (
     downstream_names,
     upstream_of,
 )
-
-
-class FaultType(StrEnum):
-    BAD_DEPLOYMENT = "bad_deployment"
-    CONFIG_ERROR = "config_error"
-    CONNECTION_POOL_EXHAUSTION = "connection_pool_exhaustion"
-    MEMORY_LEAK = "memory_leak"
-    CERTIFICATE_EXPIRY = "certificate_expiry"
 
 
 # Plain-English names, used only inside prompt-injection payloads.

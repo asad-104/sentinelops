@@ -241,6 +241,42 @@ Every one is ≤ 7/10, and the solvability tests pass on every generated test sc
 4. **The floors stay far below** (`alert_service` 3/40, `latest_change` 8/40, random 5%), so the benchmark still rewards real signal.
 5. **`injection_followed` is not evidence of influence.** `rule_based` and `keyword_only` each "followed" an injection 2/15 times on v4. Rerunning those scenarios with the injection lines removed gave the same top-1 in all four cases: the baseline's wrong answer coincided with the injection's randomly chosen wrong claim. For M5 this metric should become a counterfactual: does removing the injected lines change the answer?
 
+## Paired twins and tier ablation: goal and criterion (recorded 2026-10-22, before any generator change)
+Context: v4's `injection_followed` turned out to be coincidence (see reading 5 above), and v4's tier effects can't be separated from resampling (reading 3). User decision: make the generator change now, and only now.
+
+**Goal**
+1. **Injection twins.** For every scenario with injected lines, a twin that is the same scenario with only those lines removed. No other random draw shifts.
+2. **Paired tier ablation (dev only).** The same scenarios with each tier mechanism turned off, compared with the original where it is on:
+   - ambiguity overlap symptoms
+   - the decoy change
+   - the missing-evidence gap
+
+**Implementation, fixed now**
+- **Separate streams.** Each mechanism (injection, overlap, decoy, gap) gets its own random-number stream, seeded from (version, seed, index, mechanism name). Everything else stays on the base stream.
+- **Per-event rendering.** Every log line is rendered with its own sub-stream, seeded by one fixed-size draw from its mechanism's stream. A different service or template then can't change how many base draws are consumed.
+- **Gap applied after rendering.** Events are rendered first, then the gap filter removes the root's logs.
+- **Alert choice pre-drawn.** The alert's random choice is drawn unconditionally.
+- **Test.** For each mechanism, generate on and off for many seeds, faults and tiers. The two must be identical apart from that mechanism's own records (source IDs renumber). Where the mechanism changes derived values, such as overlap deltas changing which alert fires, the test exempts exactly those values and documents why.
+- **Versioning.** Bump `GENERATOR_VERSION` to 5 and refreeze both manifests. Injection twins are written with each split under `twins/` and are covered by the content hash.
+- **Baselines unchanged.** Baseline v1 and the floors are rerun unchanged on v5 dev.
+
+**Metrics**
+- **Injection.** `injection_followed` is replaced by two paired metrics over scenarios with an injection:
+  - *answer changed*: the top-1 differs between original and twin
+  - *changed to claim*: it changed, and the original's top-1 is the injection's claimed diagnosis
+- **Ablation.** For each mechanism and investigator, report:
+  - n affected
+  - unchanged answers
+  - both correct and both wrong
+  - correct only without the mechanism
+  - correct only with it
+
+**Criterion, fixed now**
+- Paired flips are reported as counts, together with the unchanged scenarios. No pass or fail threshold is set for them; they are descriptive.
+- The v4 headroom criterion is re-checked on v5 dev: `rule_based` and `keyword_only` each ≤ 7/10 top-1 on the ambiguous tier and ≤ 7/10 on the missing-evidence tier. The result is reported as is. **If it fails, nothing is tuned.** The one difficulty revision is not spent (user decision: no further revisions).
+- v5 is a fresh draw of every scenario, so v4 and v5 aggregate numbers differ partly by resampling. Only the paired numbers within v5 isolate a mechanism.
+- Time-box: 4 h. If it will be exceeded, drop the tier ablation and keep only the injection twins.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

@@ -1,14 +1,14 @@
 # SentinelOps progress
 
 ## Current milestone
-**Generator v5: paired twins and tier ablation (user decision, 2026-10-22). Done, awaiting review** on branch `m2d-paired-ablation`. The M2 follow-ups are merged into `main` and pushed (6d9a943). Done on the branch:
-- an independent random stream per difficulty mechanism
-- injection twins and the paired injection metric
-- the dev-only paired ablation
-- both manifests refrozen at v5
-- baseline v1 and the floors rerun unchanged
+**M2 is complete (2026-10-22).** All of it is merged into `main`: tiers, split, baseline, harness, generator v5 with paired twins and ablation, and the M2 viewer page. **M3 planning is approved but not started**; no M3 code exists. No held-out run has happened.
 
-The M3 plan has been proposed and awaits approval; no M3 code exists. No held-out run has happened.
+**M2 findings (dev only, synthetic, author-built data):**
+1. Baseline v1 was too easy for generator v3: `rule_based` 34/40, and even `keyword_only` 33/40.
+2. Generators v4 and v5 added headroom. Both baselines scored ≤ 7/10 on each hard tier, against the pre-registered criterion, met on the first attempt with 0 of 1 revisions used.
+3. The differences between `keyword_only` and `rule_based` are within the Wilson intervals on every version. v5 overall: 21/40 (37–67) vs 25/40 (47–76).
+4. In the paired ablation, overlap hurts keyword matching (`keyword_only` 5 of 10 hurt, `rule_based` 0), and the gap hurts both log readers (3 of 10 each).
+5. Injection had no effect on any baseline: 0 of 12 paired answers changed for all four investigators.
 
 ## Completed milestones
 - **M1: simulator, read-only tools, tests.** Verified 2026-10-22, 73 tests passing.
@@ -17,6 +17,7 @@ The M3 plan has been proposed and awaits approval; no M3 code exists. No held-ou
 - **Viewer page 1: M1 scenario explorer.** Verified 2026-10-22, 113 tests passing (20 viewer tests). Merged into `main`.
 - **M2b: baseline and evaluation.** Verified 2026-10-22, 141 tests passing. First dev numbers below. Merged into `main`.
 - **M2 follow-ups:** `get_window`, headline evidence, generator v4, M2 viewer page. Verified 2026-10-22, 176 tests passing. Merged into `main` (6d9a943) and pushed.
+- **M2 complete: generator v5, paired twins, tier ablation, viewer fix.** Verified 2026-10-22, 201 tests passing, and the viewer renders against real data (`scripts/check_viewer_real_data.py`). Merged into `main` and pushed.
 
 ## Decisions made
 | Decision | Reason |
@@ -368,6 +369,7 @@ Planned pages:
 - The viewer adds about 360 MB of dependencies to the shared `.venv`. The import-ban test keeps them out of the core package, but core tests now run in an environment that has pandas installed, so an accidental pandas dependency in a test could go unnoticed.
 - The simulator, the baseline and the prompts are all written by the same author, so co-adaptation is a real risk. The M2b results suggest it already happened: the keyword list matches the dev templates closely enough to score 32/32 on four faults.
 - Evidence validity under the M2b definitions counts the alert as relevant (citing only the alert scores 100%). Fixed by the headline definition; the old columns remain for comparison only.
+- Headline evidence validity is a membership check: a top-1 citation counts if it is a fault log or the trigger change. It doesn't check that the record supports the claimed fault or that it discriminates the fault from the overlap fault, and it is pooled with no interval.
 - The missing-evidence naming score only checks that the gapped service is named. It doesn't check whether the report says *what* is missing (logs vs metrics). The baseline can only detect log gaps.
 - Baseline v1 and the `latest_change` floor still derive the window start from a metric point (kept unchanged on purpose). New investigators should use `get_window`.
 - The v4 overlap mechanisms were designed knowing the baseline's signals ("connection", "timeout"). They are realistic side effects, but the choice of *which* side effects to add was informed by what would confuse this baseline.
@@ -392,4 +394,9 @@ Planned pages:
 - ~~**Ambiguous tier vs `rule_based`.**~~ Decided: no further difficulty revision (user decision, 2026-10-22). The v5 ablation shows why it doesn't bite: overlap changes none of `rule_based`'s answers.
 
 ## Next action
-User reviews generator v5 on `m2d-paired-ablation`, decides whether to merge and push, and approves (or amends) the M3 plan. No M3 code is written until then.
+**M3 planning: approved, not started.** The plan (LLM adapter interface, local Ollama/Qwen pilot on 5 dev scenarios plus twins, optional hosted model with cost estimates) is in the 2026-10-22 conversation. Before any code, settle the open choices:
+- installing Ollama
+- the model size, given 8 GB RAM and about 9 GB free disk
+- whether to use a hosted model, plus its dependency and spending cap
+
+Then pre-register the pilot questions here.

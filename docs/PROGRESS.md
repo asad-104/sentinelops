@@ -1,7 +1,14 @@
 # SentinelOps progress
 
 ## Current milestone
-**M2 follow-ups (user decisions, 2026-10-22).** Viewer page 1 and M2b are merged into `main`. In progress: tool and metric changes, a harder benchmark (generator v4), and the M2 viewer page. No held-out run has happened.
+**M2 follow-ups (user decisions, 2026-10-22): done, awaiting review** on branch `m2c-benchmark-v4`. Viewer page 1 and M2b are merged into `main` and pushed (894c21c). Done on the branch:
+- `get_window`
+- headline evidence validity, and the missing-evidence naming score
+- generator v4, with both manifests refrozen
+- baseline v1 rerun on v3 and v4 dev
+- the M2 viewer page
+
+No held-out run has happened.
 
 ## Completed milestones
 - **M1: simulator, read-only tools, tests.** Verified 2026-10-22, 73 tests passing.
@@ -248,13 +255,13 @@ Planned pages:
 | Milestone | Page |
 |---|---|
 | M1 | **Built.** Scenario explorer: alert, timeline, dependencies, metrics (one service or all), log search, record lookup, reveal answer |
-| M2 | Tier explorer: tier counts, and the dev results table with floors drawn as reference lines |
+| M2 | **Built.** Tiers and dev results: tier counts; top-1/top-3/service accuracy per tier for any generator version, rule baseline bars with Wilson intervals, floors as tick reference lines, random as a dashed line |
 | M3 | LLM pilot traces |
 | M4 | Agent run viewer: states shown in order, each tool call and the evidence it returned, hypotheses re-ranking as evidence arrives, every claim linked to its source record |
 | M5 | Three-way comparison (dev, plus logged final results) |
 | M6 | Demo walkthrough. Decide on a polish pass (Plotly or Altair charts, a styled timeline) based on remaining time |
 
-**UI quality bar.** The M2 page must draw floors as reference lines on the results chart. The M4 page must show the states in order, each tool call with its returned evidence, hypotheses re-ranking as evidence arrives, and every claim linked to its source record. M6 decides on a polish pass. The M2 page is owed after M2b.
+**UI quality bar.** The M2 page must draw floors as reference lines on the results chart. The M4 page must show the states in order, each tool call with its returned evidence, hypotheses re-ranking as evidence arrives, and every claim linked to its source record. M6 decides on a polish pass.
 
 ## Known weaknesses
 - With only 4 services, the gateway is upstream of everything and fires half the alerts (101/200, 50%, seed 7 standard set). The alert lands on the root service in 110/200 (55%), so "blame the alerting service" gets the service right about half the time. It will be reported as a floor in M2b.
@@ -287,4 +294,8 @@ Planned pages:
 - **Ambiguous tier vs `rule_based`.** The tier does not lower `rule_based` relative to standard. Leave as is (the criterion is met and the one revision is unused), or spend the revision? My recommendation is to leave it: spending the revision to beat one specific baseline would be tuning the benchmark to the baseline.
 
 ## Next action
-Per the user's decisions of 2026-10-22: (1) expose the scenario window to tools and add the strict-excluding-alert evidence validity and missing-evidence naming score; (2) pre-register the harder-benchmark principles, build generator v4, refreeze both manifests, and rerun baseline v1 and the floors on v4 dev beside the v3 results; (3) build the M2 viewer page. M3 does not start.
+User reviews the M2 follow-ups on `m2c-benchmark-v4` and decides:
+- whether to merge and push
+- the two new open questions (counterfactual injection metric; whether to spend the one remaining difficulty revision; recommendation: don't)
+
+M3 (LLM adapter interface and the 5-scenario local pilot) does not start until the user says so.

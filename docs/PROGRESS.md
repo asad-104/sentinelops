@@ -63,6 +63,7 @@ The M3 plan has been proposed and awaits approval; no M3 code exists. No held-ou
 | **v5:** Injection twins written with each split under `twins/`, covered by the content hash | Final held-out runs need twins without regenerating held-out in the harness; the hash freezes them with the split |
 | **v5:** Twins keep the original scenario ID; ground truth records `mechanisms_off` | Pairing is by ID; the twin's own answer key states what was removed |
 | **v5:** Twin runs get their own call budget and are excluded from tool-call and latency metrics | Those metrics describe one investigation; twin cost is reported separately in M3 cost estimates |
+| **Viewer fix:** `dev_results` loads only files shaped like investigator results and names every skipped file; the ablation file gets its own panel; malformed ground-truth files raise `ViewerDataError`. A real-data render (`scripts/check_viewer_real_data.py`) is a standing check before any milestone is done | The M2 page crashed with `KeyError: 'summary'` on the real v5 folder, because `dev-ablation.json` matches `dev-*.json`. Its tests used fixtures without that file, and the page was never rendered on real data |
 | **v5:** Tier ablation generated in memory, dev only, after checking every regenerated original equals the frozen file on disk | The ablation is analysis, not a benchmark split; no ablated data is stored or frozen, and held-out can't be ablated (no split argument) |
 
 ## Held-out freeze rule

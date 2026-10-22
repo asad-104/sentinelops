@@ -42,8 +42,8 @@ Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS
 - Done: **viewer page 1** (M1 scenario explorer; merged to `main`)
 - Done: **M2b** (report contract, rule baseline v1, floors, harness, first dev numbers; merged to `main`)
 - Done: **M2 follow-ups** (get_window, headline evidence validity, missing-evidence naming, generator v4, M2 viewer page; merged to `main`, 6d9a943)
-- Done, awaiting review: **generator v5** (independent mechanism streams, injection twins, paired injection metric, dev paired ablation, both manifests refrozen; branch `m2d-paired-ablation`)
-- Next: user review of v5 and approval of the M3 plan. No M3 code until approved
+- Done: **M2 complete**, including generator v5 (independent mechanism streams, injection twins, paired injection metric, dev paired ablation, viewer fix); merged to `main`
+- Next: **M3 planning approved, not started.** Settle the Ollama install, model size and hosted-model questions before any M3 code
 
 ## Standing rules
 

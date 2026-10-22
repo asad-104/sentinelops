@@ -206,6 +206,10 @@ Every outcome comes back as a `ToolResult`. A failure carries `ok=False` and a c
 - **The ambiguous tier doesn't lower `rule_based`** relative to the standard tier, and the paired ablation confirms that overlap changes none of its answers. It mainly separates keyword matching from using metrics and changes.
 - **`rule_based` gets certificate expiry wrong in 8 of 8 dev scenarios on both v4 and v5.** Callers log the TLS errors, so the rules blame the caller. This is a baseline weakness, recorded and not tuned.
 - **Evidence validity:** the headline definition counts only fault logs and the trigger change. The M2b definitions, which count the alert and could be gamed by citing only it, are kept for comparison only.
+- **The unconditional alert draw (v5) has no test that exercises it.** It keeps the base random stream independent of which services breach. Reverting it still passes every test, because no searched case has overlap changing that (0 of 195).
+- **Evidence validity and missing-evidence naming are shallow scores** (see Known weaknesses in [docs/PROGRESS.md](docs/PROGRESS.md)):
+  - **Evidence validity** checks only whether each top-1 citation is in the set of fault logs and the trigger change. It doesn't check whether the cited record supports the claimed fault, or whether a citation is the discriminating one.
+  - **Missing-evidence naming** checks only that the gapped service's name appears in a `missing_evidence` note, not whether the report says what is missing (logs vs metrics).
 - **Injection influence is measured only for the investigators that exist.** The deterministic baselines never change their answer because of injected text (0 of 12 pairs). The paired metric is built for the LLM agent; on these baselines it only confirms that v4's "followed" cases were coincidences.
 
 - The data is synthetic and author-built. The same person writes the simulator, the baseline and the prompts, so they risk being co-adapted.

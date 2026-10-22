@@ -34,10 +34,10 @@ DEV_PROFILE = SplitProfile(Split.DEV, variants=(0, 1, 2), trigger_lag_min=(1.0, 
 HELDOUT_PROFILE = SplitProfile(Split.HELDOUT, variants=(0, 1, 2, 3), trigger_lag_min=(1.0, 12.0))
 PROFILES: dict[Split, SplitProfile] = {Split.DEV: DEV_PROFILE, Split.HELDOUT: HELDOUT_PROFILE}
 
-# Ambiguous tier: distinctive fault logs are rarer, and one red herring lands just before onset.
-AMBIGUOUS_LOG_SCALE = 0.4
+# Ambiguous tier (v4): realistic secondary symptoms that resemble another fault, plus one red
+# herring just before onset. True symptoms keep their normal rate (v3 thinned them to 40%).
 DECOY_LEAD_MIN = (1.0, 6.0)
 
-# Missing-evidence tier: the root service loses logs or metrics around onset.
+# Missing-evidence tier (v4): the root service loses logs OR metrics from just before onset to
+# the window end (v3 restored them 20 minutes after onset). Never both.
 GAP_BEFORE_ONSET_MIN = 5.0
-GAP_AFTER_ONSET_MIN = 20.0

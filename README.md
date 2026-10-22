@@ -2,9 +2,10 @@
 
 SentinelOps is an AI agent that investigates simulated production incidents in a small e-commerce system. It works only through bounded, read-only tools, and it will be evaluated against a rule-based baseline and a single-pass LLM. Full requirements are in [docs/project_brief.md](docs/project_brief.md), and progress is tracked in [docs/PROGRESS.md](docs/PROGRESS.md).
 
-**Status: Milestone 2b.** Done so far:
+**Status: Milestone 2 complete, awaiting review.** Done so far:
 - the seeded simulator, read-only tools, difficulty tiers and a frozen dev/held-out split
 - a report contract, a rule-based baseline with three floors, and an evaluation harness
+- a harder benchmark (generator v4), plus a local dev-only viewer with two pages
 
 The first results are on **dev only**. No held-out evaluation has been run, and there is no LLM or agent yet.
 
@@ -54,6 +55,7 @@ An optional, read-only Streamlit viewer for exploring dev scenarios through the 
 
 - **Pages:**
   - **M1 · Scenario explorer:** alert, timeline, dependencies, metric charts (one service or all), log search, and record lookup.
+  - **M2 · Tiers and dev results:** dev tier counts, and top-1/top-3/service accuracy per tier for any generator version, with the floors drawn as reference lines.
   - **Reveal answer (dev only):** a closed-by-default expander showing the dev ground truth.
 - **Safety:**
   - **Local only:** `.streamlit/config.toml` binds to `127.0.0.1` and turns Streamlit's usage telemetry off.
@@ -78,17 +80,23 @@ An optional, read-only Streamlit viewer for exploring dev scenarios through the 
   - It is the only code that reads ground truth.
   - It measures tool calls and wall time itself, enforces a 200-call budget per scenario, and refuses data whose hash doesn't match the manifest.
 
-**First dev numbers** (baseline v1, 40 scenarios; full tables in [eval/results/dev-summary.md](eval/results/dev-summary.md)). Top-1 accuracy, with Wilson 95% intervals:
+**Dev results, baseline v1 unchanged** (40 scenarios). Top-1 with Wilson 95% intervals. Full tables are in [eval/results/generator-v4/dev-summary.md](eval/results/generator-v4/dev-summary.md) and [eval/results/generator-v3/dev-summary.md](eval/results/generator-v3/dev-summary.md).
 
-| Investigator | Top-1 |
-|---|---|
-| `rule_based` | 34/40 (85%, 71–93) |
-| `keyword_only` | 33/40 (82%) |
-| `latest_change` | 12/40 (30%) |
-| `alert_service` | 4/40 (10%) |
-| random | 5% |
+| Investigator | Generator v3, overall | Generator v4, overall | v4 ambiguous | v4 missing evidence |
+|---|---|---|---|---|
+| `rule_based` | 34/40 (85%, 71–93) | 20/40 (50%, 35–65) | 6/10 (60%, 31–83) | 2/10 (20%, 6–51) |
+| `keyword_only` | 33/40 (82%, 68–91) | 19/40 (48%, 33–63) | 3/10 (30%, 11–60) | 4/10 (40%, 17–69) |
+| `latest_change` | 12/40 (30%, 18–45) | 8/40 (20%, 10–35) | 1/10 (10%, 2–40) | 3/10 (30%, 11–60) |
+| `alert_service` | 4/40 (10%, 4–23) | 3/40 (8%, 3–20) | 0/10 (0%, 0–28) | 1/10 (10%, 2–40) |
+| random | 5% | 5% | 5% | 5% |
 
-**These numbers say more about the benchmark than about the baseline.** The rule baseline is 32/32 on four of the five fault types, and all six misses are certificate expiry. The harder tiers did not lower its accuracy (ambiguous 8/10, missing evidence 9/10). The dataset is too small (8 scenarios per fault) and too easy to separate approaches yet. See the findings in PROGRESS.md.
+**Reading these numbers:**
+- **v3 was too easy.** A keyword matcher scored 33/40, so v3 couldn't separate careful investigation from string matching.
+- **v4 meets its pre-registered headroom criterion** (both baselines ≤ 7/10 on each hard tier) on the first attempt, and every scenario is tested to remain solvable.
+- **The ambiguous tier hurts `keyword_only` but not `rule_based`**, relative to v4's standard tier (60% vs 60%).
+- **Part of the overall drop is resampling.** v4 standard fell from 17/20 to 12/20 even though that tier didn't change.
+
+With 10–20 scenarios per tier, the intervals are wide. See PROGRESS.md for the analysis.
 
 ## Architecture (Milestone 1)
 
@@ -106,7 +114,7 @@ An optional, read-only Streamlit viewer for exploring dev scenarios through the 
 - `sentinelops/models.py` holds the observable data contracts as frozen Pydantic models that reject unknown fields.
 - `sentinelops/scenario_files.py` reads and writes JSON/JSONL deterministically.
 - `sentinelops/simulator/` contains the topology, log templates, deployments and config changes, faults, the generator, ground truth and the CLI.
-- `sentinelops/tools/` provides eight read-only tools: `get_alert`, `search_logs`, `get_metrics`, `list_deployments`, `list_config_changes`, `get_dependencies`, `get_timeline` and `get_record`.
+- `sentinelops/tools/` provides nine read-only tools: `get_alert`, `get_window`, `search_logs`, `get_metrics`, `list_deployments`, `list_config_changes`, `get_dependencies`, `get_timeline` and `get_record`.
 
 ### Simulated system
 
@@ -135,8 +143,8 @@ Symptoms spread to all transitive callers, halving per hop. Every scenario also 
 | Tier | What changes |
 |---|---|
 | `standard` | as described above |
-| `ambiguous` | distinctive fault logs appear at 40% of their usual rate, and one red-herring change is moved to 1–6 min before onset on an affected service |
-| `missing_evidence` | the root service's logs *or* metrics are removed from 5 min before to 20 min after onset; nothing in the data marks the gap |
+| `ambiguous` | **v4:** realistic secondary symptoms that resemble another fault. Certificate expiry also causes connection resets on callers; pool exhaustion and config errors also cause timeouts or connection errors; a memory leak also raises pool use and causes timeouts; a bad deployment also makes slow calls and uses more memory. One red-herring change is moved to 1–6 min before onset on an affected service. True symptoms keep their normal rate (v3 thinned them to 40%) |
+| `missing_evidence` | **v4:** the root service's logs *or* metrics, never both, are removed from 5 min before onset to the window end (v3 restored them after 20 min). Nothing in the data marks the gap |
 
 | Split | Seed | Scenarios | Per fault (standard / ambiguous / missing) | Phrasings | Trigger → onset lag |
 |---|---|---|---|---|---|
@@ -145,7 +153,7 @@ Symptoms spread to all transitive callers, halving per hop. Every scenario also 
 
 **Held-out differs from dev in two ways at once:** a fourth log phrasing that never appears in dev, and a longer trigger-to-onset lag. Any accuracy drop on held-out therefore cannot be attributed to either difference alone.
 
-In the missing-evidence tier the alert is still computed from the full metric series. This models an alerting pipeline that is separate from the store the investigator queries.
+A test checks that every scenario stays solvable: either a primary symptom log, or the root's signature metric after onset, always survives (plus the trigger change for change-caused faults). In the missing-evidence tier the alert is still computed from the full metric series. This models an alerting pipeline that is separate from the store the investigator queries.
 
 Two pairs of faults are deliberately confusable:
 
@@ -179,8 +187,10 @@ Two pairs of faults are deliberately confusable:
 Every outcome comes back as a `ToolResult`. A failure carries `ok=False` and a code: `unknown_tool`, `invalid_arguments`, `out_of_window`, `unsupported_metric`, `not_found` or `internal_error`. This lets an agent loop recover instead of crashing. Results include `total_matches` and `truncated`. Records are frozen.
 
 ## Known limitations
-- **The benchmark is too easy.** A keyword matcher scores 33/40 on dev, so the current scenarios cannot distinguish careful investigation from string matching for most fault types (see the M2b findings in PROGRESS.md).
-- **Evidence validity is gameable:** it counts the alert as relevant evidence, so a floor that cites only the alert scores 100%.
+- **The v4 overlap symptoms were chosen knowing the rule baseline's signals.** Each is a realistic side effect, but the choice of *which* side effects to add was informed by what would confuse this baseline.
+- **The ambiguous tier doesn't lower `rule_based`** relative to the standard tier. It mainly separates keyword matching from using metrics and changes.
+- **Evidence validity:** the headline definition counts only fault logs and the trigger change. The M2b definitions, which count the alert and could be gamed by citing only it, are kept for comparison only.
+- **`injection_followed` measures coincidence as well as influence.** On v4 dev, all four "followed" cases were coincidences: removing the injected lines did not change the answer. A counterfactual metric is planned for M5.
 
 - The data is synthetic and author-built. The same person writes the simulator, the baseline and the prompts, so they risk being co-adapted.
 - There is one fault per scenario and no concurrent incidents. Symptom propagation is a simple "halve per hop" model, and the metrics are smoother than real telemetry.

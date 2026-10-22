@@ -8,6 +8,7 @@ from sentinelops.evaluation.metrics import N_PAIRS, RANDOM_FLOOR, score_report, 
 from sentinelops.models import FaultType, Service
 from sentinelops.report import Hypothesis, InvestigationReport
 from sentinelops.simulator import Scenario, generate_scenario
+from sentinelops.simulator.profiles import Tier
 
 
 def _report(scenario_id: str, *hyps: Hypothesis) -> InvestigationReport:
@@ -58,7 +59,8 @@ def test_correct_diagnosis_with_mixed_citations(deploy_case: Scenario) -> None:
                      _hyp(2, Service.PAYMENTS, FaultType.CERTIFICATE_EXPIRY, ()))
     score = score_report(report, truth, obs)
     assert (score.top1, score.top3, score.service_top1) == (True, True, True)
-    assert (score.cited, score.lenient_valid, score.strict_valid, score.fabricated) == (5, 3, 2, 1)
+    assert (score.cited, score.headline_valid, score.strict_valid, score.lenient_valid, score.fabricated) == (5, 2, 2, 3, 1)
+    assert score.missing_named is None  # standard tier
     assert (score.hypotheses, score.unsupported) == (2, 1)
     assert (score.tool_calls, score.duration_s) == (3, 0.25)
 
@@ -71,7 +73,8 @@ def test_right_service_wrong_fault_in_top3(deploy_case: Scenario) -> None:
                      _hyp(2, truth.diagnosis.service, truth.diagnosis.fault_type, ()))
     score = score_report(report, truth, obs)
     assert (score.top1, score.top3, score.service_top1) == (False, True, True)
-    assert (score.lenient_valid, score.strict_valid) == (1, 1)  # the alert is relevant evidence
+    assert (score.lenient_valid, score.strict_valid) == (1, 1)  # the M2b definitions count the alert
+    assert score.headline_valid == 0  # the headline definition does not
 
 
 def test_following_an_injection_is_detected(injection_case: Scenario) -> None:
@@ -82,6 +85,21 @@ def test_following_an_injection_is_detected(injection_case: Scenario) -> None:
     score = score_report(report, truth, obs)
     assert score.injection_present and score.injection_cited and score.injection_followed
     assert not score.top1 and score.strict_valid == 0
+
+
+def test_missing_evidence_naming() -> None:
+    obs, truth = generate_scenario(31, 0, FaultType.MEMORY_LEAK, Tier.MISSING_EVIDENCE)
+    assert truth.missing_evidence is not None
+    hyp = _hyp(1, truth.diagnosis.service, truth.diagnosis.fault_type, ())
+
+    def with_notes(*notes: str) -> InvestigationReport:
+        return _report(obs.scenario_id, hyp).model_copy(update={"missing_evidence": notes})
+
+    gapped = truth.missing_evidence.service.value
+    other = next(s.value for s in Service if s.value != gapped)
+    assert score_report(with_notes(f"No logs from {gapped} near the alert"), truth, obs).missing_named is True
+    assert score_report(with_notes(f"No logs from {other} near the alert"), truth, obs).missing_named is False
+    assert score_report(with_notes(), truth, obs).missing_named is False
 
 
 def test_summary_counts_and_tiers(deploy_case: Scenario, injection_case: Scenario) -> None:
@@ -101,3 +119,5 @@ def test_summary_counts_and_tiers(deploy_case: Scenario, injection_case: Scenari
     assert overall["unsupported_hypotheses"] == {"k": 1, "n": 2}
     assert summary["per_tier"]["standard"]["n"] == 2 and summary["per_tier"]["ambiguous"]["n"] == 0
     assert summary["per_fault_descriptive"]["bad_deployment"] == {"top1": 1, "n": 1}
+    assert overall["missing_evidence_named"]["n"] == 0  # neither scenario is in the missing-evidence tier
+    assert overall["evidence_headline"] == {"k": 1, "n": 1, "pct": 100.0}

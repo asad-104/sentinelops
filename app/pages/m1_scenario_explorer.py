@@ -136,12 +136,9 @@ if min_level != ANY:
 if contains:
     args["contains"] = contains
 if minutes != (0, 120):
-    # Tools do not expose the window, but every service reports a metric point at minute 0.
-    first_point = tools.call("get_metrics", {"service": Service.GATEWAY.value, "metric": "error_rate", "limit": 1})
-    if first_point.ok and first_point.items:
-        origin = first_point.items[0].timestamp
-        args["start"] = (origin + timedelta(minutes=minutes[0])).isoformat()
-        args["end"] = (origin + timedelta(minutes=minutes[1])).isoformat()
+    origin = tools.call("get_window").items[0].window_start
+    args["start"] = (origin + timedelta(minutes=minutes[0])).isoformat()
+    args["end"] = (origin + timedelta(minutes=minutes[1])).isoformat()
 
 logs = tools.call("search_logs", args)
 if logs.ok:

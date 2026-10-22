@@ -177,3 +177,74 @@ def test_hostile_log_text_is_shown_literally_never_as_markdown(app_test) -> None
     assert HOSTILE in messages
     rendered_markup = [md.value for md in app_test.markdown if "<script>" in md.value or "**bold**" in md.value]
     assert not rendered_markup
+
+
+# M2 page: tier counts and dev results
+
+M2_PAGE = REPO_ROOT / "app" / "pages" / "m2_tiers_and_results.py"
+
+
+def _write_results(results_dir: Path, scenarios: list, split: str = "dev") -> None:
+    from sentinelops.evaluation.metrics import ScenarioScore, summarize
+
+    results_dir.mkdir(parents=True)
+    for i, name in enumerate(("rule_based", "keyword_only", "latest_change", "alert_service")):
+        scores = [ScenarioScore(scenario_id=o.scenario_id, tier=t.tier.value, fault_type=t.diagnosis.fault_type.value,
+                                top1=i == 0, top3=True, service_top1=True, cited=1, headline_valid=1, lenient_valid=1,
+                                strict_valid=1, fabricated=0, hypotheses=1, unsupported=0, missing_named=None,
+                                injection_present=False, injection_cited=False, injection_followed=False,
+                                tool_calls=1, duration_s=0.0, cost_usd=0.0) for o, t in scenarios]
+        (results_dir / f"dev-{name}.json").write_text(json.dumps(
+            {"investigator": name, "split": split, "metadata": {}, "summary": summarize(scores), "scenarios": []}))
+
+
+@pytest.fixture()
+def results_dir(dev_root: tuple[Path, list], tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    from app.dev_data import RESULTS_ENV
+
+    root = tmp_path / "results"
+    _write_results(root / "generator-v4", dev_root[1])
+    _write_results(root / "generator-v3", dev_root[1])
+    monkeypatch.setenv(RESULTS_ENV, str(root))
+    return root
+
+
+def test_result_versions_newest_first_and_dev_only(results_dir: Path) -> None:
+    from app.dev_data import dev_result_versions, dev_results
+
+    assert dev_result_versions(results_dir) == ["generator-v4", "generator-v3"]
+    assert set(dev_results(results_dir, "generator-v4")) == {"rule_based", "keyword_only", "latest_change", "alert_service"}
+    with pytest.raises(ViewerDataError):
+        dev_results(results_dir, "../heldout")
+
+
+def test_non_dev_result_files_are_refused(tmp_path: Path, dev_root: tuple[Path, list]) -> None:
+    from app.dev_data import dev_results
+
+    _write_results(tmp_path / "generator-v9", dev_root[1], split="heldout")
+    with pytest.raises(ViewerDataError):
+        dev_results(tmp_path, "generator-v9")
+
+
+def test_tier_counts_match_ground_truth(dev_root: tuple[Path, list]) -> None:
+    from app.dev_data import dev_tier_counts
+
+    root, scenarios = dev_root
+    rows = dev_tier_counts(root, [o.scenario_id for o, _ in scenarios])
+    assert sum(r["scenarios"] for r in rows) == len(scenarios)
+    assert {(r["tier"], r["fault_type"]) for r in rows} == {(t.tier.value, t.diagnosis.fault_type.value) for _, t in scenarios}
+
+
+def test_m2_page_draws_floors_as_reference_lines(dev_root: tuple[Path, list], results_dir: Path) -> None:
+    testing = pytest.importorskip("streamlit.testing.v1")
+    at = testing.AppTest.from_file(str(M2_PAGE), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert [h.value for h in at.subheader] == ["Dev tier counts", "Dev results"]
+    charts = at.get("vega_lite_chart")
+    assert len(charts) == 1
+    spec = charts[0].proto.spec
+    assert '"tick"' in spec and '"bar"' in spec and "strokeDash" in spec
+    at.radio(key="results_metric").set_value("Top-3").run()
+    at.selectbox(key="results_version").set_value("generator-v3").run()
+    assert not at.exception

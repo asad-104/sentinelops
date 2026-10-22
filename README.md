@@ -2,7 +2,11 @@
 
 SentinelOps is an AI agent that investigates simulated production incidents in a small e-commerce system. It works only through bounded, read-only tools, and it will be evaluated against a rule-based baseline and a single-pass LLM. Full requirements are in [docs/project_brief.md](docs/project_brief.md), and progress is tracked in [docs/PROGRESS.md](docs/PROGRESS.md).
 
-**Status: Milestone 2a.** The seeded simulator, read-only tools, difficulty tiers and a frozen dev/held-out split are done. The baselines and the evaluation come in M2b. There are no results yet.
+**Status: Milestone 2b.** Done so far:
+- the seeded simulator, read-only tools, difficulty tiers and a frozen dev/held-out split
+- a report contract, a rule-based baseline with three floors, and an evaluation harness
+
+The first results are on **dev only**. No held-out evaluation has been run, and there is no LLM or agent yet.
 
 ## Setup
 
@@ -37,6 +41,34 @@ The same seed always produces byte-identical files. `data/` is gitignored becaus
 ```
 
 The suite runs offline in about 15 seconds and makes no API calls.
+
+## Evaluate (dev only)
+
+```bash
+.venv/bin/python -m sentinelops.simulator --split dev                      # data must match its frozen manifest
+.venv/bin/python -m sentinelops.evaluation --split dev --investigator all  # writes eval/results/
+```
+
+- **Investigators:**
+  - `rule_based`: the pre-registered v1 rules (see [docs/PROGRESS.md](docs/PROGRESS.md))
+  - floors: `alert_service`, `latest_change`, `keyword_only`
+  - a random floor, reported analytically
+- **Held-out is locked:** `--split heldout` is refused unless `--final` is given, which is reserved for milestone comparisons and logged to `eval/heldout_runs.jsonl`.
+- **How the harness works:**
+  - It is the only code that reads ground truth.
+  - It measures tool calls and wall time itself, enforces a 200-call budget per scenario, and refuses data whose hash doesn't match the manifest.
+
+**First dev numbers** (baseline v1, 40 scenarios; full tables in [eval/results/dev-summary.md](eval/results/dev-summary.md)). Top-1 accuracy, with Wilson 95% intervals:
+
+| Investigator | Top-1 |
+|---|---|
+| `rule_based` | 34/40 (85%, 71–93) |
+| `keyword_only` | 33/40 (82%) |
+| `latest_change` | 12/40 (30%) |
+| `alert_service` | 4/40 (10%) |
+| random | 5% |
+
+**These numbers say more about the benchmark than about the baseline.** The rule baseline is 32/32 on four of the five fault types, and all six misses are certificate expiry. The harder tiers did not lower its accuracy (ambiguous 8/10, missing evidence 9/10). The dataset is too small (8 scenarios per fault) and too easy to separate approaches yet. See the findings in PROGRESS.md.
 
 ## Architecture (Milestone 1)
 
@@ -127,6 +159,8 @@ Two pairs of faults are deliberately confusable:
 Every outcome comes back as a `ToolResult`. A failure carries `ok=False` and a code: `unknown_tool`, `invalid_arguments`, `out_of_window`, `unsupported_metric`, `not_found` or `internal_error`. This lets an agent loop recover instead of crashing. Results include `total_matches` and `truncated`. Records are frozen.
 
 ## Known limitations
+- **The benchmark is too easy.** A keyword matcher scores 33/40 on dev, so the current scenarios cannot distinguish careful investigation from string matching for most fault types (see the M2b findings in PROGRESS.md).
+- **Evidence validity is gameable:** it counts the alert as relevant evidence, so a floor that cites only the alert scores 100%.
 
 - The data is synthetic and author-built. The same person writes the simulator, the baseline and the prompts, so they risk being co-adapted.
 - There is one fault per scenario and no concurrent incidents. Symptom propagation is a simple "halve per hop" model, and the metrics are smoother than real telemetry.

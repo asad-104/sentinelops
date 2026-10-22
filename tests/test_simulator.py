@@ -6,6 +6,7 @@ from collections import Counter
 from sentinelops.models import Metric, Service
 from sentinelops.simulator import FaultType, Scenario, generate_dataset, generate_scenario
 from sentinelops.simulator.generator import alert_threshold
+from sentinelops.simulator.profiles import DEV_PROFILE
 from sentinelops.simulator.templates import TEMPLATES
 
 
@@ -108,7 +109,7 @@ def test_metric_values_are_in_range(small_dataset: list[Scenario]) -> None:
 def test_every_template_has_interchangeable_variants() -> None:
     formatter = string.Formatter()
     for template in TEMPLATES.values():
-        assert len(template.variants) >= 3, template.template_id
+        assert len(template.variants) == 4, template.template_id
         fields = [{name for _, name, _, _ in formatter.parse(v) if name} for v in template.variants]
         assert all(f == fields[0] for f in fields), f"{template.template_id} variants use different fields"
 
@@ -119,4 +120,4 @@ def test_variants_are_actually_used(large_dataset: list[Scenario]) -> None:
         for p in gt.log_provenance:
             used.setdefault(p.template_id, set()).add(p.variant_id)
     for template_id, variants in used.items():
-        assert variants == set(range(len(TEMPLATES[template_id].variants))), template_id
+        assert variants == set(DEV_PROFILE.variants), template_id

@@ -141,6 +141,11 @@ class ToolSet:
     def tool_names(self) -> tuple[str, ...]:
         return tuple(self._registry)
 
+    @property
+    def tool_input_models(self) -> dict[str, type[ToolInput]]:
+        """Input model per tool, e.g. for building an LLM's tool schemas."""
+        return {name: model for name, (model, _) in self._registry.items()}
+
     def call(self, name: str, arguments: Any = None) -> ToolResult:
         """Validate untrusted arguments (e.g. from a model) and dispatch. Never raises."""
         tool = name if isinstance(name, str) else repr(name)
@@ -199,7 +204,7 @@ class ToolSet:
             d for d in self._obs.dependencies
             if params.service is None or params.service in (d.caller, d.callee)
         ]
-        return _result("get_dependencies", matches, len(matches) or 1)
+        return _result("get_dependencies", matches, params.limit)
 
     def get_timeline(self, params: GetTimelineInput) -> ToolResult:
         start, end = self._window(params)

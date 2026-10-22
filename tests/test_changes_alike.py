@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from sentinelops.models import ConfigChange, Deployment
 from sentinelops.simulator import Scenario
 from sentinelops.simulator.changes import AUTHORS, CONFIG_KEYS, DEPLOY_SUMMARIES
+from sentinelops.simulator.profiles import Tier
 
 VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 
@@ -34,8 +35,11 @@ def ks_critical(n: int, m: int, alpha: float = 0.01) -> float:
 
 
 def _split(dataset: list[Scenario], kind: str) -> tuple[list, list]:
+    """Standard tier only: the ambiguous tier deliberately moves one red herring next to onset."""
     real, decoy = [], []
     for obs, gt in dataset:
+        if gt.tier is not Tier.STANDARD:
+            continue
         records: tuple[Deployment | ConfigChange, ...] = obs.deployments if kind == "deploy" else obs.config_changes
         for record in records:
             offset = (record.timestamp - obs.window_start).total_seconds() / 60

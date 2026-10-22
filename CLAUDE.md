@@ -31,7 +31,8 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 ## Milestone status
 Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS.md`. Update both files at the end of every milestone.
 - Done: **M1** (verified 2026-10-22, 73 tests passing)
-- Done, awaiting review: **M2a** (tiers, split, frozen manifests; 93 tests passing; branch `m2a-tiers-split`)
+- Done: **M2a** (tiers, split, frozen manifests; merged to `main`, 6ef60fc)
+- Done, awaiting review: **viewer page 1** (M1 scenario explorer; 113 tests passing; branch `viewer-page-1`)
 - Next: **M2b** per the approved plan; do not start until the user says so
 
 ## Standing rules
@@ -45,7 +46,11 @@ Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS
 - Tests run offline with no paid API calls. Mock LLM providers in tests.
 - Never invent benchmark numbers, users or results. Use placeholders until the evaluation has been run.
 - Teach: if the user seems to accept something they cannot explain, quiz them briefly before moving on.
-- Every milestone ends with a new page in a local Streamlit viewer (`app/viewer.py`, one page per milestone). The viewer is read-only and local only, reads dev data only, never loads held-out scenarios, reuses `ToolSet` and the existing loaders, and holds no business logic. Streamlit goes in a separate `requirements-viewer.txt`; ask before installing it. Planned pages are listed in `docs/PROGRESS.md`.
+- Every milestone ends with a new page in a local Streamlit viewer (`app/viewer.py`, one page per milestone). The viewer is read-only and local only, reads dev data only, never loads held-out scenarios, reuses `ToolSet` and the existing loaders, and holds no business logic. Streamlit goes in a separate `requirements-viewer.txt`; ask before installing it. Planned pages are listed in `docs/PROGRESS.md`. Run it with `.venv/bin/streamlit run app/viewer.py`.
+- UI quality bar for later viewer pages:
+  - **M2 page:** tier counts, and the dev results table with floors drawn as reference lines.
+  - **M4 page:** the agent run viewer must visually show the states in order, each tool call and the evidence it returned, hypotheses re-ranking as evidence arrives, and every claim linked to its source record.
+  - **M6:** decide on a polish pass (Plotly or Altair charts, a styled timeline) based on remaining time.
 
 ### Decided design (do not change without asking)
 - System: 4 services (api-gateway, auth, orders, payments). No DB service; pool exhaustion is a metric.

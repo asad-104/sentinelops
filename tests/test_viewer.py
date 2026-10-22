@@ -1,0 +1,179 @@
+"""Local viewer: dev-only guards, safe rendering of untrusted log text, no simulator imports."""
+
+from __future__ import annotations
+
+import ast
+import json
+from pathlib import Path
+
+import pytest
+
+from app.dev_data import (
+    MANIFEST_ENV,
+    ROOT_ENV,
+    ViewerDataError,
+    dev_ground_truth,
+    dev_scenario_ids,
+    dev_scenarios_root,
+)
+from sentinelops.models import LogRecord
+from sentinelops.scenario_files import dump_json, write_observable
+from sentinelops.simulator import FaultType, generate_scenario
+
+from conftest import REPO_ROOT
+
+PAGE = REPO_ROOT / "app" / "pages" / "m1_scenario_explorer.py"
+HOSTILE = "**bold** <script>alert(1)</script> [click](http://evil.example)"
+
+
+@pytest.fixture()
+def dev_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, list]:
+    """A two-scenario dev tree; the first scenario's first log carries hostile markup."""
+    scenarios = [generate_scenario(11, 0, FaultType.MEMORY_LEAK), generate_scenario(11, 1, FaultType.CONFIG_ERROR)]
+    obs, truth = scenarios[0]
+    first = obs.logs[0]
+    hostile_log = LogRecord(source_id=first.source_id, timestamp=first.timestamp, service=first.service,
+                            level=first.level, message=HOSTILE)
+    scenarios[0] = (obs.model_copy(update={"logs": (hostile_log, *obs.logs[1:])}), truth)
+
+    root = tmp_path / "data" / "dev" / "scenarios"
+    (tmp_path / "data" / "dev" / "ground_truth").mkdir(parents=True)
+    for o, t in scenarios:
+        write_observable(o, root / o.scenario_id)
+        dump_json(tmp_path / "data" / "dev" / "ground_truth" / f"{o.scenario_id}.json", t.model_dump(mode="json"))
+    manifest = tmp_path / "dev.json"
+    manifest.write_text(json.dumps({"split": "dev", "scenario_ids": [o.scenario_id for o, _ in scenarios]}))
+    monkeypatch.setenv(ROOT_ENV, str(root))
+    monkeypatch.setenv(MANIFEST_ENV, str(manifest))
+    return root, scenarios
+
+
+# Guards (no Streamlit needed)
+
+@pytest.mark.parametrize("bad", ["data/heldout/scenarios", "data/HeldOut-v2/scenarios", "data/dev", "data/dev/ground_truth"])
+def test_root_guard_rejects_heldout_and_non_scenario_dirs(tmp_path: Path, bad: str) -> None:
+    with pytest.raises(ViewerDataError):
+        dev_scenarios_root(str(tmp_path / bad))
+
+
+def test_manifest_ids_without_a_directory_are_not_listed(dev_root: tuple[Path, list], tmp_path: Path) -> None:
+    root, scenarios = dev_root
+    manifest = tmp_path / "with_ghost.json"
+    ids = [o.scenario_id for o, _ in scenarios]
+    manifest.write_text(json.dumps({"split": "dev", "scenario_ids": [*ids, "sc-0000000000"]}))
+    assert dev_scenario_ids(root, manifest) == ids
+
+
+def test_non_dev_manifest_is_refused(dev_root: tuple[Path, list], tmp_path: Path) -> None:
+    root, _ = dev_root
+    manifest = tmp_path / "other.json"
+    manifest.write_text(json.dumps({"split": "heldout_like", "scenario_ids": []}))
+    with pytest.raises(ViewerDataError):
+        dev_scenario_ids(root, manifest)
+
+
+def test_ground_truth_reader(dev_root: tuple[Path, list]) -> None:
+    root, scenarios = dev_root
+    obs, truth = scenarios[1]
+    assert dev_ground_truth(root, obs.scenario_id) == {
+        "fault_type": truth.diagnosis.fault_type.value,
+        "root_service": truth.diagnosis.service.value,
+        "tier": truth.tier.value,
+        "onset": truth.model_dump(mode="json")["onset"],
+    }
+    for bad_id in ("../../heldout/x", "sc-../../etc", "SC-0123456789"):
+        with pytest.raises(ViewerDataError):
+            dev_ground_truth(root, bad_id)
+
+
+def test_ground_truth_reader_refuses_heldout_tree(tmp_path: Path) -> None:
+    with pytest.raises(ViewerDataError):
+        dev_ground_truth(tmp_path / "data" / "heldout" / "scenarios", "sc-0123456789")
+
+
+# Import boundaries
+
+def _imports(path: Path) -> set[str]:
+    found = set()
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.Import):
+            found.update(a.name for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            found.add(node.module)
+    return found
+
+
+@pytest.mark.parametrize("path", sorted((REPO_ROOT / "app").rglob("*.py")), ids=lambda p: p.name)
+def test_viewer_never_imports_the_simulator(path: Path) -> None:
+    assert not [m for m in _imports(path) if m.startswith("sentinelops.simulator")]
+
+
+def test_core_package_never_imports_streamlit_or_pandas() -> None:
+    offenders = [
+        str(p.relative_to(REPO_ROOT)) for p in (REPO_ROOT / "sentinelops").rglob("*.py")
+        if any(m.split(".")[0] in ("streamlit", "pandas") for m in _imports(p))
+    ]
+    assert not offenders
+
+
+# Rendering (needs Streamlit)
+
+@pytest.fixture()
+def app_test(dev_root: tuple[Path, list]):
+    testing = pytest.importorskip("streamlit.testing.v1")
+    at = testing.AppTest.from_file(str(PAGE), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    return at
+
+
+def test_page_renders_core_sections(app_test) -> None:
+    headers = [h.value for h in app_test.subheader]
+    assert headers == ["Alert", "Timeline", "Dependencies", "Metrics", "Log search", "Record lookup"]
+    assert app_test.dataframe, "timeline and log tables should render"
+
+
+def test_reveal_answer_is_collapsed_and_reads_dev_ground_truth(app_test, dev_root: tuple[Path, list]) -> None:
+    _, scenarios = dev_root
+    expander = app_test.expander[0]
+    assert expander.label == "Reveal answer (dev only)"
+    assert expander.proto.expanded is False
+    shown = json.loads(expander.json[0].proto.body)
+    assert shown["fault_type"] == scenarios[0][1].diagnosis.fault_type.value
+
+
+def test_truncation_warning_appears_above_chart(app_test) -> None:
+    assert not [w for w in app_test.warning if "points per service" in w.value]
+    app_test.number_input(key="metric_limit").set_value(10).run()
+    assert [w for w in app_test.warning if "points per service" in w.value]
+
+
+def test_compare_all_services_draws_one_chart(app_test) -> None:
+    app_test.selectbox(key="metric_name").set_value("db_pool_utilization_pct")
+    app_test.toggle(key="metric_compare").set_value(True).run()
+    assert not app_test.exception
+    assert any("api-gateway (unsupported_metric)" in c.value for c in app_test.caption)
+
+
+def test_unsupported_metric_shows_structured_error(app_test) -> None:
+    app_test.selectbox(key="metric_service").set_value("api-gateway")
+    app_test.selectbox(key="metric_name").set_value("db_pool_utilization_pct").run()
+    assert any("unsupported_metric" in c.value for c in app_test.code)
+
+
+def test_log_search_form_applies_filters_on_submit(app_test) -> None:
+    app_test.text_input(key="log_contains").set_value("evil.example")  # only the hostile line has this
+    app_test.number_input(key="log_limit").set_value(5)
+    app_test.button[0].click().run()  # form values only apply on submit
+    tables = [df.value for df in app_test.dataframe if "message" in df.value.columns]
+    assert len(tables) == 1 and list(tables[0]["message"]) == [HOSTILE]
+    app_test.text_input(key="log_contains").set_value("<script>")
+    app_test.button[0].click().run()
+    assert [m.value for m in app_test.metric if m.label == "Returned"] == ["5"], "limit applies"
+
+
+def test_hostile_log_text_is_shown_literally_never_as_markdown(app_test) -> None:
+    messages = [m for df in app_test.dataframe if "message" in df.value.columns for m in df.value["message"]]
+    assert HOSTILE in messages
+    rendered_markup = [md.value for md in app_test.markdown if "<script>" in md.value or "**bold**" in md.value]
+    assert not rendered_markup

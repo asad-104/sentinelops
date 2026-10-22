@@ -38,6 +38,26 @@ The same seed always produces byte-identical files. `data/` is gitignored becaus
 
 The suite runs offline in about 15 seconds and makes no API calls.
 
+## Local viewer (dev only)
+
+An optional, read-only Streamlit viewer for exploring dev scenarios through the same tools an investigator uses.
+
+```bash
+.venv/bin/pip install -r requirements-viewer.txt     # streamlit==1.65.0, about 360 MB with its dependencies
+.venv/bin/python -m sentinelops.simulator --split dev
+.venv/bin/streamlit run app/viewer.py                 # http://127.0.0.1:8501
+```
+
+- **Pages:**
+  - **M1 · Scenario explorer:** alert, timeline, dependencies, metric charts (one service or all), log search, and record lookup.
+  - **Reveal answer (dev only):** a closed-by-default expander showing the dev ground truth.
+- **Safety:**
+  - **Local only:** `.streamlit/config.toml` binds to `127.0.0.1` and turns Streamlit's usage telemetry off.
+  - **Dev data only:** the viewer refuses any path containing `heldout` and never imports `sentinelops.simulator`.
+  - **Tools only:** every panel is a `ToolSet.call`. Truncation and structured errors are shown as returned.
+  - **Log text is untrusted:** messages appear only in tables, never as markdown or HTML.
+- **Optional:** the core package and its tests don't need Streamlit. Viewer rendering tests are skipped if it isn't installed.
+
 ## Architecture (Milestone 1)
 
 ```

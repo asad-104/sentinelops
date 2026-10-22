@@ -47,8 +47,8 @@ Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS
 - Done: **M2b** (report contract, rule baseline v1, floors, harness, first dev numbers; merged to `main`)
 - Done: **M2 follow-ups** (get_window, headline evidence validity, missing-evidence naming, generator v4, M2 viewer page; merged to `main`, 6d9a943)
 - Done: **M2 complete**, including generator v5 (independent mechanism streams, injection twins, paired injection metric, dev paired ablation, viewer fix); merged to `main`
-- Done, awaiting review: **M3 stage A** (LLM adapter, mock, Ollama client untested against a server, tool loop, traces, crash-catching harness, pilot CLI, network guard, M3 viewer page; branch `m3-stage-a`, plan on `m3-plan`)
-- Next: user review of stage A. **Stage B (install Ollama, pull `qwen3:4b`, real local runs) needs explicit approval**
+- Done: **M3 stage A** (LLM adapter, mock, Ollama client untested against a server, tool loop, traces, crash-catching harness, pilot CLI, network guard, M3 viewer page; merged to `main`)
+- In progress: **M3 stage B** (Ollama + `qwen3:4b`, smoke run, 7 pilot runs; branch `m3-stage-b`)
 
 ## Standing rules
 

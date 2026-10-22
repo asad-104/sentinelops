@@ -1,7 +1,7 @@
 # SentinelOps progress
 
 ## Current milestone
-**M3 stage A is done and awaiting review** on `m3-stage-a` (2026-10-23). The plan is in `docs/M3_PLAN.md`, on branch `m3-plan`.
+**M3 stage A: complete** (approved and merged into `main` on 2026-10-23). **Stage B** (the first real local run) is in progress on `m3-stage-b`. The plan is in `docs/M3_PLAN.md`, on branch `m3-plan`.
 - **What stage A added:** an LLM client interface, a scripted mock, the Ollama client (never run against a server), tool schemas, the tool loop, JSONL traces, crash-catching in the harness, the pilot CLI, the network guard and the M3 viewer page.
 - **What has not happened:** no model has been pulled or called, nothing was installed, and nothing touched the network except the two D1 page fetches.
 - **Mock traces:** the committed traces in `eval/pilot/generator-v5/mock-scripted/` come from a scripted policy, not a model.
@@ -23,6 +23,7 @@
 - **Viewer page 1: M1 scenario explorer.** Verified 2026-10-22, 113 tests passing (20 viewer tests). Merged into `main`.
 - **M2b: baseline and evaluation.** Verified 2026-10-22, 141 tests passing. First dev numbers below. Merged into `main`.
 - **M2 follow-ups:** `get_window`, headline evidence, generator v4, M2 viewer page. Verified 2026-10-22, 176 tests passing. Merged into `main` (6d9a943) and pushed.
+- **M3 stage A: LLM adapter, tool loop, pilot CLI, network guard, M3 viewer page.** Verified 2026-10-23: 277 tests passing, and the viewer renders against real data. Merged into `main`.
 - **M2 complete: generator v5, paired twins, tier ablation, viewer fix.** Verified 2026-10-22, 201 tests passing, and the viewer renders against real data (`scripts/check_viewer_real_data.py`). Merged into `main` and pushed.
 
 ## Decisions made
@@ -460,7 +461,7 @@ Planned pages:
 - ~~**Ambiguous tier vs `rule_based`.**~~ Decided: no further difficulty revision (user decision, 2026-10-22). The v5 ablation shows why it doesn't bite: overlap changes none of `rule_based`'s answers.
 
 ## Next action
-**Review M3 stage A on `m3-stage-a`; stage B (first real local run) needs approval.** Earlier note, kept for history:
+**M3 stage B** (approved 2026-10-23): install Ollama, pull `qwen3:4b`, smoke run, then the 7 pilot runs. Earlier note, kept for history:
 
 **M3 planning: approved, not started.** The plan (LLM adapter interface, local Ollama/Qwen pilot on 5 dev scenarios plus twins, optional hosted model with cost estimates) is in the 2026-10-22 conversation. Before any code, settle the open choices:
 - installing Ollama

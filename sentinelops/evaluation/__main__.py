@@ -17,9 +17,10 @@ from sentinelops.evaluation.metrics import scores_as_dicts, summarize
 from sentinelops.evaluation.tables import full_report
 from sentinelops.scenario_files import dump_json
 from sentinelops.simulator.datasets import DEFAULT_MANIFEST_DIR
+from sentinelops.simulator.generator import GENERATOR_VERSION
 from sentinelops.simulator.profiles import Split
 
-DEFAULT_RESULTS_DIR = Path("eval/results")
+DEFAULT_RESULTS_ROOT = Path("eval/results")
 HELDOUT_RUN_LOG = Path("eval/heldout_runs.jsonl")
 
 
@@ -29,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--investigator", choices=[*INVESTIGATORS, "all"], default="all")
     parser.add_argument("--final", action="store_true", help="required for the held-out split (milestones only)")
     parser.add_argument("--data-root", type=Path, help="default: data/<split>")
-    parser.add_argument("--out-dir", type=Path, default=DEFAULT_RESULTS_DIR)
+    parser.add_argument("--out-dir", type=Path, help="default: eval/results/generator-v<version>")
     parser.add_argument("--manifest-dir", type=Path, default=DEFAULT_MANIFEST_DIR, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
@@ -39,6 +40,7 @@ def main(argv: list[str] | None = None) -> int:
 
     names = list(INVESTIGATORS) if args.investigator == "all" else [args.investigator]
     data_root = args.data_root or Path("data") / args.split.value
+    args.out_dir = args.out_dir or DEFAULT_RESULTS_ROOT / f"generator-v{GENERATOR_VERSION}"
     summaries, metadata = {}, {}
     try:
         for name in names:

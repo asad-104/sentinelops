@@ -57,6 +57,47 @@ def open_toolset(root: Path, scenario_id: str) -> ToolSet:
     return ToolSet.from_directory(root, scenario_id)
 
 
+RESULTS_ROOT = REPO_ROOT / "eval" / "results"
+RESULTS_ENV = "SENTINELOPS_VIEWER_RESULTS"
+
+
+def results_root() -> Path:
+    root = Path(os.environ.get(RESULTS_ENV) or RESULTS_ROOT).resolve()
+    _refuse_heldout(root)
+    return root
+
+
+def dev_result_versions(root: Path) -> list[str]:
+    """Generator versions with dev results, newest first, e.g. ["generator-v4", "generator-v3"]."""
+    versions = [d.name for d in root.glob("generator-v*")
+                if re.fullmatch(r"generator-v\d+", d.name) and any(d.glob("dev-*.json"))]
+    return sorted(versions, key=lambda v: int(v.removeprefix("generator-v")), reverse=True)
+
+
+def dev_results(root: Path, version: str) -> dict[str, dict[str, Any]]:
+    """Investigator name -> summary, from dev result files only."""
+    if not re.fullmatch(r"generator-v\d+", version):
+        raise ViewerDataError(f"invalid results version {version!r}")
+    results = {}
+    for path in sorted((root / version).glob("dev-*.json")):
+        _refuse_heldout(path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("split") != "dev":
+            raise ViewerDataError(f"{path.name} is not a dev result")
+        results[data["investigator"]] = data["summary"]
+    return results
+
+
+def dev_tier_counts(root: Path, scenario_ids: list[str]) -> list[dict[str, Any]]:
+    """Rows of (tier, fault_type, scenarios) for the dev split on disk."""
+    counts: dict[tuple[str, str], int] = {}
+    for scenario_id in scenario_ids:
+        truth = dev_ground_truth(root, scenario_id)
+        key = (truth["tier"], truth["fault_type"])
+        counts[key] = counts.get(key, 0) + 1
+    return [{"tier": t, "fault_type": f, "scenarios": n} for (t, f), n in sorted(counts.items())]
+
+
 def dev_ground_truth(root: Path, scenario_id: str) -> dict[str, Any]:
     """The four answer fields for one dev scenario, read as plain JSON."""
     if not re.fullmatch(SCENARIO_ID_PATTERN, scenario_id):

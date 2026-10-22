@@ -1,7 +1,14 @@
 # SentinelOps progress
 
 ## Current milestone
-**M2 follow-ups (user decisions, 2026-10-22).** Viewer page 1 and M2b are merged into `main`. In progress: tool and metric changes, a harder benchmark (generator v4), and the M2 viewer page. No held-out run has happened.
+**M2 follow-ups (user decisions, 2026-10-22): done, awaiting review** on branch `m2c-benchmark-v4`. Viewer page 1 and M2b are merged into `main` and pushed (894c21c). Done on the branch:
+- `get_window`
+- headline evidence validity, and the missing-evidence naming score
+- generator v4, with both manifests refrozen
+- baseline v1 rerun on v3 and v4 dev
+- the M2 viewer page
+
+No held-out run has happened.
 
 ## Completed milestones
 - **M1: simulator, read-only tools, tests.** Verified 2026-10-22, 73 tests passing.
@@ -58,6 +65,7 @@
 
 Freeze log:
 - 2026-10-22: dev and held-out first frozen at generator version 3 (M2a).
+- 2026-10-22: dev and held-out refrozen at generator version 4 (harder benchmark, user decision). No `--final` run had happened, so this is allowed under the freeze rule. v3 dev results are kept in `eval/results/generator-v3/`.
 
 ## Pre-registered expectation (written 2026-10-22, before any baseline numbers exist)
 The rule baseline will score well on dev standard, lower on dev ambiguous and missing-evidence, and lose some accuracy on held-out because of the fourth phrasing.
@@ -160,6 +168,79 @@ Every investigator had 0 unsupported hypotheses and 0 fabricated citations. On t
 5. **The floors behave as predicted.** Blaming the alerting service gets the service right 23/40 (58%), close to the 55% seen in M1. `latest_change` gets top-1 12/40 (30%).
 6. **Evidence validity as defined can be gamed.** `alert_service` scores 100% because citing the alert always counts as relevant. Validity should not be read without top-1 beside it, and a stricter definition is needed.
 
+## Harder benchmark: principles and success criterion (recorded 2026-10-22, before any generator change)
+Context: on v3 dev, `rule_based` scored 34/40 and `keyword_only` 33/40, and the hard tiers did not lower accuracy. The user decided to make the benchmark harder before any `--final` run.
+
+**Principles (user decisions):**
+1. **Hardness comes from realistic symptom overlap, not from deleting the baseline's keywords.** Examples: certificate expiry also causes connection errors on callers; pool exhaustion and config errors also cause timeouts.
+2. **Every scenario stays solvable.** At least one independent evidence path for the true (service, fault) survives in every tier, and a test enforces it.
+3. **The missing-evidence tier never removes both logs and metrics** for the root service.
+4. **Success criterion is headroom:** both baselines clearly below ceiling on the hard tiers.
+5. **At most one difficulty revision,** judged by baseline scores, and logged here.
+
+**Quantitative success criterion,** fixed now. On v4 dev, `rule_based` and `keyword_only`, both unchanged v1, each score **≤ 7/10 top-1 on the ambiguous tier and ≤ 7/10 on the missing-evidence tier.** The standard tier has no target; it remains the realistic reference.
+
+**Planned v4 mechanisms.** I chose these knowing the baseline's signals, which is co-adaptation in the opposite direction. The guard is that each one must be a plausible real-world side effect.
+- **Ambiguous tier: secondary symptoms that overlap with another fault.** These are added on top of the true fault's symptoms, which stay at their normal rate:
+  - `certificate_expiry`: callers also log connection resets during the TLS handshake.
+  - `connection_pool_exhaustion`: the root also logs query and call timeouts.
+  - `config_error`: the root also logs connection errors to the dependency it times out on, or is throttled or slowed on.
+  - `memory_leak`: callers log refused connections during OOM restarts. GC pauses hold connections, so the root's pool utilisation rises.
+  - `bad_deployment`: the new version also logs timeouts to its dependencies, and its memory use rises.
+  - The decoy change from v3 stays.
+  - v3's thinning of distinctive logs to 40% is **removed**. Under principle 1, hardness must come from overlap, not from thinning true evidence.
+- **Missing-evidence tier: the gap runs from onset − 5 min to the window end** (v3 stopped at onset + 20). It still removes the root's logs *or* its metrics, never both. In v3 the root's logs came back 20 minutes after onset, which made the gap nearly irrelevant.
+- **Solvability test.** For every scenario, the observable data must contain the trigger (for change-caused faults) and at least one of:
+  - a log channel: a primary fault log on the root, or for certificate expiry a caller's TLS error naming the root
+  - a metric channel: the root's signature metric after onset (pool > 95, memory > 85, error rate above its alert threshold, latency above 2× baseline, or request rate below 50% of baseline, depending on the fault)
+
+## Harder benchmark: results (2026-10-22, generator v4, baseline v1 unchanged)
+Baseline v1 and the floors were rerun unchanged on v4 dev (code 8d3454b). Full tables are in `eval/results/generator-v4/dev-summary.md`; the v3 tables, rerun with the new metrics, are in `eval/results/generator-v3/dev-summary.md`. Dev only, no `--final` run.
+
+| Investigator | Slice | Top-1, generator v3 | Top-1, generator v4 |
+|---|---|---|---|
+| rule_based | overall | 34/40 (85%, 71–93) | 20/40 (50%, 35–65) |
+| rule_based | standard | 17/20 (85%, 64–95) | 12/20 (60%, 39–78) |
+| rule_based | ambiguous | 8/10 (80%, 49–94) | 6/10 (60%, 31–83) |
+| rule_based | missing evidence | 9/10 (90%, 60–98) | 2/10 (20%, 6–51) |
+| keyword_only | overall | 33/40 (82%, 68–91) | 19/40 (48%, 33–63) |
+| keyword_only | standard | 16/20 (80%, 58–92) | 12/20 (60%, 39–78) |
+| keyword_only | ambiguous | 9/10 (90%, 60–98) | 3/10 (30%, 11–60) |
+| keyword_only | missing evidence | 8/10 (80%, 49–94) | 4/10 (40%, 17–69) |
+| latest_change | overall | 12/40 (30%, 18–45) | 8/40 (20%, 10–35) |
+| latest_change | standard | 7/20 (35%, 18–57) | 4/20 (20%, 8–42) |
+| latest_change | ambiguous | 1/10 (10%, 2–40) | 1/10 (10%, 2–40) |
+| latest_change | missing evidence | 4/10 (40%, 17–69) | 3/10 (30%, 11–60) |
+| alert_service | overall | 4/40 (10%, 4–23) | 3/40 (8%, 3–20) |
+| alert_service | standard | 2/20 (10%, 3–30) | 2/20 (10%, 3–30) |
+| alert_service | ambiguous | 0/10 (0%, 0–28) | 0/10 (0%, 0–28) |
+| alert_service | missing evidence | 2/10 (20%, 6–51) | 1/10 (10%, 2–40) |
+
+| rule_based (overall) | Generator v3 | Generator v4 |
+|---|---|---|
+| Top-3 | 40/40 (100%, 91–100) | 38/40 (95%, 83–99) |
+| Service top-1 | 37/40 (92%, 80–97) | 27/40 (68%, 52–80) |
+| Missing evidence named (missing tier) | 3/10 (30%, 11–60) | 5/10 (50%, 24–76) |
+| Evidence, headline (strict excl. alert) | 98/131 (75%) | 69/116 (59%) |
+
+**Success criterion: met on the first attempt, so no difficulty revision was used** (0 of the 1 allowed). On v4 dev:
+- `rule_based`: ambiguous 6/10, missing evidence 2/10
+- `keyword_only`: ambiguous 3/10, missing evidence 4/10
+
+Every one is ≤ 7/10, and the solvability tests pass on every generated test scenario and on both frozen splits.
+
+**Honest reading:**
+1. **The missing-evidence tier is now clearly hard,** and still solvable. `rule_based` gets 2/10 top-1 but 9/10 top-3: the right answer is usually ranked, just not first.
+2. **The ambiguous tier hurts `keyword_only` (3/10) but not `rule_based`** relative to v4's own standard tier (6/10 against 12/20, both 60%). The metric and change bonuses resist keyword overlap. The criterion was set as a fixed bar, so it is met, but the tier does not separate "uses more signals" from "uses keywords" for `rule_based`.
+3. **The standard tier also fell, from 17/20 to 12/20. That is resampling, not a leak.** No standard scenario has overlap logs, and every miss is a mechanism already present in v3. The bump changed every random draw, and this draw has more scenarios that trigger the known weaknesses:
+   - three certificate expiries rooted at payments, whose caller logs the x509 errors
+   - two pool-key config errors
+   - two bad deployments outranked by another service's change bonus
+
+   A 20-scenario tier can swing this much on a fresh draw, so v3 and v4 standard numbers are not comparable evidence of anything.
+4. **The floors stay far below** (`alert_service` 3/40, `latest_change` 8/40, random 5%), so the benchmark still rewards real signal.
+5. **`injection_followed` is not evidence of influence.** `rule_based` and `keyword_only` each "followed" an injection 2/15 times on v4. Rerunning those scenarios with the injection lines removed gave the same top-1 in all four cases: the baseline's wrong answer coincided with the injection's randomly chosen wrong claim. For M5 this metric should become a counterfactual: does removing the injected lines change the answer?
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 
@@ -174,13 +255,13 @@ Planned pages:
 | Milestone | Page |
 |---|---|
 | M1 | **Built.** Scenario explorer: alert, timeline, dependencies, metrics (one service or all), log search, record lookup, reveal answer |
-| M2 | Tier explorer: tier counts, and the dev results table with floors drawn as reference lines |
+| M2 | **Built.** Tiers and dev results: tier counts; top-1/top-3/service accuracy per tier for any generator version, rule baseline bars with Wilson intervals, floors as tick reference lines, random as a dashed line |
 | M3 | LLM pilot traces |
 | M4 | Agent run viewer: states shown in order, each tool call and the evidence it returned, hypotheses re-ranking as evidence arrives, every claim linked to its source record |
 | M5 | Three-way comparison (dev, plus logged final results) |
 | M6 | Demo walkthrough. Decide on a polish pass (Plotly or Altair charts, a styled timeline) based on remaining time |
 
-**UI quality bar.** The M2 page must draw floors as reference lines on the results chart. The M4 page must show the states in order, each tool call with its returned evidence, hypotheses re-ranking as evidence arrives, and every claim linked to its source record. M6 decides on a polish pass. The M2 page is owed after M2b.
+**UI quality bar.** The M2 page must draw floors as reference lines on the results chart. The M4 page must show the states in order, each tool call with its returned evidence, hypotheses re-ranking as evidence arrives, and every claim linked to its source record. M6 decides on a polish pass.
 
 ## Known weaknesses
 - With only 4 services, the gateway is upstream of everything and fires half the alerts (101/200, 50%, seed 7 standard set). The alert lands on the root service in 110/200 (55%), so "blame the alerting service" gets the service right about half the time. It will be reported as a floor in M2b.
@@ -193,21 +274,28 @@ Planned pages:
 - `internal_error` in `ToolSet.call` is a catch-all that could hide tool bugs, and no test exercises it.
 - The viewer adds about 360 MB of dependencies to the shared `.venv`. The import-ban test keeps them out of the core package, but core tests now run in an environment that has pandas installed, so an accidental pandas dependency in a test could go unnoticed.
 - The simulator, the baseline and the prompts are all written by the same author, so co-adaptation is a real risk. The M2b results suggest it already happened: the keyword list matches the dev templates closely enough to score 32/32 on four faults.
-- Evidence validity counts the alert as relevant, so citing only the alert scores 100%.
-- Missing-evidence reporting (`missing_evidence` in the report) is produced by the baseline but not scored.
-- Three consumers (viewer, rule baseline, `latest_change` floor) derive the window start from a metric point, and the baseline retries without `end` near the window end, because tools don't expose the scenario window.
+- Evidence validity under the M2b definitions counts the alert as relevant (citing only the alert scores 100%). Fixed by the headline definition; the old columns remain for comparison only.
+- The missing-evidence naming score only checks that the gapped service is named. It doesn't check whether the report says *what* is missing (logs vs metrics). The baseline can only detect log gaps.
+- Baseline v1 and the `latest_change` floor still derive the window start from a metric point (kept unchanged on purpose). New investigators should use `get_window`.
+- The v4 overlap mechanisms were designed knowing the baseline's signals ("connection", "timeout"). They are realistic side effects, but the choice of *which* side effects to add was informed by what would confuse this baseline.
 - The harness does not catch investigator exceptions; a crash stops the run. That is fine for deterministic baselines, but LLM investigators in M3/M4 need an `error` stop reason instead.
 
 ## Open questions
-- **Benchmark difficulty.** Should the tiers be strengthened before the first `--final` run? The freeze rule allows regenerating held-out until then. Options:
+- ~~**Benchmark difficulty.**~~ Decided and done: generator v4 (see "Harder benchmark" above). Original question: should the tiers be strengthened before the first `--final` run? The freeze rule allows regenerating held-out until then. Options:
   - remove distinctive templates entirely in the ambiguous tier, rather than thinning them to 40%
   - add confounders that share keywords across faults
   - gap the root's logs *and* metrics in the missing-evidence tier
 
   Any change bumps the generator and needs a refreeze note.
-- **Scenario window.** Should tools expose it, e.g. in `get_alert` or a `get_window` tool? That changes the decided tool set.
-- **Evidence validity.** Should it exclude the alert, or require at least one fault-log or trigger citation?
-- **Missing-evidence scoring.** Should the evaluation score whether `missing_evidence` names the gapped service?
+- ~~**Scenario window.**~~ Done: the `get_window` tool. Baseline v1 still infers the window from a metric point, unchanged by decision.
+- ~~**Evidence validity.**~~ Done: the headline is "strict excluding the alert"; the M2b definitions are kept and labelled.
+- ~~**Missing-evidence scoring.**~~ Done: "missing evidence named" on the missing-evidence tier.
+- **Injection metric.** Replace `injection_followed` with a counterfactual (answer with vs without the injected lines) before M5.
+- **Ambiguous tier vs `rule_based`.** The tier does not lower `rule_based` relative to standard. Leave as is (the criterion is met and the one revision is unused), or spend the revision? My recommendation is to leave it: spending the revision to beat one specific baseline would be tuning the benchmark to the baseline.
 
 ## Next action
-Per the user's decisions of 2026-10-22: (1) expose the scenario window to tools and add the strict-excluding-alert evidence validity and missing-evidence naming score; (2) pre-register the harder-benchmark principles, build generator v4, refreeze both manifests, and rerun baseline v1 and the floors on v4 dev beside the v3 results; (3) build the M2 viewer page. M3 does not start.
+User reviews the M2 follow-ups on `m2c-benchmark-v4` and decides:
+- whether to merge and push
+- the two new open questions (counterfactual injection metric; whether to spend the one remaining difficulty revision; recommendation: don't)
+
+M3 (LLM adapter interface and the 5-scenario local pilot) does not start until the user says so.

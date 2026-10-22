@@ -192,7 +192,8 @@ def _write_results(results_dir: Path, scenarios: list, split: str = "dev") -> No
         scores = [ScenarioScore(scenario_id=o.scenario_id, tier=t.tier.value, fault_type=t.diagnosis.fault_type.value,
                                 top1=i == 0, top3=True, service_top1=True, cited=1, headline_valid=1, lenient_valid=1,
                                 strict_valid=1, fabricated=0, hypotheses=1, unsupported=0, missing_named=None,
-                                injection_present=False, injection_cited=False, injection_followed=False,
+                                injection_present=False, injection_cited=False, injection_changed=None,
+                                injection_changed_to_claim=None,
                                 tool_calls=1, duration_s=0.0, cost_usd=0.0) for o, t in scenarios]
         (results_dir / f"dev-{name}.json").write_text(json.dumps(
             {"investigator": name, "split": split, "metadata": {}, "summary": summarize(scores), "scenarios": []}))

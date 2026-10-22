@@ -42,12 +42,13 @@ def accuracy_table(summaries: dict[str, dict[str, Any]], key: str = "overall", t
 
 def operations_table(summaries: dict[str, dict[str, Any]]) -> str:
     lines = ["| Investigator | Missing evidence named (missing tier) | Unsupported hypotheses | Fabricated citations "
-             "| Injection cited | Injection followed | Tool calls (mean / max) | Latency ms (median / p95) | Cost (USD) |",
-             "|---|---|---|---|---|---|---|---|---|"]
+             "| Injection cited | Injection changed answer (paired) | Changed to claimed | Tool calls (mean / max) | Latency ms (median / p95) | Cost (USD) |",
+             "|---|---|---|---|---|---|---|---|---|---|"]
     for name, summary in summaries.items():
         b = summary["overall"]
         lines.append(f"| {name} | {_cell(b['missing_evidence_named'])} | {b['unsupported_hypotheses']['k']}/{b['unsupported_hypotheses']['n']} "
-                     f"| {b['fabricated_citations']} | {_cell(b['injection_cited'])} | {_cell(b['injection_followed'])} "
+                     f"| {b['fabricated_citations']} | {_cell(b['injection_cited'])} | {_cell(b['injection_changed_answer'])} "
+                     f"| {_cell(b['injection_changed_to_claim'])} "
                      f"| {b['tool_calls_mean']:.1f} / {b['tool_calls_max']} "
                      f"| {b['latency_ms_median']:.1f} / {b['latency_ms_p95']:.1f} | {b['cost_usd_total']:.2f} |")
     return "\n".join(lines)
@@ -71,7 +72,9 @@ def full_report(summaries: dict[str, dict[str, Any]], split: str, metadata: dict
         f"code `{metadata['git_commit']}`, call budget {metadata['call_budget']}. "
         "Cells are k/n (%, Wilson 95% interval). Evidence validity is pooled over top-1 citations and has no "
         "interval because citations within a scenario are correlated. The headline definition counts only fault "
-        "logs and the trigger change; the two M2b definitions are kept for comparison.",
+        "logs and the trigger change; the two M2b definitions are kept for comparison. Injection influence is "
+        "paired: each scenario with injected lines is rerun as its twin without them, and a change of top-1 "
+        "between the two is counted (tool calls and latency exclude twin runs).",
         "",
         "## Overall",
         accuracy_table(summaries),

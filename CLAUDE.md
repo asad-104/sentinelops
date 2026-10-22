@@ -14,9 +14,11 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 - Tests: `.venv/bin/python -m pytest`
 - Generate data: `.venv/bin/python -m sentinelops.simulator --split dev` (frozen dev split → `data/dev/`), or `--seed 1 --n 5` for ad-hoc scenarios. `data/` is gitignored
 - Never print, open or inspect held-out data (`data/heldout/`). Generating it prints only a count and hash
+- Evaluate on dev: `.venv/bin/python -m sentinelops.evaluation --split dev --investigator all` (writes `eval/results/`). Held-out needs `--final` and runs only at milestone comparisons
 
 ## Invariants (enforced by tests; don't break them)
-- `sentinelops/tools/`, `models.py` and `scenario_files.py` must never import `sentinelops.simulator`
+- `sentinelops/tools/`, `models.py`, `scenario_files.py`, `report.py` and `sentinelops/baselines/` must never import `sentinelops.simulator`; only the simulator and `sentinelops/evaluation/` read ground truth
+- Rule baseline changes bump `BASELINE_VERSION` and are logged in the Baseline tuning log in `docs/PROGRESS.md`; tune on dev only
 - Source IDs are assigned only after all records are merged and sorted by timestamp
 - Real and red-herring deployments/config changes come from the same draw (same authors, version format, timing)
 - Alert summaries describe symptoms only, never a fault type or cause
@@ -32,8 +34,9 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS.md`. Update both files at the end of every milestone.
 - Done: **M1** (verified 2026-10-22, 73 tests passing)
 - Done: **M2a** (tiers, split, frozen manifests; merged to `main`, 6ef60fc)
-- Done, awaiting review: **viewer page 1** (M1 scenario explorer; 113 tests passing; branch `viewer-page-1`)
-- Next: **M2b** per the approved plan; do not start until the user says so
+- Done: **viewer page 1** (M1 scenario explorer; merged to `main`)
+- Done: **M2b** (report contract, rule baseline v1, floors, harness, first dev numbers; merged to `main`)
+- In progress (user decisions 2026-10-22): tool/metric changes, then a harder benchmark (generator v4), then the M2 viewer page. M3 waits
 
 ## Standing rules
 

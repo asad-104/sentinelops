@@ -46,6 +46,16 @@ class Metric(StrEnum):
     DB_POOL_UTILIZATION = "db_pool_utilization_pct"
 
 
+class FaultType(StrEnum):
+    """Diagnosis vocabulary. Public: investigators must name one of these."""
+
+    BAD_DEPLOYMENT = "bad_deployment"
+    CONFIG_ERROR = "config_error"
+    CONNECTION_POOL_EXHAUSTION = "connection_pool_exhaustion"
+    MEMORY_LEAK = "memory_leak"
+    CERTIFICATE_EXPIRY = "certificate_expiry"
+
+
 class AlertSeverity(StrEnum):
     WARNING = "warning"
     CRITICAL = "critical"

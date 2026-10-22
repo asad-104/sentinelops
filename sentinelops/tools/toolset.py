@@ -52,8 +52,9 @@ class ToolError(Exception):
     """Raised when a scenario cannot be loaded. Tool calls never raise this."""
 
 
+# budget_exhausted is returned by budget-enforcing wrappers (the evaluation harness, later the agent).
 ErrorCode = Literal["unknown_tool", "invalid_arguments", "out_of_window", "unsupported_metric",
-                    "not_found", "internal_error"]
+                    "not_found", "internal_error", "budget_exhausted"]
 
 
 class _Failure(Exception):

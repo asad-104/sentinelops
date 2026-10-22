@@ -160,6 +160,32 @@ Every investigator had 0 unsupported hypotheses and 0 fabricated citations. On t
 5. **The floors behave as predicted.** Blaming the alerting service gets the service right 23/40 (58%), close to the 55% seen in M1. `latest_change` gets top-1 12/40 (30%).
 6. **Evidence validity as defined can be gamed.** `alert_service` scores 100% because citing the alert always counts as relevant. Validity should not be read without top-1 beside it, and a stricter definition is needed.
 
+## Harder benchmark: principles and success criterion (recorded 2026-10-22, before any generator change)
+Context: on v3 dev, `rule_based` scored 34/40 and `keyword_only` 33/40, and the hard tiers did not lower accuracy. The user decided to make the benchmark harder before any `--final` run.
+
+**Principles (user decisions):**
+1. **Hardness comes from realistic symptom overlap, not from deleting the baseline's keywords.** Examples: certificate expiry also causes connection errors on callers; pool exhaustion and config errors also cause timeouts.
+2. **Every scenario stays solvable.** At least one independent evidence path for the true (service, fault) survives in every tier, and a test enforces it.
+3. **The missing-evidence tier never removes both logs and metrics** for the root service.
+4. **Success criterion is headroom:** both baselines clearly below ceiling on the hard tiers.
+5. **At most one difficulty revision,** judged by baseline scores, and logged here.
+
+**Quantitative success criterion,** fixed now. On v4 dev, `rule_based` and `keyword_only`, both unchanged v1, each score **≤ 7/10 top-1 on the ambiguous tier and ≤ 7/10 on the missing-evidence tier.** The standard tier has no target; it remains the realistic reference.
+
+**Planned v4 mechanisms.** I chose these knowing the baseline's signals, which is co-adaptation in the opposite direction. The guard is that each one must be a plausible real-world side effect.
+- **Ambiguous tier: secondary symptoms that overlap with another fault.** These are added on top of the true fault's symptoms, which stay at their normal rate:
+  - `certificate_expiry`: callers also log connection resets during the TLS handshake.
+  - `connection_pool_exhaustion`: the root also logs query and call timeouts.
+  - `config_error`: the root also logs connection errors to the dependency it times out on, or is throttled or slowed on.
+  - `memory_leak`: callers log refused connections during OOM restarts. GC pauses hold connections, so the root's pool utilisation rises.
+  - `bad_deployment`: the new version also logs timeouts to its dependencies, and its memory use rises.
+  - The decoy change from v3 stays.
+  - v3's thinning of distinctive logs to 40% is **removed**. Under principle 1, hardness must come from overlap, not from thinning true evidence.
+- **Missing-evidence tier: the gap runs from onset − 5 min to the window end** (v3 stopped at onset + 20). It still removes the root's logs *or* its metrics, never both. In v3 the root's logs came back 20 minutes after onset, which made the gap nearly irrelevant.
+- **Solvability test.** For every scenario, the observable data must contain the trigger (for change-caused faults) and at least one of:
+  - a log channel: a primary fault log on the root, or for certificate expiry a caller's TLS error naming the root
+  - a metric channel: the root's signature metric after onset (pool > 95, memory > 85, error rate above its alert threshold, latency above 2× baseline, or request rate below 50% of baseline, depending on the fault)
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

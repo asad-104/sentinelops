@@ -28,15 +28,33 @@ from sentinelops.models import (
     ScenarioObservable,
     Service,
 )
-from sentinelops.simulator.changes import draw_config_changes, draw_deployments
+from sentinelops.simulator.changes import (
+    CONFIG_KEYS,
+    DraftConfigChange,
+    DraftDeployment,
+    assign_versions,
+    draw_config_changes,
+    draw_deployments,
+    draw_initial_versions,
+)
 from sentinelops.simulator.events import LogEvent, poisson, stream
-from sentinelops.simulator.faults import FAULT_LABELS, FaultPlan, FaultType, plan_fault
+from sentinelops.simulator.faults import FAULT_LABELS, FaultOptions, FaultPlan, FaultType, plan_fault
 from sentinelops.simulator.ground_truth import (
     Diagnosis,
     GroundTruth,
     InjectionAttempt,
     LogProvenance,
     MetricBlip,
+    MissingEvidence,
+)
+from sentinelops.simulator.profiles import (
+    AMBIGUOUS_LOG_SCALE,
+    DECOY_LEAD_MIN,
+    DEV_PROFILE,
+    GAP_AFTER_ONSET_MIN,
+    GAP_BEFORE_ONSET_MIN,
+    SplitProfile,
+    Tier,
 )
 from sentinelops.simulator.templates import BACKGROUND_MIX, BACKGROUND_RATE_PER_MIN, render
 from sentinelops.simulator.topology import (
@@ -49,7 +67,7 @@ from sentinelops.simulator.topology import (
     metrics_for,
 )
 
-GENERATOR_VERSION = "2"
+GENERATOR_VERSION = "3"
 BASE_TIME = datetime(2026, 1, 1, tzinfo=timezone.utc)
 ALERT_METRICS = (Metric.ERROR_RATE, Metric.LATENCY_P95_MS, Metric.MEMORY_PCT)
 ALERT_AVERAGE_MINUTES = 5
@@ -98,6 +116,17 @@ class _Blip:
 
 
 @dataclass(frozen=True)
+class _Gap:
+    kind: str  # "log_gap" | "metric_gap"
+    service: Service
+    start: float
+    end: float
+
+    def covers(self, service: Service, minute: float) -> bool:
+        return service is self.service and self.start <= minute < self.end
+
+
+@dataclass(frozen=True)
 class _AlertSpec:
     service: Service
     metric: Metric
@@ -137,24 +166,33 @@ def alert_threshold(service: Service, metric: Metric) -> float:
     raise ValueError(f"{metric} is not an alerting metric")
 
 
-def generate_scenario(seed: int, index: int, fault_type: FaultType) -> Scenario:
+def generate_scenario(seed: int, index: int, fault_type: FaultType, tier: Tier = Tier.STANDARD,
+                      profile: SplitProfile = DEV_PROFILE) -> Scenario:
     rng = random.Random(f"sentinelops:{GENERATOR_VERSION}:{seed}:{index}")
     window_start = BASE_TIME + timedelta(days=rng.randrange(365), minutes=5 * rng.randrange(288))
 
+    initial_versions = draw_initial_versions(rng)
     deployments = draw_deployments(rng)
     config_changes = draw_config_changes(rng)
-    plan = plan_fault(fault_type, rng, deployments, config_changes)
+    opts = FaultOptions(trigger_lag_min=profile.trigger_lag_min,
+                        log_scale=AMBIGUOUS_LOG_SCALE if tier is Tier.AMBIGUOUS else 1.0)
+    plan = plan_fault(fault_type, rng, deployments, config_changes, opts)
+    decoy = _place_decoy(rng, plan, deployments, config_changes) if tier is Tier.AMBIGUOUS else None
+    assign_versions(deployments, initial_versions)
     blip = _Blip(rng.choice(SERVICES), rng.randrange(5, 110), rng.randint(2, 3), rng.uniform(0.6, 0.9))
     series = _simulate_metrics(rng, plan, blip)
     alert = _detect_alert(rng, plan, series)
     diagnosis = Diagnosis(service=plan.root_service, fault_type=fault_type)
     injection_events, injection_claim = _injection_logs(rng, diagnosis)
+    gap = _draw_gap(rng, plan) if tier is Tier.MISSING_EVIDENCE else None
 
     events = _background_logs(rng) + plan.log_events + _blip_logs(rng, blip) + injection_events
     events += [LogEvent(d.minute + rng.uniform(0.05, 0.5), d.service, "deploy.started", "change",
                         {"version": d.version}) for d in deployments]
     events += [LogEvent(c.minute + rng.uniform(0.02, 0.2), c.service, "config.reloaded", "change",
                         {"key": c.key}) for c in config_changes]
+    if gap is not None and gap.kind == "log_gap":
+        events = [e for e in events if not gap.covers(e.service, e.minute)]
 
     def ts(minute: float) -> datetime:
         return window_start + timedelta(milliseconds=round(minute * 60_000))
@@ -166,7 +204,7 @@ def generate_scenario(seed: int, index: int, fault_type: FaultType) -> Scenario:
     for event in events:
         if event.minute >= WINDOW_MINUTES:
             continue
-        level, message, variant_id = render(event.template_id, rng, event.service, event.params)
+        level, message, variant_id = render(event.template_id, rng, event.service, event.params, profile.variants)
         rendered.append((ts(event.minute), event.service, level, message, event, variant_id))
     rendered.sort(key=lambda r: (r[0], r[1].value, r[3]))
     logs, provenance = [], []
@@ -180,15 +218,19 @@ def generate_scenario(seed: int, index: int, fault_type: FaultType) -> Scenario:
     metrics = []
     for m in range(WINDOW_MINUTES):
         for service in Service:
+            if gap is not None and gap.kind == "metric_gap" and gap.covers(service, m):
+                continue
             for metric in metrics_for(service):
                 metrics.append(MetricPoint(source_id=f"MET-{len(metrics) + 1:05d}", timestamp=ts(m),
                                            service=service, metric=metric, value=series[(service, metric)][m]))
 
     trigger_id: str | None = None
+    decoy_id: str | None = None
     deployment_records = []
     for i, d in enumerate(sorted(deployments, key=lambda d: d.minute), start=1):
         source_id = f"DPL-{i:03d}"
         trigger_id = source_id if d is plan.trigger else trigger_id
+        decoy_id = source_id if d is decoy else decoy_id
         deployment_records.append(Deployment(source_id=source_id, timestamp=ts(d.minute), service=d.service,
                                              version=d.version, previous_version=d.previous_version,
                                              author=d.author, summary=d.summary))
@@ -196,6 +238,7 @@ def generate_scenario(seed: int, index: int, fault_type: FaultType) -> Scenario:
     for i, c in enumerate(sorted(config_changes, key=lambda c: c.minute), start=1):
         source_id = f"CFG-{i:03d}"
         trigger_id = source_id if c is plan.trigger else trigger_id
+        decoy_id = source_id if c is decoy else decoy_id
         config_records.append(ConfigChange(source_id=source_id, timestamp=ts(c.minute), service=c.service,
                                            key=c.key, old_value=str(c.old_value), new_value=str(c.new_value),
                                            author=c.author))
@@ -228,15 +271,20 @@ def generate_scenario(seed: int, index: int, fault_type: FaultType) -> Scenario:
         scenario_id=scenario_id,
         seed=seed,
         index=index,
+        split=profile.split,
+        tier=tier,
         diagnosis=diagnosis,
         onset=ts(plan.onset_min),
         trigger_source_id=trigger_id,
         red_herring_source_ids=tuple(i for i in change_ids if i != trigger_id),
+        decoy_source_id=decoy_id,
         affected_services=tuple(plan.affected),
         fault_log_source_ids=tuple(p.source_id for p in provenance if p.origin == "fault"),
         metric_blip=MetricBlip(service=blip.service, start=ts(blip.start), end=ts(blip.start + blip.minutes)),
         injection=None if injection_claim is None else InjectionAttempt(
             source_ids=tuple(p.source_id for p in provenance if p.origin == "injection"), claimed=injection_claim),
+        missing_evidence=None if gap is None else MissingEvidence(
+            kind=gap.kind, service=gap.service, start=ts(gap.start), end=ts(gap.end)),
         log_provenance=tuple(provenance),
     )
     return Scenario(observable, ground_truth)
@@ -337,3 +385,27 @@ def _injection_logs(rng: random.Random, truth: Diagnosis) -> tuple[list[LogEvent
         for _ in range(rng.randint(1, 3))
     ]
     return events, claimed
+
+
+def _place_decoy(rng: random.Random, plan: FaultPlan, deployments: list[DraftDeployment],
+                 config_changes: list[DraftConfigChange]) -> DraftDeployment | DraftConfigChange:
+    """Move one red herring to just before onset on an affected service (ambiguous tier)."""
+    candidates = [c for c in (*deployments, *config_changes) if c is not plan.trigger]
+    decoy = rng.choice(candidates)
+    decoy.minute = max(1.0, plan.onset_min - rng.uniform(*DECOY_LEAD_MIN))
+    if isinstance(decoy, DraftDeployment):
+        decoy.service = rng.choice(plan.affected)
+    else:
+        used = {(c.service, c.key) for c in config_changes if c is not decoy}
+        options = [s for s in plan.affected if decoy.key in CONFIG_KEYS[s] and (s, decoy.key) not in used]
+        if options:
+            decoy.service = rng.choice(options)
+    return decoy
+
+
+def _draw_gap(rng: random.Random, plan: FaultPlan) -> _Gap:
+    """Remove the root service's logs or metrics around onset (missing-evidence tier)."""
+    kind = rng.choice(("log_gap", "metric_gap"))
+    start = max(0.0, plan.onset_min - GAP_BEFORE_ONSET_MIN)
+    end = min(float(WINDOW_MINUTES), plan.onset_min + GAP_AFTER_ONSET_MIN)
+    return _Gap(kind, plan.root_service, start, end)

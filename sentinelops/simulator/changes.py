@@ -82,9 +82,16 @@ def _format_version(version: tuple[int, int, int]) -> str:
     return "v{}.{}.{}".format(*version)
 
 
+Version = tuple[int, int, int]
+
+
+def draw_initial_versions(rng: random.Random) -> dict[Service, Version]:
+    return {s: (rng.randint(1, 3), rng.randint(0, 20), rng.randint(0, 9)) for s in SERVICES}
+
+
 def draw_deployments(rng: random.Random) -> list[DraftDeployment]:
-    current = {s: (rng.randint(1, 3), rng.randint(0, 20), rng.randint(0, 9)) for s in SERVICES}
-    drafts = [
+    """Draw deployments without versions; call ``assign_versions`` once their final times are known."""
+    return [
         DraftDeployment(
             minute=rng.uniform(*CHANGE_WINDOW_MIN),
             service=rng.choice(SERVICES),
@@ -94,14 +101,17 @@ def draw_deployments(rng: random.Random) -> list[DraftDeployment]:
         )
         for _ in range(rng.randint(1, 3))
     ]
-    # Chain versions in time order so repeated deploys of one service are consistent.
+
+
+def assign_versions(drafts: list[DraftDeployment], initial: dict[Service, Version]) -> None:
+    """Chain versions in time order so repeated deploys of one service are consistent."""
+    current = dict(initial)
     for draft in sorted(drafts, key=lambda d: d.minute):
         major, minor, patch = current[draft.service]
         new = (major, minor + 1, 0) if draft.minor_bump else (major, minor, patch + 1)
         draft.previous_version = _format_version(current[draft.service])
         draft.version = _format_version(new)
         current[draft.service] = new
-    return drafts
 
 
 def draw_config_changes(rng: random.Random) -> list[DraftConfigChange]:

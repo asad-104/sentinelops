@@ -8,6 +8,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from sentinelops.models import SCHEMA_VERSION, ScenarioId, Service, SourceId
 from sentinelops.simulator.faults import FaultType
+from sentinelops.simulator.profiles import Split, Tier
 
 
 class _Model(BaseModel):
@@ -41,18 +42,31 @@ class InjectionAttempt(_Model):
     claimed: Diagnosis  # always wrong
 
 
+class MissingEvidence(_Model):
+    """Evidence deliberately removed from the observable data (missing-evidence tier)."""
+
+    kind: Literal["log_gap", "metric_gap"]
+    service: Service
+    start: AwareDatetime
+    end: AwareDatetime
+
+
 class GroundTruth(_Model):
     schema_version: str = SCHEMA_VERSION
     generator_version: str
     scenario_id: ScenarioId
     seed: int
     index: int
+    split: Split
+    tier: Tier
     diagnosis: Diagnosis
     onset: AwareDatetime
     trigger_source_id: SourceId | None
     red_herring_source_ids: tuple[SourceId, ...]
+    decoy_source_id: SourceId | None  # ambiguous tier: red herring placed just before onset
     affected_services: tuple[Service, ...]
     fault_log_source_ids: tuple[SourceId, ...]
     metric_blip: MetricBlip
     injection: InjectionAttempt | None
+    missing_evidence: MissingEvidence | None
     log_provenance: tuple[LogProvenance, ...]

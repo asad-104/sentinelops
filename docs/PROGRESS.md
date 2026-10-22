@@ -1,14 +1,14 @@
 # SentinelOps progress
 
 ## Current milestone
-**M2 follow-ups (user decisions, 2026-10-22): done, awaiting review** on branch `m2c-benchmark-v4`. Viewer page 1 and M2b are merged into `main` and pushed (894c21c). Done on the branch:
-- `get_window`
-- headline evidence validity, and the missing-evidence naming score
-- generator v4, with both manifests refrozen
-- baseline v1 rerun on v3 and v4 dev
-- the M2 viewer page
+**M2 is complete (2026-10-22).** All of it is merged into `main`: tiers, split, baseline, harness, generator v5 with paired twins and ablation, and the M2 viewer page. **M3 planning is approved but not started**; no M3 code exists. No held-out run has happened.
 
-No held-out run has happened.
+**M2 findings (dev only, synthetic, author-built data):**
+1. Baseline v1 was too easy for generator v3: `rule_based` 34/40, and even `keyword_only` 33/40.
+2. Generators v4 and v5 added headroom. Both baselines scored ≤ 7/10 on each hard tier, against the pre-registered criterion, met on the first attempt with 0 of 1 revisions used.
+3. The differences between `keyword_only` and `rule_based` are within the Wilson intervals on every version. v5 overall: 21/40 (37–67) vs 25/40 (47–76).
+4. In the paired ablation, overlap hurts keyword matching (`keyword_only` 5 of 10 hurt, `rule_based` 0), and the gap hurts both log readers (3 of 10 each).
+5. Injection had no effect on any baseline: 0 of 12 paired answers changed for all four investigators.
 
 ## Completed milestones
 - **M1: simulator, read-only tools, tests.** Verified 2026-10-22, 73 tests passing.
@@ -16,6 +16,8 @@ No held-out run has happened.
 - **M2a: tiers and split.** Verified 2026-10-22, 93 tests passing. Merged into `main` (6ef60fc) and pushed.
 - **Viewer page 1: M1 scenario explorer.** Verified 2026-10-22, 113 tests passing (20 viewer tests). Merged into `main`.
 - **M2b: baseline and evaluation.** Verified 2026-10-22, 141 tests passing. First dev numbers below. Merged into `main`.
+- **M2 follow-ups:** `get_window`, headline evidence, generator v4, M2 viewer page. Verified 2026-10-22, 176 tests passing. Merged into `main` (6d9a943) and pushed.
+- **M2 complete: generator v5, paired twins, tier ablation, viewer fix.** Verified 2026-10-22, 201 tests passing, and the viewer renders against real data (`scripts/check_viewer_real_data.py`). Merged into `main` and pushed.
 
 ## Decisions made
 | Decision | Reason |
@@ -57,6 +59,13 @@ No held-out run has happened.
 | **M2b:** Held-out refused unless `--final`, before any file is read; final runs append to `eval/heldout_runs.jsonl` | Enforces the freeze rule mechanically |
 | **M2b:** Evidence validity pooled over top-1 citations, lenient and strict, with no interval | Citations within a scenario are correlated, so a binomial interval would overstate precision |
 | **M2b:** Per-fault results are descriptive counts only | Cells of 8 cannot support claims |
+| **v5:** One seeded stream per mechanism (injection, overlap, decoy, gap) plus a base stream; every log line rendered from a sub-stream seeded by one 64-bit draw | Turning one mechanism off must not shift any other draw. Without per-line sub-streams, `rng.choice` over service-dependent lists consumes a variable number of draws |
+| **v5:** Gap applied after rendering; alert's random choice drawn unconditionally | Same reason: the base stream's position must not depend on which records a mechanism removes or which services breach |
+| **v5:** Injection twins written with each split under `twins/`, covered by the content hash | Final held-out runs need twins without regenerating held-out in the harness; the hash freezes them with the split |
+| **v5:** Twins keep the original scenario ID; ground truth records `mechanisms_off` | Pairing is by ID; the twin's own answer key states what was removed |
+| **v5:** Twin runs get their own call budget and are excluded from tool-call and latency metrics | Those metrics describe one investigation; twin cost is reported separately in M3 cost estimates |
+| **Viewer fix:** `dev_results` loads only files shaped like investigator results and names every skipped file; the ablation file gets its own panel; malformed ground-truth files raise `ViewerDataError`. A real-data render (`scripts/check_viewer_real_data.py`) is a standing check before any milestone is done | The M2 page crashed with `KeyError: 'summary'` on the real v5 folder, because `dev-ablation.json` matches `dev-*.json`. Its tests used fixtures without that file, and the page was never rendered on real data |
+| **v5:** Tier ablation generated in memory, dev only, after checking every regenerated original equals the frozen file on disk | The ablation is analysis, not a benchmark split; no ablated data is stored or frozen, and held-out can't be ablated (no split argument) |
 
 ## Held-out freeze rule
 - The held-out split may be regenerated, and its manifest refrozen, **until the first `--final` evaluation run**. Each refreeze must be noted here with a date and reason.
@@ -66,6 +75,7 @@ No held-out run has happened.
 Freeze log:
 - 2026-10-22: dev and held-out first frozen at generator version 3 (M2a).
 - 2026-10-22: dev and held-out refrozen at generator version 4 (harder benchmark, user decision). No `--final` run had happened, so this is allowed under the freeze rule. v3 dev results are kept in `eval/results/generator-v3/`.
+- 2026-10-22: dev and held-out refrozen at generator version 5 (independent mechanism streams and injection twins, user decision). No `--final` run had happened. The tier mechanisms are unchanged in intent, but every draw is new. v4 dev results are kept in `eval/results/generator-v4/`. Dev sha256 `5a35c45a…`, held-out `29bab634…`. The held-out freeze printed only count and hash.
 
 ## Pre-registered expectation (written 2026-10-22, before any baseline numbers exist)
 The rule baseline will score well on dev standard, lower on dev ambiguous and missing-evidence, and lose some accuracy on held-out because of the fourth phrasing.
@@ -241,6 +251,90 @@ Every one is ≤ 7/10, and the solvability tests pass on every generated test sc
 4. **The floors stay far below** (`alert_service` 3/40, `latest_change` 8/40, random 5%), so the benchmark still rewards real signal.
 5. **`injection_followed` is not evidence of influence.** `rule_based` and `keyword_only` each "followed" an injection 2/15 times on v4. Rerunning those scenarios with the injection lines removed gave the same top-1 in all four cases: the baseline's wrong answer coincided with the injection's randomly chosen wrong claim. For M5 this metric should become a counterfactual: does removing the injected lines change the answer?
 
+## Paired twins and tier ablation: goal and criterion (recorded 2026-10-22, before any generator change)
+Context: v4's `injection_followed` turned out to be coincidence (see reading 5 above), and v4's tier effects can't be separated from resampling (reading 3). User decision: make the generator change now, and only now.
+
+**Goal**
+1. **Injection twins.** For every scenario with injected lines, a twin that is the same scenario with only those lines removed. No other random draw shifts.
+2. **Paired tier ablation (dev only).** The same scenarios with each tier mechanism turned off, compared with the original where it is on:
+   - ambiguity overlap symptoms
+   - the decoy change
+   - the missing-evidence gap
+
+**Implementation, fixed now**
+- **Separate streams.** Each mechanism (injection, overlap, decoy, gap) gets its own random-number stream, seeded from (version, seed, index, mechanism name). Everything else stays on the base stream.
+- **Per-event rendering.** Every log line is rendered with its own sub-stream, seeded by one fixed-size draw from its mechanism's stream. A different service or template then can't change how many base draws are consumed.
+- **Gap applied after rendering.** Events are rendered first, then the gap filter removes the root's logs.
+- **Alert choice pre-drawn.** The alert's random choice is drawn unconditionally.
+- **Test.** For each mechanism, generate on and off for many seeds, faults and tiers. The two must be identical apart from that mechanism's own records (source IDs renumber). Where the mechanism changes derived values, such as overlap deltas changing which alert fires, the test exempts exactly those values and documents why.
+- **Versioning.** Bump `GENERATOR_VERSION` to 5 and refreeze both manifests. Injection twins are written with each split under `twins/` and are covered by the content hash.
+- **Baselines unchanged.** Baseline v1 and the floors are rerun unchanged on v5 dev.
+
+**Metrics**
+- **Injection.** `injection_followed` is replaced by two paired metrics over scenarios with an injection:
+  - *answer changed*: the top-1 differs between original and twin
+  - *changed to claim*: it changed, and the original's top-1 is the injection's claimed diagnosis
+- **Ablation.** For each mechanism and investigator, report:
+  - n affected
+  - unchanged answers
+  - both correct and both wrong
+  - correct only without the mechanism
+  - correct only with it
+
+**Criterion, fixed now**
+- Paired flips are reported as counts, together with the unchanged scenarios. No pass or fail threshold is set for them; they are descriptive.
+- The v4 headroom criterion is re-checked on v5 dev: `rule_based` and `keyword_only` each ≤ 7/10 top-1 on the ambiguous tier and ≤ 7/10 on the missing-evidence tier. The result is reported as is. **If it fails, nothing is tuned.** The one difficulty revision is not spent (user decision: no further revisions).
+- v5 is a fresh draw of every scenario, so v4 and v5 aggregate numbers differ partly by resampling. Only the paired numbers within v5 isolate a mechanism.
+- Time-box: 4 h. If it will be exceeded, drop the tier ablation and keep only the injection twins.
+
+## Paired twins and tier ablation: results (2026-10-22, generator v5, baseline v1 unchanged)
+Code e8c9279, dev only, no `--final` run. Full tables:
+- `eval/results/generator-v5/dev-summary.md`
+- `eval/results/generator-v5/dev-ablation.md`
+
+**v4 vs v5 top-1, by version.** Each version is a fresh draw, so these are separate samples, not paired measurements.
+
+| Investigator | Slice | Generator v4 | Generator v5 |
+|---|---|---|---|
+| rule_based | overall | 20/40 (50%, 35–65) | 25/40 (62%, 47–76) |
+| rule_based | standard | 12/20 (60%, 39–78) | 15/20 (75%, 53–89) |
+| rule_based | ambiguous | 6/10 (60%, 31–83) | 6/10 (60%, 31–83) |
+| rule_based | missing evidence | 2/10 (20%, 6–51) | 4/10 (40%, 17–69) |
+| keyword_only | overall | 19/40 (48%, 33–63) | 21/40 (52%, 37–67) |
+| keyword_only | standard | 12/20 (60%, 39–78) | 14/20 (70%, 48–85) |
+| keyword_only | ambiguous | 3/10 (30%, 11–60) | 3/10 (30%, 11–60) |
+| keyword_only | missing evidence | 4/10 (40%, 17–69) | 4/10 (40%, 17–69) |
+| latest_change | overall | 8/40 (20%, 10–35) | 10/40 (25%, 14–40) |
+| alert_service | overall | 3/40 (8%, 3–20) | 5/40 (12%, 5–26) |
+
+| rule_based (overall) | Generator v4 | Generator v5 |
+|---|---|---|
+| Top-3 | 38/40 (95%, 83–99) | 37/40 (92%, 80–97) |
+| Missing evidence named (missing tier) | 5/10 (50%, 24–76) | 5/10 (50%, 24–76) |
+| Evidence, headline | 69/116 (59%) | 66/119 (55%) |
+| Injection: v4 unpaired "followed" / v5 paired "changed answer" | 2/15 (not a measure of influence) | 0/12 (0%, 0–24) |
+
+**Headroom criterion re-checked on v5: met.** It is reported as is, and nothing was tuned:
+- `rule_based`: ambiguous 6/10, missing evidence 4/10
+- `keyword_only`: ambiguous 3/10, missing evidence 4/10
+
+**Paired results on v5 dev.** For each mechanism, the scenarios where it is on are compared with the same scenarios with only that mechanism off. "Hurt" = correct without the mechanism, wrong with it. Across all 16 rows, no answer went from wrong to correct.
+
+| Mechanism | n | rule_based (unchanged / hurt) | keyword_only | latest_change | alert_service |
+|---|---|---|---|---|---|
+| injection | 12 | 12 / 0 | 12 / 0 | 12 / 0 | 12 / 0 |
+| overlap | 10 | 10 / 0 | 5 / 5 | 10 / 0 | 10 / 0 |
+| decoy | 10 | 8 / 1 | 10 / 0 | 4 / 2 | 10 / 0 |
+| gap | 10 | 7 / 3 | 7 / 3 | 10 / 0 | 10 / 0 |
+
+**Honest reading:**
+1. **Injection never changes a baseline's answer** (0/12 for all four). That is expected for keyword rules, and it confirms that v4's 2/15 "followed" was coincidence. The paired metric is built for the M4/M5 agent; on these baselines it has nothing to detect.
+2. **Overlap isolates keyword matching exactly.** It costs `keyword_only` 5 of 10 and changes none of `rule_based`'s answers. The metric and change bonuses make `rule_based` immune to the overlap logs, so the ambiguous tier's difficulty for `rule_based` (6/10) comes from the decoy (1 hurt) and from mechanisms that are also present in the standard tier.
+3. **The gap costs both log-using baselines 3 of 10.** The floors that don't read logs are unaffected.
+4. **The decoy mainly fools `latest_change`.** It changed 6 of 10 of its answers, with 2 hurt; the other 4 changed from one wrong answer to another. It hurt `rule_based` once.
+5. **These are counts on n = 10–12.** They show which mechanism acts on which investigator; they are not effect sizes.
+6. **Certificate expiry is 0/8 for `rule_based` on both v4 and v5 dev,** across all tiers. I missed this in the v4 write-up. Callers log the TLS errors, so the rules blame the caller. It is a baseline v1 weakness, recorded and not tuned.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 
@@ -268,17 +362,23 @@ Planned pages:
 - Many faults are identifiable from a single distinctive log template (TLS errors → certificate expiry, OOM → memory leak). The ambiguous tier only lowers their rate to 40%; it does not remove them.
 - Some symptoms only exist when a fault is present (`db.long_query`, `process.gc_pause`). A keyword baseline can exploit them.
 - I wrote the 4th held-out phrasings myself. They are natural paraphrases, but I knew which keywords dev uses, so how hard held-out is depends on choices made by the same author as the future baseline.
-- The ambiguous decoy can land on the root service itself. In dev it does in 4 of 10 ambiguous scenarios (40%: 2 certificate expiry, 1 config error, 1 memory leak), and 9 of 10 dev decoys are deployments rather than config changes. A benign deploy just before a memory leak is realistic but genuinely hard, and with 10 ambiguous dev scenarios these placements may dominate the tier's results.
+- The ambiguous decoy can land on the root service itself. In v5 dev it does in 5 of 10 ambiguous scenarios, and 8 of 10 decoys are deployments rather than config changes (v3: 4 of 10 and 9 of 10). A benign deploy just before a memory leak is realistic but genuinely hard, and with 10 ambiguous dev scenarios these placements may dominate the tier's results.
 - A config decoy keeps its original service when no affected service can take its key, so not every config decoy is on an affected service. This is tested for deployment decoys only.
 - Metrics are smooth and propagation is a fixed halve-per-hop rule; real incidents are messier.
 - `internal_error` in `ToolSet.call` is a catch-all that could hide tool bugs, and no test exercises it.
 - The viewer adds about 360 MB of dependencies to the shared `.venv`. The import-ban test keeps them out of the core package, but core tests now run in an environment that has pandas installed, so an accidental pandas dependency in a test could go unnoticed.
 - The simulator, the baseline and the prompts are all written by the same author, so co-adaptation is a real risk. The M2b results suggest it already happened: the keyword list matches the dev templates closely enough to score 32/32 on four faults.
 - Evidence validity under the M2b definitions counts the alert as relevant (citing only the alert scores 100%). Fixed by the headline definition; the old columns remain for comparison only.
+- Headline evidence validity is a membership check: a top-1 citation counts if it is a fault log or the trigger change. It doesn't check that the record supports the claimed fault or that it discriminates the fault from the overlap fault, and it is pooled with no interval.
 - The missing-evidence naming score only checks that the gapped service is named. It doesn't check whether the report says *what* is missing (logs vs metrics). The baseline can only detect log gaps.
 - Baseline v1 and the `latest_change` floor still derive the window start from a metric point (kept unchanged on purpose). New investigators should use `get_window`.
 - The v4 overlap mechanisms were designed knowing the baseline's signals ("connection", "timeout"). They are realistic side effects, but the choice of *which* side effects to add was informed by what would confuse this baseline.
 - The harness does not catch investigator exceptions; a crash stops the run. That is fine for deterministic baselines, but LLM investigators in M3/M4 need an `error` stop reason instead.
+- **Stream independence is tested on 10 cases per mechanism and profile, not proven.**
+  - The unconditional alert draw is a defensive fix that no tested case exercises: reverting it still passes, because overlap never changed which services breach in 195 cases searched.
+  - A mutation that routes overlap and injection lines back to the base stream fails 8 of 13 tests.
+- **The solvability test is lenient:** some evidence path survives, not a discriminating one (see README limitations).
+- **Twin runs double LLM cost for roughly a third of scenarios** (12/40 dev).
 
 ## Open questions
 - ~~**Benchmark difficulty.**~~ Decided and done: generator v4 (see "Harder benchmark" above). Original question: should the tiers be strengthened before the first `--final` run? The freeze rule allows regenerating held-out until then. Options:
@@ -290,12 +390,13 @@ Planned pages:
 - ~~**Scenario window.**~~ Done: the `get_window` tool. Baseline v1 still infers the window from a metric point, unchanged by decision.
 - ~~**Evidence validity.**~~ Done: the headline is "strict excluding the alert"; the M2b definitions are kept and labelled.
 - ~~**Missing-evidence scoring.**~~ Done: "missing evidence named" on the missing-evidence tier.
-- **Injection metric.** Replace `injection_followed` with a counterfactual (answer with vs without the injected lines) before M5.
-- **Ambiguous tier vs `rule_based`.** The tier does not lower `rule_based` relative to standard. Leave as is (the criterion is met and the one revision is unused), or spend the revision? My recommendation is to leave it: spending the revision to beat one specific baseline would be tuning the benchmark to the baseline.
+- ~~**Injection metric.**~~ Done in v5: paired injection twins.
+- ~~**Ambiguous tier vs `rule_based`.**~~ Decided: no further difficulty revision (user decision, 2026-10-22). The v5 ablation shows why it doesn't bite: overlap changes none of `rule_based`'s answers.
 
 ## Next action
-User reviews the M2 follow-ups on `m2c-benchmark-v4` and decides:
-- whether to merge and push
-- the two new open questions (counterfactual injection metric; whether to spend the one remaining difficulty revision; recommendation: don't)
+**M3 planning: approved, not started.** The plan (LLM adapter interface, local Ollama/Qwen pilot on 5 dev scenarios plus twins, optional hosted model with cost estimates) is in the 2026-10-22 conversation. Before any code, settle the open choices:
+- installing Ollama
+- the model size, given 8 GB RAM and about 9 GB free disk
+- whether to use a hosted model, plus its dependency and spending cap
 
-M3 (LLM adapter interface and the 5-scenario local pilot) does not start until the user says so.
+Then pre-register the pilot questions here.

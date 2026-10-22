@@ -11,7 +11,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from sentinelops.models import SCENARIO_ID_PATTERN
 from sentinelops.tools import ToolSet
@@ -74,18 +74,53 @@ def dev_result_versions(root: Path) -> list[str]:
     return sorted(versions, key=lambda v: int(v.removeprefix("generator-v")), reverse=True)
 
 
-def dev_results(root: Path, version: str) -> dict[str, dict[str, Any]]:
-    """Investigator name -> summary, from dev result files only."""
+class DevResults(NamedTuple):
+    investigators: dict[str, dict[str, Any]]  # investigator name -> summary
+    skipped: list[str]  # dev-*.json files that are not investigator results (e.g. dev-ablation.json)
+
+
+def _version_dir(root: Path, version: str) -> Path:
     if not re.fullmatch(r"generator-v\d+", version):
         raise ViewerDataError(f"invalid results version {version!r}")
-    results = {}
-    for path in sorted((root / version).glob("dev-*.json")):
-        _refuse_heldout(path)
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if data.get("split") != "dev":
-            raise ViewerDataError(f"{path.name} is not a dev result")
-        results[data["investigator"]] = data["summary"]
-    return results
+    return root / version
+
+
+def _load_dev_json(path: Path) -> Any:
+    _refuse_heldout(path)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or data.get("split") != "dev":
+        raise ViewerDataError(f"{path.name} is not a dev result")
+    return data
+
+
+def dev_results(root: Path, version: str) -> DevResults:
+    """Investigator summaries from dev result files. Files of any other shape are skipped and named."""
+    investigators, skipped = {}, []
+    for path in sorted(_version_dir(root, version).glob("dev-*.json")):
+        try:
+            data = _load_dev_json(path)
+        except json.JSONDecodeError:
+            skipped.append(path.name)
+            continue
+        summary = data.get("summary")
+        if (isinstance(data.get("investigator"), str) and isinstance(summary, dict)
+                and isinstance(summary.get("overall"), dict) and isinstance(summary.get("per_tier"), dict)):
+            investigators[data["investigator"]] = summary
+        else:
+            skipped.append(path.name)
+    return DevResults(investigators, skipped)
+
+
+def dev_ablation(root: Path, version: str) -> dict[str, Any] | None:
+    """The paired-ablation file for a version, as written by the evaluation (None if absent or malformed)."""
+    path = _version_dir(root, version) / "dev-ablation.json"
+    if not path.is_file():
+        return None
+    try:
+        data = _load_dev_json(path)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data.get("ablation"), dict) else None
 
 
 def dev_tier_counts(root: Path, scenario_ids: list[str]) -> list[dict[str, Any]]:
@@ -107,10 +142,13 @@ def dev_ground_truth(root: Path, scenario_id: str) -> dict[str, Any]:
     path = (truth_dir / f"{scenario_id}.json").resolve()
     if not path.is_relative_to(truth_dir):
         raise ViewerDataError(f"{scenario_id!r} escapes the ground-truth directory")
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return {
-        "fault_type": data["diagnosis"]["fault_type"],
-        "root_service": data["diagnosis"]["service"],
-        "tier": data["tier"],
-        "onset": data["onset"],
-    }
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return {
+            "fault_type": data["diagnosis"]["fault_type"],
+            "root_service": data["diagnosis"]["service"],
+            "tier": data["tier"],
+            "onset": data["onset"],
+        }
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise ViewerDataError(f"{path.name} is not a ground-truth file ({type(exc).__name__})") from exc

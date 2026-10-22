@@ -34,6 +34,23 @@ DEV_PROFILE = SplitProfile(Split.DEV, variants=(0, 1, 2), trigger_lag_min=(1.0, 
 HELDOUT_PROFILE = SplitProfile(Split.HELDOUT, variants=(0, 1, 2, 3), trigger_lag_min=(1.0, 12.0))
 PROFILES: dict[Split, SplitProfile] = {Split.DEV: DEV_PROFILE, Split.HELDOUT: HELDOUT_PROFILE}
 
+@dataclass(frozen=True)
+class Mechanisms:
+    """Which difficulty mechanisms are on. Each draws from its own random stream (v5), so turning
+    one off leaves every other draw identical: the basis for injection twins and the tier ablation."""
+
+    injection: bool = True  # still only ~40% of scenarios; off removes the injected lines
+    overlap: bool = False
+    decoy: bool = False
+    gap: bool = False
+
+    @classmethod
+    def for_tier(cls, tier: Tier) -> Mechanisms:
+        return cls(overlap=tier is Tier.AMBIGUOUS, decoy=tier is Tier.AMBIGUOUS, gap=tier is Tier.MISSING_EVIDENCE)
+
+
+MECHANISM_NAMES = ("injection", "overlap", "decoy", "gap")
+
 # Ambiguous tier (v4): realistic secondary symptoms that resemble another fault, plus one red
 # herring just before onset. True symptoms keep their normal rate (v3 thinned them to 40%).
 DECOY_LEAD_MIN = (1.0, 6.0)

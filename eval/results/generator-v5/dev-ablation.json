@@ -1,0 +1,147 @@
+{
+  "ablation": {
+    "decoy": {
+      "alert_service": {
+        "both_correct": 2,
+        "both_wrong": 8,
+        "correct_only_with": 0,
+        "correct_only_without": 0,
+        "n": 10,
+        "unchanged": 10
+      },
+      "keyword_only": {
+        "both_correct": 3,
+        "both_wrong": 7,
+        "correct_only_with": 0,
+        "correct_only_without": 0,
+        "n": 10,
+        "unchanged": 10
+      },
+      "latest_change": {
+        "both_correct": 1,
+        "both_wrong": 7,
+        "correct_only_with": 0,
+        "correct_only_without": 2,
+        "n": 10,
+        "unchanged": 4
+      },
+      "rule_based": {
+        "both_correct": 6,
+        "both_wrong": 3,
+        "correct_only_with": 0,
+        "correct_only_without": 1,
+        "n": 10,
+        "unchanged": 8
+      }
+    },
+    "gap": {
+      "alert_service": {
+        "both_correct": 1,
+        "both_wrong": 9,
+        "correct_only_with": 0,
+        "correct_only_without": 0,
+        "n": 10,
+        "unchanged": 10
+      },
+      "keyword_only": {
+        "both_correct": 4,
+        "both_wrong": 3,
+        "correct_only_with": 0,
+        "correct_only_without": 3,
+        "n": 10,
+        "unchanged": 7
+      },
+      "latest_change": {
+        "both_correct": 3,
+        "both_wrong": 7,
+        "correct_only_with": 0,
+        "correct_only_without": 0,
+        "n": 10,
+        "unchanged": 10
+      },
+      "rule_based": {
+        "both_correct": 4,
+        "both_wrong": 3,
+        "correct_only_with": 0,
+        "correct_only_without": 3,
+        "n": 10,
+        "unchanged": 7
+      }
+    },
+    "injection": {
+      "alert_service": {
+        "both_correct": 1,
+        "both_wrong": 11,
+        "correct_only_with": 0,
+        "correct_only_without": 0,
+        "n": 12,
+        "unchanged": 12
+      },
+      "keyword_only": {
+        "both_correct": 5,
+        "both_wrong": 7,
+        "correct_only_with": 0,
+        "correct_only_without": 0,
+        "n": 12,
+        "unchanged": 12
+      },
+      "latest_change": {
+        "both_correct": 2,
+        "both_wrong": 10,
+        "correct_only_with": 0,
+        "correct_only_without": 0,
+        "n": 12,
+        "unchanged": 12
+      },
+      "rule_based": {
+        "both_correct": 6,
+        "both_wrong": 6,
+        "correct_only_with": 0,
+        "correct_only_without": 0,
+        "n": 12,
+        "unchanged": 12
+      }
+    },
+    "overlap": {
+      "alert_service": {
+        "both_correct": 2,
+        "both_wrong": 8,
+        "correct_only_with": 0,
+        "correct_only_without": 0,
+        "n": 10,
+        "unchanged": 10
+      },
+      "keyword_only": {
+        "both_correct": 3,
+        "both_wrong": 2,
+        "correct_only_with": 0,
+        "correct_only_without": 5,
+        "n": 10,
+        "unchanged": 5
+      },
+      "latest_change": {
+        "both_correct": 1,
+        "both_wrong": 9,
+        "correct_only_with": 0,
+        "correct_only_without": 0,
+        "n": 10,
+        "unchanged": 10
+      },
+      "rule_based": {
+        "both_correct": 6,
+        "both_wrong": 4,
+        "correct_only_with": 0,
+        "correct_only_without": 0,
+        "n": 10,
+        "unchanged": 10
+      }
+    }
+  },
+  "metadata": {
+    "call_budget": 200,
+    "generator_version": "5",
+    "git_commit": "e8c9279",
+    "manifest_sha256": "5a35c45a7e8fdcee94b4be82c000a0d62de04d56b25404d5c647d51bd1eb0397"
+  },
+  "split": "dev"
+}

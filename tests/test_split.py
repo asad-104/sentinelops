@@ -16,6 +16,7 @@ import pytest
 from sentinelops.simulator import FaultType, Scenario
 from sentinelops.simulator.datasets import (
     TIER_COUNTS,
+    build_injection_twins,
     build_split,
     content_sha256,
     load_manifest,
@@ -34,7 +35,7 @@ def splits(tmp_path_factory: pytest.TempPathFactory) -> dict[Split, tuple[list[S
     for split in Split:
         root = tmp_path_factory.mktemp(split.value)
         scenarios = build_split(split)
-        write_split(scenarios, root)
+        write_split(scenarios, root, build_injection_twins(split, scenarios))
         result[split] = (scenarios, root)
     return result
 
@@ -100,7 +101,8 @@ def test_heldout_has_longer_trigger_lags_than_dev(splits: dict) -> None:
 
 def test_regeneration_is_byte_identical(splits: dict, tmp_path: Path) -> None:
     _, root = splits[Split.DEV]
-    write_split(build_split(Split.DEV), tmp_path)
+    scenarios = build_split(Split.DEV)
+    write_split(scenarios, tmp_path, build_injection_twins(Split.DEV, scenarios))
     assert content_sha256(tmp_path) == content_sha256(root)
 
 

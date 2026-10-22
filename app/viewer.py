@@ -11,4 +11,5 @@ st.set_page_config(page_title="SentinelOps viewer (dev only)", layout="wide")
 st.navigation([
     st.Page("pages/m1_scenario_explorer.py", title="M1 · Scenario explorer"),
     st.Page("pages/m2_tiers_and_results.py", title="M2 · Tiers and dev results"),
+    st.Page("pages/m3_pilot_traces.py", title="M3 · Pilot traces"),
 ]).run()

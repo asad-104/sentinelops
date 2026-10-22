@@ -67,4 +67,28 @@ for version in versions:
                 assert row[name] == c["correct_only_without"] and row["n"] == c["n"]
         line += f"; ablation table {len(flips)} rows match file; note: {[i.value for i in at.info]}"
     print(line)
+
+# M3: every committed pilot run and trace (eval/pilot only).
+from app.dev_data import pilot_runs, pilot_trace, pilot_traces  # noqa: E402
+
+pilot = repo / "eval" / "pilot"
+m3 = AppTest.from_file(str(repo / "app/pages/m3_pilot_traces.py"), default_timeout=60)
+m3.run()
+assert not m3.exception, [e.value for e in m3.exception]
+runs = pilot_runs(pilot)
+assert runs, "no pilot runs under eval/pilot; run the pilot CLI with --backend mock"
+for run in runs:
+    m3.selectbox(key="pilot_run").set_value(run).run()
+    names = pilot_traces(pilot, run)
+    for name in names:
+        m3.selectbox(key="pilot_trace").set_value(name).run()
+        assert not m3.exception, (run, name, [e.value for e in m3.exception])
+        events, skipped = pilot_trace(pilot, run, name)
+        steps = next(df.value for df in m3.dataframe if "step" in df.value.columns)
+        assert len(steps) == sum(e["event"] in ("model", "tool") for e in events) and not skipped, (run, name)
+        stop = next(e for e in events if e["event"] == "stop")
+        assert m3.metric[0].value == stop["stop_reason"], (run, name)
+    rows = json.loads((pilot / run / "summary.json").read_text())["runs"]
+    print(f"M3 {run}: {len(names)} traces render without exceptions; steps and stop reasons match files; "
+          f"{len(rows)} summary rows")
 print("OK: viewer renders against real data")

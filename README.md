@@ -110,6 +110,19 @@ An optional, read-only Streamlit viewer for exploring dev scenarios through the 
 
 With 10–20 scenarios per tier, the intervals are wide. See PROGRESS.md for the analysis.
 
+## LLM pilot (M3, dev only)
+
+```bash
+.venv/bin/python -m sentinelops.evaluation.pilot --backend mock      # scripted policy; no model, no network
+.venv/bin/python -m sentinelops.evaluation.pilot --backend ollama    # stage B only: local Ollama, qwen3:4b
+```
+
+M3 is a feasibility test, not the agent. A minimal tool loop (`sentinelops/llm/loop.py`) gives a model the read-only tools, through schemas generated from the same Pydantic models `ToolSet` validates with. It runs on 5 fixed dev scenarios plus one injection probe and its twin, and writes JSONL traces to `eval/pilot/`. The viewer's "M3 · Pilot traces" page shows them.
+
+- **Bounds:** 30 tool calls, 40 turns, 180 s per model call, 20 min per scenario, and a 4,000-character cap on each tool result.
+- **Failures:** every failure is a structured value, and a run with no valid report becomes an error row.
+- **Pre-registration:** the questions and decision rule were written down before any code (`docs/PROGRESS.md`). The plan is in `docs/M3_PLAN.md`.
+
 ## Architecture (Milestone 1)
 
 ```

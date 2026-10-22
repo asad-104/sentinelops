@@ -62,12 +62,19 @@ HANDLERS: dict[Service, tuple[str, ...]] = {
 }
 
 
+@dataclass(frozen=True)
+class FaultOptions:
+    trigger_lag_min: tuple[float, float] = (1.0, 6.0)  # minutes from causal change to onset
+    log_scale: float = 1.0  # multiplier on symptom log rates
+
+
 @dataclass
 class FaultPlan:
     fault_type: FaultType
     root_service: Service
     onset_min: float
     trigger: DraftDeployment | DraftConfigChange | None
+    log_scale: float = 1.0
     affected: list[Service] = field(default_factory=list)
     deltas: dict[tuple[Service, Metric], list[float]] = field(default_factory=dict)
     log_events: list[LogEvent] = field(default_factory=list)
@@ -87,7 +94,7 @@ class FaultPlan:
 
     def emit(self, rng: random.Random, service: Service, template_id: str, rates: Sequence[float],
              params: ParamsFn | None = None) -> None:
-        self.log_events += stream(rng, service, template_id, rates, "fault",
+        self.log_events += stream(rng, service, template_id, [r * self.log_scale for r in rates], "fault",
                                   not_before=self.onset_min, params=params)
 
 
@@ -129,9 +136,10 @@ def _propagate(rng: random.Random, plan: FaultPlan, err: Sequence[float], lat_fr
 
 
 def _bad_deployment(rng: random.Random, deployments: list[DraftDeployment],
-                    config_changes: list[DraftConfigChange]) -> FaultPlan:
+                    config_changes: list[DraftConfigChange], opts: FaultOptions) -> FaultPlan:
     trigger = rng.choice(deployments)
-    plan = FaultPlan(FaultType.BAD_DEPLOYMENT, trigger.service, trigger.minute + rng.uniform(1.0, 6.0), trigger)
+    plan = FaultPlan(FaultType.BAD_DEPLOYMENT, trigger.service, trigger.minute + rng.uniform(*opts.trigger_lag_min),
+                     trigger, opts.log_scale)
     err = _ramp(plan.onset_min, rng.uniform(0.12, 0.35))
     lat = _ramp(plan.onset_min, rng.uniform(0.2, 0.6))
     plan.impact(plan.root_service, err, lat)
@@ -142,11 +150,12 @@ def _bad_deployment(rng: random.Random, deployments: list[DraftDeployment],
 
 
 def _config_error(rng: random.Random, deployments: list[DraftDeployment],
-                  config_changes: list[DraftConfigChange]) -> FaultPlan:
+                  config_changes: list[DraftConfigChange], opts: FaultOptions) -> FaultPlan:
     trigger = rng.choice(config_changes)
     make_harmful(trigger, rng)
     root = trigger.service
-    plan = FaultPlan(FaultType.CONFIG_ERROR, root, trigger.minute + rng.uniform(0.5, 4.0), trigger)
+    plan = FaultPlan(FaultType.CONFIG_ERROR, root, trigger.minute + rng.uniform(*opts.trigger_lag_min), trigger,
+                     opts.log_scale)
     onset, value = plan.onset_min, str(trigger.new_value)
 
     if trigger.key == TIMEOUT_KEY:
@@ -178,9 +187,9 @@ def _config_error(rng: random.Random, deployments: list[DraftDeployment],
 
 
 def _connection_pool_exhaustion(rng: random.Random, deployments: list[DraftDeployment],
-                                config_changes: list[DraftConfigChange]) -> FaultPlan:
+                                config_changes: list[DraftConfigChange], opts: FaultOptions) -> FaultPlan:
     root = rng.choice(DB_SERVICES)
-    plan = FaultPlan(FaultType.CONNECTION_POOL_EXHAUSTION, root, rng.uniform(20.0, 85.0), None)
+    plan = FaultPlan(FaultType.CONNECTION_POOL_EXHAUSTION, root, rng.uniform(20.0, 85.0), None, opts.log_scale)
     onset = plan.onset_min
     _saturate_pool(plan, root)
     err, lat = _ramp(onset, rng.uniform(0.05, 0.15)), _ramp(onset, rng.uniform(1.5, 3.0))
@@ -196,9 +205,9 @@ def _connection_pool_exhaustion(rng: random.Random, deployments: list[DraftDeplo
 
 
 def _memory_leak(rng: random.Random, deployments: list[DraftDeployment],
-                 config_changes: list[DraftConfigChange]) -> FaultPlan:
+                 config_changes: list[DraftConfigChange], opts: FaultOptions) -> FaultPlan:
     root = rng.choice(SERVICES)
-    plan = FaultPlan(FaultType.MEMORY_LEAK, root, rng.uniform(15.0, 55.0), None)
+    plan = FaultPlan(FaultType.MEMORY_LEAK, root, rng.uniform(15.0, 55.0), None, opts.log_scale)
     base_memory = BASELINES[root][Metric.MEMORY_PCT]
     leak_per_min = rng.uniform(1.5, 3.0)
 
@@ -232,10 +241,10 @@ def _memory_leak(rng: random.Random, deployments: list[DraftDeployment],
 
 
 def _certificate_expiry(rng: random.Random, deployments: list[DraftDeployment],
-                        config_changes: list[DraftConfigChange]) -> FaultPlan:
+                        config_changes: list[DraftConfigChange], opts: FaultOptions) -> FaultPlan:
     """A serving certificate expires at a whole minute; clients can no longer connect."""
     root = rng.choice(SERVICES)
-    plan = FaultPlan(FaultType.CERTIFICATE_EXPIRY, root, float(rng.randint(20, 85)), None)
+    plan = FaultPlan(FaultType.CERTIFICATE_EXPIRY, root, float(rng.randint(20, 85)), None, opts.log_scale)
     onset = plan.onset_min
     # Failed handshakes never reach the application, so traffic drops. Only the gateway's
     # ingress counts them as errors; internal services' failures show up at their callers.
@@ -261,5 +270,5 @@ _BUILDERS = {
 
 
 def plan_fault(fault_type: FaultType, rng: random.Random, deployments: list[DraftDeployment],
-               config_changes: list[DraftConfigChange]) -> FaultPlan:
-    return _BUILDERS[fault_type](rng, deployments, config_changes)
+               config_changes: list[DraftConfigChange], opts: FaultOptions) -> FaultPlan:
+    return _BUILDERS[fault_type](rng, deployments, config_changes, opts)

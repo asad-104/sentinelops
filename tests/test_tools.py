@@ -87,6 +87,34 @@ def test_changes_and_timeline(toolset: ToolSet, small_dataset: list[Scenario]) -
     assert [e.timestamp for e in timeline] == sorted(e.timestamp for e in timeline)
 
 
+SINGLE_ITEM_TOOLS = {"get_alert", "get_record"}
+
+
+def test_every_tool_bounds_its_results(toolset: ToolSet, small_dataset: list[Scenario]) -> None:
+    """No span cap per call is acceptable only because every tool enforces limit and truncated."""
+    for name, model in toolset.tool_input_models.items():
+        if name in SINGLE_ITEM_TOOLS:
+            assert "limit" not in model.model_fields, name
+            continue
+        limit_field = model.model_fields.get("limit")
+        assert limit_field is not None, f"{name} has no limit"
+        caps = [m.le for m in limit_field.metadata if getattr(m, "le", None) is not None]
+        assert caps and caps[0] <= 500, f"{name} limit is not capped"
+        required = {"get_metrics": {"service": "orders", "metric": "error_rate"}}.get(name, {})
+        result = _ok(toolset.call(name, {**required, "limit": 1}))
+        assert len(result.items) <= 1
+        assert result.truncated == (result.total_matches > 1), name
+    record_id = small_dataset[0].observable.logs[0].source_id
+    for name, args in (("get_alert", {}), ("get_record", {"source_id": record_id})):
+        result = _ok(toolset.call(name, args))
+        assert len(result.items) == 1 and result.truncated is False
+
+
+def test_dependencies_truncate(toolset: ToolSet) -> None:
+    result = _ok(toolset.call("get_dependencies", {"limit": 2}))
+    assert (len(result.items), result.total_matches, result.truncated) == (2, 4, True)
+
+
 def test_dependencies(toolset: ToolSet) -> None:
     edges = _ok(toolset.call("get_dependencies", {"service": "payments"})).items
     assert {(e.caller, e.callee) for e in edges} == {(Service.ORDERS, Service.PAYMENTS)}

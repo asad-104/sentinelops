@@ -1,4 +1,8 @@
-"""Validated tool inputs. Unknown fields are rejected and every result size is bounded."""
+"""Validated tool inputs. Unknown fields are rejected.
+
+Every tool's result size is bounded: list tools take a capped ``limit``, and
+``get_alert``/``get_record`` return at most one item.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +14,7 @@ MAX_LOG_RESULTS = 200
 MAX_METRIC_RESULTS = 500
 MAX_CHANGE_RESULTS = 100
 MAX_TIMELINE_RESULTS = 200
+MAX_DEPENDENCY_RESULTS = 50
 
 
 class ToolInput(BaseModel):
@@ -51,6 +56,7 @@ class ListChangesInput(TimeWindowInput):
 
 class GetDependenciesInput(ToolInput):
     service: Service | None = None
+    limit: int = Field(default=20, ge=1, le=MAX_DEPENDENCY_RESULTS)
 
 
 class GetTimelineInput(TimeWindowInput):

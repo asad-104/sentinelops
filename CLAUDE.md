@@ -14,9 +14,11 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 - Tests: `.venv/bin/python -m pytest`
 - Generate data: `.venv/bin/python -m sentinelops.simulator --split dev` (frozen dev split → `data/dev/`), or `--seed 1 --n 5` for ad-hoc scenarios. `data/` is gitignored
 - Never print, open or inspect held-out data (`data/heldout/`). Generating it prints only a count and hash
+- Evaluate on dev: `.venv/bin/python -m sentinelops.evaluation --split dev --investigator all` (writes `eval/results/`). Held-out needs `--final` and runs only at milestone comparisons
 
 ## Invariants (enforced by tests; don't break them)
-- `sentinelops/tools/`, `models.py` and `scenario_files.py` must never import `sentinelops.simulator`
+- `sentinelops/tools/`, `models.py`, `scenario_files.py`, `report.py` and `sentinelops/baselines/` must never import `sentinelops.simulator`; only the simulator and `sentinelops/evaluation/` read ground truth
+- Rule baseline changes bump `BASELINE_VERSION` and are logged in the Baseline tuning log in `docs/PROGRESS.md`; tune on dev only
 - Source IDs are assigned only after all records are merged and sorted by timestamp
 - Real and red-herring deployments/config changes come from the same draw (same authors, version format, timing)
 - Alert summaries describe symptoms only, never a fault type or cause
@@ -31,8 +33,10 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 ## Milestone status
 Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS.md`. Update both files at the end of every milestone.
 - Done: **M1** (verified 2026-10-22, 73 tests passing)
-- Done, awaiting review: **M2a** (tiers, split, frozen manifests; 93 tests passing; branch `m2a-tiers-split`)
-- Next: **M2b** per the approved plan; do not start until the user says so
+- Done: **M2a** (tiers, split, frozen manifests; merged to `main`, 6ef60fc)
+- Done, awaiting review: **M2b** (report contract, rule baseline v1, floors, harness, first dev numbers; 141 tests passing; branch `m2b-baseline-eval`)
+- Unmerged: **viewer page 1** on branch `viewer-page-1` (58cf555); its doc edits need reconciling with M2b's
+- Next: user decides the open questions in PROGRESS.md (benchmark difficulty first). The M2 viewer page is owed; M3 waits
 
 ## Standing rules
 

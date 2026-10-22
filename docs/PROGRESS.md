@@ -1,12 +1,15 @@
 # SentinelOps progress
 
 ## Current milestone
-**M2a: difficulty tiers, dev/held-out split, frozen manifests.** Implemented and tested on branch `m2a-tiers-split`, waiting for review. M2b (report contract, baselines, harness, first dev numbers) has not started.
+**M2b: report contract, rule baseline v1, floors, evaluation harness, first dev numbers.** Implemented and tested on branch `m2b-baseline-eval` (branched from `main` at 6ef60fc), waiting for review. No held-out run has happened.
+
+Viewer page 1 (M1 scenario explorer) is on the separate, unmerged branch `viewer-page-1` (58cf555), which also updates this file. Its PROGRESS.md and CLAUDE.md edits will need reconciling when both branches are merged.
 
 ## Completed milestones
 - **M1: simulator, read-only tools, tests.** Verified 2026-10-22, 73 tests passing.
   - The first pass diverged from the decided design (6 services including a database service, 4 fault types, no prompt injection, tools raised exceptions). It was aligned within the same milestone.
-- **M2a: tiers and split.** Verified 2026-10-22, 93 tests passing. Not yet merged.
+- **M2a: tiers and split.** Verified 2026-10-22, 93 tests passing. Merged into `main` (6ef60fc) and pushed.
+- **M2b: baseline and evaluation.** Verified 2026-10-22, 141 tests passing. First dev numbers below. Not yet merged.
 
 ## Decisions made
 | Decision | Reason |
@@ -36,6 +39,14 @@
 | **M2a:** Dev 40 (4/2/2 per fault), held-out 60 (6/3/3), seeds 1001 / 2002 | Roadmap sizes; balanced fault × tier cells |
 | **M2a:** Manifest holds scenario IDs and a SHA-256 over all files, but no per-scenario fault or tier | Detects any generator change; fault and tier are ground truth |
 | **M2a:** `ToolSet.tool_input_models` exposed publicly | Needed for the bounds test now and for LLM tool schemas in M3 |
+| **M2b:** Baseline v1 specification committed (6f8a312) before any baseline code existed | Pre-registration; the git history proves the rules were not fitted to results |
+| **M2b:** `FaultType` moved to `models.py` | Investigators must output fault names, so the vocabulary is public; labels stay in ground truth. Generator output unchanged (hash tests pass) |
+| **M2b:** The harness is the only reader of ground truth; investigators get a `CountingToolSet` | Same isolation as the tools. Tool calls and wall time are measured, not self-reported |
+| **M2b:** Call budget of 200 per scenario, refused with `budget_exhausted` | Bounds every investigator; the rule baseline uses 52 calls |
+| **M2b:** The harness refuses data whose hash differs from the frozen manifest | A stale or edited dev set cannot silently produce numbers |
+| **M2b:** Held-out refused unless `--final`, before any file is read; final runs append to `eval/heldout_runs.jsonl` | Enforces the freeze rule mechanically |
+| **M2b:** Evidence validity pooled over top-1 citations, lenient and strict, with no interval | Citations within a scenario are correlated, so a binomial interval would overstate precision |
+| **M2b:** Per-fault results are descriptive counts only | Cells of 8 cannot support claims |
 
 ## Held-out freeze rule
 - The held-out split may be regenerated, and its manifest refrozen, **until the first `--final` evaluation run**. Each refreeze must be noted here with a date and reason.
@@ -105,6 +116,47 @@ The signatures and thresholds below are exactly as planned in the approved M2 pl
 - `keyword_only`: the keyword evidence above, with no metric or change bonuses.
 - Random guessing, reported analytically: 1/19 top-1, 3/19 top-3, 1/4 service.
 
+## Dev results, baseline v1 (2026-10-22, code 015e654, generator 3)
+Produced by `python -m sentinelops.evaluation --split dev --investigator all`. The full tables, including per-tier results, are in `eval/results/dev-summary.md`, and per-scenario scores are in `eval/results/dev-<investigator>.json`. Cells are k/n (%, Wilson 95% interval). Dev data only; nothing was run on held-out.
+
+| Investigator | Top-1 | Top-3 | Service top-1 | Evidence lenient / strict |
+|---|---|---|---|---|
+| rule_based | 34/40 (85%, 71–93) | 40/40 (100%, 91–100) | 37/40 (92%, 80–97) | 114/131 (87%) / 98/131 (75%) |
+| keyword_only | 33/40 (82%, 68–91) | 37/40 (92%, 80–97) | 34/40 (85%, 71–93) | 88/108 (81%) / 88/108 (81%) |
+| latest_change | 12/40 (30%, 18–45) | 16/40 (40%, 26–55) | 20/40 (50%, 35–65) | 14/40 (35%) / 14/40 (35%) |
+| alert_service | 4/40 (10%, 4–23) | 12/40 (30%, 18–45) | 23/40 (58%, 42–71) | 40/40 (100%) / 40/40 (100%) |
+| random (analytical) | 5.3% | 15.8% | 25% | – |
+
+Rule baseline top-1 by tier:
+- standard 17/20 (85%, 64–95)
+- ambiguous 8/10 (80%, 49–94)
+- missing evidence 9/10 (90%, 60–98)
+
+Rule baseline top-1 by fault (descriptive counts):
+- bad_deployment 8/8
+- config_error 8/8
+- connection_pool_exhaustion 8/8
+- memory_leak 8/8
+- certificate_expiry 2/8
+
+Every investigator had 0 unsupported hypotheses and 0 fabricated citations. On the 11 dev scenarios with an injection, the rule baseline followed it 0/11 times and cited an injection line 1/11 times. The rule baseline used 52 tool calls per scenario, at about 34 ms median latency and $0.
+
+### Findings
+1. **The task is too easy for four of the five fault types. This is a finding about the benchmark, not a success.**
+   - The rule baseline is perfect (32/32) on `bad_deployment`, `config_error`, `connection_pool_exhaustion` and `memory_leak`, across all tiers, and its top-3 is 40/40.
+   - All six top-1 misses are `certificate_expiry`. Standard-tier accuracy is 85% only because of certificate expiry; on the other four faults the standard tier is 16/16.
+   - In this state the benchmark cannot separate a good investigator from a keyword matcher on most faults.
+2. **The pre-registered expectation was only partly right.** I expected lower accuracy on ambiguous and missing-evidence. Instead:
+   - ambiguous was 8/10 against 17/20 on standard
+   - missing evidence was 9/10, higher than standard
+   - the intervals overlap almost entirely
+
+   The tiers as built don't make the task harder for this baseline. Missing-evidence *reporting* is not scored at all yet.
+3. **Metrics and changes add almost nothing over keywords.** `keyword_only` scores 33/40 against `rule_based`'s 34/40, and keyword-only is better on certificate expiry (4/8 against 2/8). In 3 of the 6 rule misses, a nearby deployment or config change gave the wrong hypothesis a +1 bonus. `certificate_expiry` can never receive a bonus, so its maximum score is 1.0: v1 is structurally biased against it.
+4. **The other 3 certificate misses blamed the caller.** Callers log "x509: certificate has expired when calling …", so the keyword lands on the caller, not the service whose certificate expired.
+5. **The floors behave as predicted.** Blaming the alerting service gets the service right 23/40 (58%), close to the 55% seen in M1. `latest_change` gets top-1 12/40 (30%).
+6. **Evidence validity as defined can be gamed.** `alert_service` scores 100% because citing the alert always counts as relevant. Validity should not be read without top-1 beside it, and a stricter definition is needed.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 
@@ -136,10 +188,22 @@ The M1 and M2 pages are owed. Streamlit is not installed, and no viewer code was
 - A config decoy keeps its original service when no affected service can take its key, so not every config decoy is on an affected service. This is tested for deployment decoys only.
 - Metrics are smooth and propagation is a fixed halve-per-hop rule; real incidents are messier.
 - `internal_error` in `ToolSet.call` is a catch-all that could hide tool bugs, and no test exercises it.
-- The simulator, the future baseline and the prompts are all written by the same author, so co-adaptation is a real risk.
+- The simulator, the baseline and the prompts are all written by the same author, so co-adaptation is a real risk. The M2b results suggest it already happened: the keyword list matches the dev templates closely enough to score 32/32 on four faults.
+- Evidence validity counts the alert as relevant, so citing only the alert scores 100%.
+- Missing-evidence reporting (`missing_evidence` in the report) is produced by the baseline but not scored.
+- Three consumers (viewer, rule baseline, `latest_change` floor) derive the window start from a metric point, and the baseline retries without `end` near the window end, because tools don't expose the scenario window.
+- The harness does not catch investigator exceptions; a crash stops the run. That is fine for deterministic baselines, but LLM investigators in M3/M4 need an `error` stop reason instead.
 
 ## Open questions
-- None blocking M2b. The three M1 questions were decided by the user (see the M2a rows above).
+- **Benchmark difficulty.** Should the tiers be strengthened before the first `--final` run? The freeze rule allows regenerating held-out until then. Options:
+  - remove distinctive templates entirely in the ambiguous tier, rather than thinning them to 40%
+  - add confounders that share keywords across faults
+  - gap the root's logs *and* metrics in the missing-evidence tier
+
+  Any change bumps the generator and needs a refreeze note.
+- **Scenario window.** Should tools expose it, e.g. in `get_alert` or a `get_window` tool? That changes the decided tool set.
+- **Evidence validity.** Should it exclude the alert, or require at least one fault-log or trigger citation?
+- **Missing-evidence scoring.** Should the evaluation score whether `missing_evidence` names the gapped service?
 
 ## Next action
-User reviews M2a and decides whether to merge and push. Then start M2b (report contract, `rule_based` baseline, floors `alert_service` / `latest_change` / `keyword_only`, harness with lenient and strict evidence validity and Wilson intervals, first dev numbers) per the approved plan.
+User reviews M2b, decides on the open questions above (especially benchmark difficulty, since it determines whether held-out should be regenerated before any `--final` run), and decides whether to merge and push M2b and `viewer-page-1`. The M2 viewer page (tier explorer and dev results with floors as reference lines) is owed after that. M3 does not start until then.

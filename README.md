@@ -132,5 +132,7 @@ Every outcome comes back as a `ToolResult`. A failure carries `ok=False` and a c
 - There is one fault per scenario and no concurrent incidents. Symptom propagation is a simple "halve per hop" model, and the metrics are smoother than real telemetry.
 - Truncation keeps the *earliest* matches. An agent must narrow the time window to see later records.
 - Logs are English-only and templated. Even with three phrasings each, they are more regular than real logs.
-- The dev split has only 40 scenarios (8 per fault type, 2 per fault in each harder tier), and held-out has 60. Per-fault and per-tier numbers will have wide intervals.
+- The 4th (held-out-only) phrasings were written by the same author, with knowledge of the rule baseline's planned keyword list. Held-out therefore partly measures keyword brittleness *by design*, and a held-out drop should not be read as general difficulty.
+- Dev tier cells are small: 20 standard, 10 ambiguous and 10 missing-evidence scenarios (8 per fault type overall). Tier-level intervals will be wide; held-out has 60 scenarios in total.
+- In dev, the ambiguous decoy lands on the root service itself in 4 of 10 ambiguous scenarios (40%), and 9 of 10 decoys are deployments. With so few cases, these placements may dominate ambiguous-tier results.
 - Ambiguity is limited to two mechanisms (fewer distinctive logs, one decoy change). Missing evidence covers only one gap per scenario, on the root service.

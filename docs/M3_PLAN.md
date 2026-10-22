@@ -194,3 +194,9 @@ The rule covers the 5 fixed runs; the probe pair is reported separately. Top-1 i
 - **Coverage:** no ambiguous scenario, and only one injection probe.
 - **Non-determinism:** Ollama output can vary across runs and versions, so the version and digest are recorded and each run is one sample.
 - **Configuration:** the 4,000-character cap and `num_ctx` 8192 shape what the model sees, so the pilot measures this configuration, not the model in general.
+
+## Stage A notes (2026-10-23)
+- **Memory signal correction.** The `memory_pressure` command *applies* memory pressure (see `man memory_pressure`). The pilot never runs it. It reads the kernel's pressure level with `sysctl kern.memorystatus_vm_pressure_level` (1 normal, 2 warn, 4 critical) and swap with `sysctl vm.swapusage`, and aborts on critical pressure or more than 2 GB of swap growth.
+- **Disk units.** Free disk is checked in decimal GB via `shutil.disk_usage`, so 10 GB is about 9.3 GiB as `df -h` reports it.
+- **Frozen prompt.** The prompt hash is `0f97fb44c2549794f7ba1be577d8d01392422e30b8752f4fd2ba640a88c2d2ea`.
+- **Stage B scope.** The mock backend's results are not evidence about any model. Stage B is the first real run.

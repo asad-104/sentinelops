@@ -60,6 +60,7 @@ def _imported_modules(path: Path) -> set[str]:
     REPO_ROOT / "sentinelops" / "scenario_files.py",
     REPO_ROOT / "sentinelops" / "report.py",
     *sorted((REPO_ROOT / "sentinelops" / "baselines").glob("*.py")),
+    *sorted((REPO_ROOT / "sentinelops" / "llm").glob("*.py")),
 ], ids=lambda p: f"{p.parent.name}/{p.name}")
 def test_tool_side_modules_never_import_the_simulator(path: Path) -> None:
     assert not [m for m in _imported_modules(path) if m.startswith("sentinelops.simulator")]

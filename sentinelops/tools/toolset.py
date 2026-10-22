@@ -120,6 +120,21 @@ def _describe(exc: ValidationError) -> str:
     return "; ".join(f"{'.'.join(map(str, e['loc'])) or 'arguments'}: {e['msg']}" for e in exc.errors())
 
 
+# Tool name -> validated input model, in a fixed order. Shared by every ToolSet, and used to build
+# LLM tool schemas without a scenario (e.g. sentinelops.llm.schemas).
+TOOL_INPUT_MODELS: dict[str, type[ToolInput]] = {
+    "get_alert": GetAlertInput,
+    "get_window": GetWindowInput,
+    "search_logs": SearchLogsInput,
+    "get_metrics": GetMetricsInput,
+    "list_deployments": ListChangesInput,
+    "list_config_changes": ListChangesInput,
+    "get_dependencies": GetDependenciesInput,
+    "get_timeline": GetTimelineInput,
+    "get_record": GetRecordInput,
+}
+
+
 class ToolSet:
     def __init__(self, observable: ScenarioObservable) -> None:
         self._obs = observable
@@ -130,15 +145,7 @@ class ToolSet:
         }
         self._metric_series = {(p.service, p.metric) for p in observable.metrics}
         self._registry: dict[str, tuple[type[ToolInput], Callable[[Any], ToolResult]]] = {
-            "get_alert": (GetAlertInput, self.get_alert),
-            "get_window": (GetWindowInput, self.get_window),
-            "search_logs": (SearchLogsInput, self.search_logs),
-            "get_metrics": (GetMetricsInput, self.get_metrics),
-            "list_deployments": (ListChangesInput, self.list_deployments),
-            "list_config_changes": (ListChangesInput, self.list_config_changes),
-            "get_dependencies": (GetDependenciesInput, self.get_dependencies),
-            "get_timeline": (GetTimelineInput, self.get_timeline),
-            "get_record": (GetRecordInput, self.get_record),
+            name: (model, getattr(self, name)) for name, model in TOOL_INPUT_MODELS.items()
         }
 
     @classmethod

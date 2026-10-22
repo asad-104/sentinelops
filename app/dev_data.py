@@ -152,3 +152,65 @@ def dev_ground_truth(root: Path, scenario_id: str) -> dict[str, Any]:
         }
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         raise ViewerDataError(f"{path.name} is not a ground-truth file ({type(exc).__name__})") from exc
+
+
+PILOT_ROOT = REPO_ROOT / "eval" / "pilot"
+PILOT_ENV = "SENTINELOPS_VIEWER_PILOT"
+_PILOT_RUN = re.compile(r"generator-v\d+/[A-Za-z0-9._-]+")
+_TRACE_NAME = re.compile(r"\d{2}-sc-[0-9a-f]{10}\.jsonl")
+
+
+def pilot_root() -> Path:
+    root = Path(os.environ.get(PILOT_ENV) or PILOT_ROOT).resolve()
+    _refuse_heldout(root)
+    return root
+
+
+def _pilot_dir(root: Path, run: str) -> Path:
+    if not _PILOT_RUN.fullmatch(run):
+        raise ViewerDataError(f"invalid pilot run {run!r}")
+    path = (root / run).resolve()
+    if not path.is_relative_to(root):
+        raise ViewerDataError(f"{run!r} escapes the pilot directory")
+    _refuse_heldout(path)
+    return path
+
+
+def pilot_runs(root: Path) -> list[str]:
+    """Pilot run directories (e.g. "generator-v5/mock-scripted") that have a summary, newest version first."""
+    runs = [p.parent.relative_to(root).as_posix() for p in root.glob("generator-v*/*/summary.json")]
+    runs = [r for r in runs if _PILOT_RUN.fullmatch(r)]
+    return sorted(runs, key=lambda r: (-int(r.split("/")[0].removeprefix("generator-v")), r))
+
+
+def pilot_summary(root: Path, run: str) -> dict[str, Any] | None:
+    try:
+        data = json.loads((_pilot_dir(root, run) / "summary.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def pilot_traces(root: Path, run: str) -> list[str]:
+    return sorted(p.name for p in (_pilot_dir(root, run) / "traces").glob("*.jsonl") if _TRACE_NAME.fullmatch(p.name))
+
+
+def pilot_trace(root: Path, run: str, name: str) -> tuple[list[dict[str, Any]], list[int]]:
+    """(events in file order, line numbers that were not valid JSON objects and were skipped)."""
+    if not _TRACE_NAME.fullmatch(name):
+        raise ViewerDataError(f"invalid trace name {name!r}")
+    events, skipped = [], []
+    lines = (_pilot_dir(root, run) / "traces" / name).read_text(encoding="utf-8").splitlines()
+    for number, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            skipped.append(number)
+            continue
+        if isinstance(event, dict) and isinstance(event.get("event"), str):
+            events.append(event)
+        else:
+            skipped.append(number)
+    return events, skipped

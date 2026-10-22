@@ -75,7 +75,7 @@ The M1 and M2 pages are owed. Streamlit is not installed, and no viewer code was
 - Many faults are identifiable from a single distinctive log template (TLS errors → certificate expiry, OOM → memory leak). The ambiguous tier only lowers their rate to 40%; it does not remove them.
 - Some symptoms only exist when a fault is present (`db.long_query`, `process.gc_pause`). A keyword baseline can exploit them.
 - I wrote the 4th held-out phrasings myself. They are natural paraphrases, but I knew which keywords dev uses, so how hard held-out is depends on choices made by the same author as the future baseline.
-- The ambiguous decoy can land on the root service itself. A benign deploy just before a memory leak is realistic but genuinely hard, and with only 2 ambiguous scenarios per fault in dev the effect is noisy.
+- The ambiguous decoy can land on the root service itself. In dev it does in 4 of 10 ambiguous scenarios (40%: 2 certificate expiry, 1 config error, 1 memory leak), and 9 of 10 dev decoys are deployments rather than config changes. A benign deploy just before a memory leak is realistic but genuinely hard, and with 10 ambiguous dev scenarios these placements may dominate the tier's results.
 - A config decoy keeps its original service when no affected service can take its key, so not every config decoy is on an affected service. This is tested for deployment decoys only.
 - Metrics are smooth and propagation is a fixed halve-per-hop rule; real incidents are messier.
 - `internal_error` in `ToolSet.call` is a catch-all that could hide tool bugs, and no test exercises it.

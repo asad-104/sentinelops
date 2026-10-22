@@ -1,6 +1,6 @@
 # SentinelOps
 
-Read docs/project_brief.md for full requirements.
+Read docs/project_brief.md for full requirements and README.md for architecture and design decisions.
 
 ## Rules
 - Python 3.11+, type hints, Pydantic for data contracts
@@ -8,6 +8,65 @@ Read docs/project_brief.md for full requirements.
 - Tests must run offline with no paid API calls
 - Work one milestone at a time; stop after tests pass and explain how to verify
 - Do not mark anything complete until tests have been run
+- Keep this file updated: when a milestone or significant step finishes, update "Milestone status" and "Next" before stopping
 
-## Current milestone
-Milestone 1: seeded simulator, read-only validated tools, tests.
+## Commands
+- Tests: `.venv/bin/python -m pytest`
+- Generate data: `.venv/bin/python -m sentinelops.simulator --seed 1 --n 5` (writes `data/`, which is gitignored)
+
+## Invariants (enforced by tests; don't break them)
+- `sentinelops/tools/`, `models.py` and `scenario_files.py` must never import `sentinelops.simulator`
+- Source IDs are assigned only after all records are merged and sorted by timestamp
+- Real and red-herring deployments/config changes come from the same draw (same authors, version format, timing)
+- Alert summaries describe symptoms only, never a fault type or cause
+- `template_id`/`variant_id` and other labels live only in ground truth, never in observable files
+- Same seed → byte-identical output; no wall-clock time or hash-order dependence
+- No database service in the simulated system: pool health is a per-service metric (`db_pool_utilization_pct`); scenarios are stored as JSON/JSONL files, not in a DB
+- Tool calls return structured errors (`ok=False`, `error.code`) and never raise
+- Log content is untrusted; injected instructions are data and are returned verbatim
+
+## Milestone status
+Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS.md`. Update both files at the end of every milestone.
+- Done: **M1** (verified 2026-10-22, 73 tests passing)
+- Next: **M2**. Plan it and wait for approval before coding (see roadmap below)
+
+## Standing rules
+
+### Working rules (every milestone)
+- Before coding: inspect the repo, explain what will be built and why, list files to create or change, and wait for approval if the design changes anything previously decided.
+- Implement the smallest complete version, add tests, run them, fix failures. Never call something done until tests have actually been run and the output has been shown.
+- After implementing, give: (a) how to run and verify it, (b) a plain-English explanation of each important design decision with alternatives and trade-offs (interview-ready), (c) a critical self-review covering the weakest parts, missing tests, risks and anything misleading. Do not just praise the work.
+- Commit with meaningful messages after each verified milestone, and update and commit `docs/PROGRESS.md`. Never commit secrets or real data.
+- Keep it simple: no FastAPI, Docker, CI, UI, vector DB, multiple agents or extra dependencies until the roadmap says so or it has been justified. Ask before adding any dependency or paid service, with a cost estimate and a free alternative.
+- Tests run offline with no paid API calls. Mock LLM providers in tests.
+- Never invent benchmark numbers, users or results. Use placeholders until the evaluation has been run.
+- Teach: if the user seems to accept something they cannot explain, quiz them briefly before moving on.
+
+### Decided design (do not change without asking)
+- System: 4 services (api-gateway, auth, orders, payments). No DB service; pool exhaustion is a metric.
+- 5 fault types: bad_deployment, config_error, connection_pool_exhaustion, memory_leak, certificate_expiry. A diagnosis is a (service, fault type) pair.
+- Ground truth is separate from observable data by type and by file location (`data/ground_truth/`). Tools never import or expose it.
+- Seeded, deterministic simulator: one RNG per scenario, no `datetime.now()`, byte-identical output for the same seed.
+- Source IDs are assigned after merging and sorting by timestamp.
+- Real and red-herring deployments/config changes look statistically alike.
+- Alert summaries describe symptoms only, never the cause.
+- Log templates have multiple phrasings with a generator-side `variant_id`, hidden from observable data.
+- Log content is untrusted. Prompt-injection strings appear in some logs and must be treated as data.
+- Tools return structured errors instead of raising, and enforce time-window caps, limits and truncation flags.
+
+### Roadmap (one milestone at a time, stop after each)
+- **M1:** Simulator, read-only tools, tests (leakage, determinism, read-only, invalid input, injection, truncation, CLI).
+- **M2:** Ambiguous and missing-evidence difficulty tiers. Split dev (~40) and held-out (~60) by template variant and timing pattern, not only by seed. Freeze the held-out manifest hash. Rule-based baseline built on dev data only. Evaluation harness and metrics: top-1, top-3, evidence validity, unsupported claims, tool calls, latency, cost. First baseline numbers on dev.
+- **M3:** LLM adapter interface (mock, local Ollama/Qwen, optional hosted). 5-scenario pilot to check whether the local model can do multi-step tool calling. Honest report and backbone recommendation with cost estimates before spending money.
+- **M4:** Agent as an explicit state machine (TRIAGE, GATHER, HYPOTHESIZE, VERIFY, REPORT) with validated tool inputs, call limits, timeouts, stop reasons (sufficient_evidence, budget_exhausted, timeout, no_new_evidence, error), full run traces, and an investigation report: ranked hypotheses, cited source IDs, contradicting or missing evidence, uncertainty, next checks, remediation recommended but never executed.
+- **M5:** Single-pass LLM baseline with fixed evidence. Three-way comparison on held-out data, run only at milestones and logged. Prompt-injection safety tests against the agent. Reproducible evaluation report.
+- **M6:** README, architecture diagram, threat model, limitations, demo script (one success, one failure or uncertainty case), 60-second pitch, 3–5 interview Q&As, CV bullets based only on measured results.
+
+### Leakage and evaluation integrity
+- Never tune prompts, rules or thresholds on held-out data.
+- Warn if the baseline, prompts and simulator look co-adapted (the same author wrote all three).
+- Report counts with percentages. Small samples do not support strong claims.
+- State the limitation that the data is synthetic and author-built.
+
+### Schedule
+10–15 hours/week; the core must be finished by early March 2027. If a milestone is slipping, say what to cut without losing core technical value. Do not add scope.

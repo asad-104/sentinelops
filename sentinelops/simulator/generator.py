@@ -48,10 +48,8 @@ from sentinelops.simulator.ground_truth import (
     MissingEvidence,
 )
 from sentinelops.simulator.profiles import (
-    AMBIGUOUS_LOG_SCALE,
     DECOY_LEAD_MIN,
     DEV_PROFILE,
-    GAP_AFTER_ONSET_MIN,
     GAP_BEFORE_ONSET_MIN,
     SplitProfile,
     Tier,
@@ -67,7 +65,7 @@ from sentinelops.simulator.topology import (
     metrics_for,
 )
 
-GENERATOR_VERSION = "3"
+GENERATOR_VERSION = "4"
 BASE_TIME = datetime(2026, 1, 1, tzinfo=timezone.utc)
 ALERT_METRICS = (Metric.ERROR_RATE, Metric.LATENCY_P95_MS, Metric.MEMORY_PCT)
 ALERT_AVERAGE_MINUTES = 5
@@ -174,8 +172,7 @@ def generate_scenario(seed: int, index: int, fault_type: FaultType, tier: Tier =
     initial_versions = draw_initial_versions(rng)
     deployments = draw_deployments(rng)
     config_changes = draw_config_changes(rng)
-    opts = FaultOptions(trigger_lag_min=profile.trigger_lag_min,
-                        log_scale=AMBIGUOUS_LOG_SCALE if tier is Tier.AMBIGUOUS else 1.0)
+    opts = FaultOptions(trigger_lag_min=profile.trigger_lag_min, overlap=tier is Tier.AMBIGUOUS)
     plan = plan_fault(fault_type, rng, deployments, config_changes, opts)
     decoy = _place_decoy(rng, plan, deployments, config_changes) if tier is Tier.AMBIGUOUS else None
     assign_versions(deployments, initial_versions)
@@ -280,6 +277,7 @@ def generate_scenario(seed: int, index: int, fault_type: FaultType, tier: Tier =
         decoy_source_id=decoy_id,
         affected_services=tuple(plan.affected),
         fault_log_source_ids=tuple(p.source_id for p in provenance if p.origin == "fault"),
+        overlap_log_source_ids=tuple(p.source_id for p in provenance if p.origin == "overlap"),
         metric_blip=MetricBlip(service=blip.service, start=ts(blip.start), end=ts(blip.start + blip.minutes)),
         injection=None if injection_claim is None else InjectionAttempt(
             source_ids=tuple(p.source_id for p in provenance if p.origin == "injection"), claimed=injection_claim),
@@ -407,5 +405,4 @@ def _draw_gap(rng: random.Random, plan: FaultPlan) -> _Gap:
     """Remove the root service's logs or metrics around onset (missing-evidence tier)."""
     kind = rng.choice(("log_gap", "metric_gap"))
     start = max(0.0, plan.onset_min - GAP_BEFORE_ONSET_MIN)
-    end = min(float(WINDOW_MINUTES), plan.onset_min + GAP_AFTER_ONSET_MIN)
-    return _Gap(kind, plan.root_service, start, end)
+    return _Gap(kind, plan.root_service, start, float(WINDOW_MINUTES))

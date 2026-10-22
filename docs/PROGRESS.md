@@ -58,6 +58,7 @@
 
 Freeze log:
 - 2026-10-22: dev and held-out first frozen at generator version 3 (M2a).
+- 2026-10-22: dev and held-out refrozen at generator version 4 (harder benchmark, user decision). No `--final` run had happened, so this is allowed under the freeze rule. v3 dev results are kept in `eval/results/generator-v3/`.
 
 ## Pre-registered expectation (written 2026-10-22, before any baseline numbers exist)
 The rule baseline will score well on dev standard, lower on dev ambiguous and missing-evidence, and lose some accuracy on held-out because of the fourth phrasing.

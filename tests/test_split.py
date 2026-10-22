@@ -102,3 +102,11 @@ def test_regeneration_is_byte_identical(splits: dict, tmp_path: Path) -> None:
     _, root = splits[Split.DEV]
     write_split(build_split(Split.DEV), tmp_path)
     assert content_sha256(tmp_path) == content_sha256(root)
+
+
+@pytest.mark.parametrize("split", list(Split))
+def test_every_frozen_scenario_is_solvable(splits: dict, split: Split) -> None:
+    from test_tiers import _log_channel, _metric_channel
+
+    unsolvable = sum(not (_log_channel(obs, gt) or _metric_channel(obs, gt)) for obs, gt in splits[split][0])
+    assert unsolvable == 0, f"{unsolvable} {split.value} scenarios have no independent evidence path"

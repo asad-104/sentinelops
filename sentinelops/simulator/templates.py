@@ -149,6 +149,12 @@ _ALL = (
         "dependency {dep} error: HTTP 502 on {path}",
         "{dep} answered {path} with a server error",
     )),
+    LogTemplate("upstream.connection_error", _E, (
+        "connection reset by {dep}",
+        "connection to {dep} refused",
+        "lost connection to {dep} mid-request",
+        "{dep} closed the socket unexpectedly",
+    )),
     LogTemplate("upstream.slow", _W, (
         "call to {dep} took {ms}ms",
         "slow response from {dep}: {ms} ms",

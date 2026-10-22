@@ -10,7 +10,7 @@ from typing import Literal
 
 from sentinelops.models import Service
 
-Origin = Literal["background", "change", "distractor", "fault"]
+Origin = Literal["background", "change", "distractor", "fault", "overlap"]
 ParamsFn = Callable[[random.Random, int], dict[str, str]]
 
 

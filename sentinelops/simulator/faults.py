@@ -129,7 +129,8 @@ def _propagate(rng: random.Random, plan: FaultPlan, err: Sequence[float], lat_fr
 
 
 def _bad_deployment(rng: random.Random, deployments: list[DraftDeployment],
-                    config_changes: list[DraftConfigChange], opts: FaultOptions) -> FaultPlan:
+                    config_changes: list[DraftConfigChange], opts: FaultOptions,
+                    orng: random.Random) -> FaultPlan:
     trigger = rng.choice(deployments)
     plan = FaultPlan(FaultType.BAD_DEPLOYMENT, trigger.service, trigger.minute + rng.uniform(*opts.trigger_lag_min),
                      trigger, opts.log_scale)
@@ -141,14 +142,15 @@ def _bad_deployment(rng: random.Random, deployments: list[DraftDeployment],
     _propagate(rng, plan, _scaled(err, 0.5), _scaled(lat, 0.5))
     if opts.overlap:
         # The new version also makes slow calls and uses more memory.
-        plan.emit(rng, plan.root_service, "client.timeout", _ramp(plan.onset_min, 3.0),
-                  _fixed(dep=rng.choice(downstream_names(plan.root_service)), timeout="3000"), origin="overlap")
-        plan.add_delta(plan.root_service, Metric.MEMORY_PCT, _ramp(plan.onset_min, rng.uniform(40.0, 50.0), 10.0))
+        plan.emit(orng, plan.root_service, "client.timeout", _ramp(plan.onset_min, 3.0),
+                  _fixed(dep=orng.choice(downstream_names(plan.root_service)), timeout="3000"), origin="overlap")
+        plan.add_delta(plan.root_service, Metric.MEMORY_PCT, _ramp(plan.onset_min, orng.uniform(40.0, 50.0), 10.0))
     return plan
 
 
 def _config_error(rng: random.Random, deployments: list[DraftDeployment],
-                  config_changes: list[DraftConfigChange], opts: FaultOptions) -> FaultPlan:
+                  config_changes: list[DraftConfigChange], opts: FaultOptions,
+                  orng: random.Random) -> FaultPlan:
     trigger = rng.choice(config_changes)
     make_harmful(trigger, rng)
     root = trigger.service
@@ -183,13 +185,14 @@ def _config_error(rng: random.Random, deployments: list[DraftDeployment],
     _propagate(rng, plan, _scaled(err, 0.5), _scaled(lat, 0.5))
     if opts.overlap:
         # Requests that time out or are throttled also drop their connections to the dependency.
-        plan.emit(rng, root, "upstream.connection_error", _ramp(onset, 3.0),
-                  _fixed(dep=rng.choice(downstream_names(root))), origin="overlap")
+        plan.emit(orng, root, "upstream.connection_error", _ramp(onset, 3.0),
+                  _fixed(dep=orng.choice(downstream_names(root))), origin="overlap")
     return plan
 
 
 def _connection_pool_exhaustion(rng: random.Random, deployments: list[DraftDeployment],
-                                config_changes: list[DraftConfigChange], opts: FaultOptions) -> FaultPlan:
+                                config_changes: list[DraftConfigChange], opts: FaultOptions,
+                                orng: random.Random) -> FaultPlan:
     root = rng.choice(DB_SERVICES)
     plan = FaultPlan(FaultType.CONNECTION_POOL_EXHAUSTION, root, rng.uniform(20.0, 85.0), None, opts.log_scale)
     onset = plan.onset_min
@@ -205,13 +208,14 @@ def _connection_pool_exhaustion(rng: random.Random, deployments: list[DraftDeplo
     _propagate(rng, plan, _scaled(err, 0.5), _scaled(lat, 0.5))
     if opts.overlap:
         # Requests waiting for a connection hit their own timeouts.
-        plan.emit(rng, root, "client.timeout", _ramp(onset, 3.0),
+        plan.emit(orng, root, "client.timeout", _ramp(onset, 3.0),
                   _fixed(dep=f"{root.value}-db", timeout="5000"), origin="overlap")
     return plan
 
 
 def _memory_leak(rng: random.Random, deployments: list[DraftDeployment],
-                 config_changes: list[DraftConfigChange], opts: FaultOptions) -> FaultPlan:
+                 config_changes: list[DraftConfigChange], opts: FaultOptions,
+                 orng: random.Random) -> FaultPlan:
     root = rng.choice(SERVICES)
     plan = FaultPlan(FaultType.MEMORY_LEAK, root, rng.uniform(15.0, 55.0), None, opts.log_scale)
     base_memory = BASELINES[root][Metric.MEMORY_PCT]
@@ -249,19 +253,20 @@ def _memory_leak(rng: random.Random, deployments: list[DraftDeployment],
             base_pool = BASELINES[root][Metric.DB_POOL_UTILIZATION]
             plan.add_delta(root, Metric.DB_POOL_UTILIZATION, [(100 - base_pool) * min(1.0, f) for f in lat])
         # The stalled process's own outbound calls time out too.
-        plan.emit(rng, root, "client.timeout", _scaled(lat, 2, cap=3),
-                  _fixed(dep=rng.choice(downstream_names(root)), timeout="3000"), origin="overlap")
+        plan.emit(orng, root, "client.timeout", _scaled(lat, 2, cap=3),
+                  _fixed(dep=orng.choice(downstream_names(root)), timeout="3000"), origin="overlap")
         for caller in callers(root):
-            plan.emit(rng, caller, "client.timeout", _scaled(lat, 2, cap=3),
+            plan.emit(orng, caller, "client.timeout", _scaled(lat, 2, cap=3),
                       _fixed(dep=root.value, timeout="3000"), origin="overlap")
             for t in restarts:
-                plan.log_events += [LogEvent(t + rng.random(), caller, "upstream.connection_error", "overlap",
-                                             {"dep": root.value}) for _ in range(rng.randint(3, 6))]
+                plan.log_events += [LogEvent(t + orng.random(), caller, "upstream.connection_error", "overlap",
+                                             {"dep": root.value}) for _ in range(orng.randint(3, 6))]
     return plan
 
 
 def _certificate_expiry(rng: random.Random, deployments: list[DraftDeployment],
-                        config_changes: list[DraftConfigChange], opts: FaultOptions) -> FaultPlan:
+                        config_changes: list[DraftConfigChange], opts: FaultOptions,
+                        orng: random.Random) -> FaultPlan:
     """A serving certificate expires at a whole minute; clients can no longer connect."""
     root = rng.choice(SERVICES)
     plan = FaultPlan(FaultType.CERTIFICATE_EXPIRY, root, float(rng.randint(20, 85)), None, opts.log_scale)
@@ -280,10 +285,10 @@ def _certificate_expiry(rng: random.Random, deployments: list[DraftDeployment],
     if opts.overlap:
         # Clients see failed handshakes as reset connections; at the gateway, the clients are external.
         for caller in callers(root):
-            plan.emit(rng, caller, "upstream.connection_error", _ramp(onset, 3.0, 1.0), _fixed(dep=root.value),
+            plan.emit(orng, caller, "upstream.connection_error", _ramp(onset, 3.0, 1.0), _fixed(dep=root.value),
                       origin="overlap")
         if not callers(root):
-            plan.emit(rng, root, "upstream.connection_error", _ramp(onset, 3.0, 1.0),
+            plan.emit(orng, root, "upstream.connection_error", _ramp(onset, 3.0, 1.0),
                       _fixed(dep="external clients"), origin="overlap")
     return plan
 
@@ -298,5 +303,7 @@ _BUILDERS = {
 
 
 def plan_fault(fault_type: FaultType, rng: random.Random, deployments: list[DraftDeployment],
-               config_changes: list[DraftConfigChange], opts: FaultOptions) -> FaultPlan:
-    return _BUILDERS[fault_type](rng, deployments, config_changes, opts)
+               config_changes: list[DraftConfigChange], opts: FaultOptions, overlap_rng: random.Random) -> FaultPlan:
+    """``rng`` draws the fault itself; ``overlap_rng`` draws only the overlap symptoms, so turning overlap
+    off leaves every other draw unchanged."""
+    return _BUILDERS[fault_type](rng, deployments, config_changes, opts, overlap_rng)

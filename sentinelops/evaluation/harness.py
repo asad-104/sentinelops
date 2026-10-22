@@ -3,6 +3,10 @@
 Investigators receive a ``CountingToolSet`` built from the scenarios directory
 only. Tool calls and wall time are measured here and override whatever the
 report claims. The held-out split is refused unless ``final=True``.
+
+Scenarios with injected lines are also run on their injection twin (under
+``twins/``, covered by the manifest hash) for the paired injection metric.
+Twin runs get their own budget and are not counted in tool calls or latency.
 """
 
 from __future__ import annotations
@@ -16,7 +20,7 @@ from typing import Any
 from sentinelops.evaluation.metrics import ScenarioScore, score_report
 from sentinelops.report import Investigator
 from sentinelops.scenario_files import load_observable
-from sentinelops.simulator.datasets import DEFAULT_MANIFEST_DIR, content_sha256, load_manifest
+from sentinelops.simulator.datasets import DEFAULT_MANIFEST_DIR, TWINS_DIR, content_sha256, load_manifest
 from sentinelops.simulator.ground_truth import GroundTruth
 from sentinelops.simulator.profiles import Split
 from sentinelops.tools import ToolErrorInfo, ToolResult, ToolSet
@@ -67,17 +71,30 @@ def git_commit() -> str | None:
         return None
 
 
+def verify_split(split: Split, data_root: Path, manifest_dir: Path = DEFAULT_MANIFEST_DIR) -> dict[str, Any]:
+    """The split's frozen manifest, after checking the data on disk matches its hash."""
+    manifest = load_manifest(split, manifest_dir)
+    if manifest is None:
+        raise DataMismatch(f"no manifest for {split.value}")
+    if content_sha256(data_root) != manifest["content_sha256"]:
+        raise DataMismatch(f"{split.value} data does not match its frozen manifest; regenerate with "
+                           f"python -m sentinelops.simulator --split {split.value}")
+    return manifest
+
+
+def _truth(root: Path, scenario_id: str) -> GroundTruth:
+    path = root / "ground_truth" / f"{scenario_id}.json"
+    if not path.is_file():
+        raise DataMismatch(f"missing ground truth for {scenario_id} under {root.name}")
+    return GroundTruth.model_validate_json(path.read_text(encoding="utf-8"))
+
+
 def run_split(investigator: Investigator, split: Split, data_root: Path, *, final: bool = False,
               manifest_dir: Path = DEFAULT_MANIFEST_DIR, budget: int = DEFAULT_CALL_BUDGET) -> RunResult:
     if split is Split.HELDOUT and not final:
         raise HeldOutLocked("the held-out split is locked; it runs only with --final at milestones")
-    manifest = load_manifest(split, manifest_dir)
-    if manifest is None:
-        raise DataMismatch(f"no manifest for {split.value}")
-    sha256 = content_sha256(data_root)
-    if sha256 != manifest["content_sha256"]:
-        raise DataMismatch(f"{split.value} data does not match its frozen manifest; regenerate with "
-                           f"python -m sentinelops.simulator --split {split.value}")
+    manifest = verify_split(split, data_root, manifest_dir)
+    sha256 = manifest["content_sha256"]
 
     scores = []
     for scenario_id in manifest["scenario_ids"]:
@@ -86,9 +103,16 @@ def run_split(investigator: Investigator, split: Split, data_root: Path, *, fina
         report = investigator.investigate(tools, scenario_id)
         elapsed = time.perf_counter() - started
         report = report.model_copy(update={"tool_calls": len(tools.calls), "duration_s": elapsed})
-        truth = GroundTruth.model_validate_json(
-            (data_root / "ground_truth" / f"{scenario_id}.json").read_text(encoding="utf-8"))
-        scores.append(score_report(report, truth, load_observable(data_root / "scenarios" / scenario_id)))
+        truth = _truth(data_root, scenario_id)
+        twin_report = None
+        if truth.injection is not None:
+            twin_root = data_root / TWINS_DIR
+            if _truth(twin_root, scenario_id).mechanisms_off != ("injection",):
+                raise DataMismatch(f"{scenario_id} has no valid injection twin")
+            twin_tools = CountingToolSet(ToolSet.from_directory(twin_root / "scenarios", scenario_id), budget)
+            twin_report = investigator.investigate(twin_tools, scenario_id)
+        scores.append(score_report(report, truth, load_observable(data_root / "scenarios" / scenario_id),
+                                   twin_report=twin_report))
     return RunResult(
         investigator=investigator.name,
         split=split.value,

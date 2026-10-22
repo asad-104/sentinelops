@@ -358,3 +358,92 @@ def test_malformed_files_raise_viewer_errors_not_crashes(tmp_path: Path, dev_roo
     version.mkdir()
     (version / "dev-old.json").write_text(json.dumps({"split": "dev", "investigator": "x", "summary": {"n": 1}}))
     assert dev_results(tmp_path, "generator-v5") == ({}, ["dev-old.json"])
+
+
+M3_PAGE = REPO_ROOT / "app" / "pages" / "m3_pilot_traces.py"
+COMMITTED_PILOT = REPO_ROOT / "eval" / "pilot"
+
+
+@pytest.fixture()
+def hostile_pilot(dev_root: tuple[Path, list], tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A pilot run whose trace contains the hostile log line, produced by the real loop and trace writer."""
+    from app.dev_data import PILOT_ENV
+    from sentinelops.evaluation.harness import CountingToolSet
+    from sentinelops.llm.loop import ToolLoopInvestigator
+    from sentinelops.llm.mock import ScriptedClient, call
+    from sentinelops.llm.trace import TraceWriter
+    from sentinelops.tools import ToolSet
+
+    root, scenarios = dev_root
+    observable = scenarios[0][0]
+    run_dir = tmp_path / "pilot" / "generator-v5" / "mock-scripted"
+    report = {"summary": "s", "hypotheses": [{"rank": 1, "service": "orders", "fault_type": "memory_leak",
+                                              "confidence": "low", "supporting_evidence": ["ALR-001"],
+                                              "rationale": HOSTILE}]}
+    loop = ToolLoopInvestigator(ScriptedClient([call("search_logs", {"contains": "bold"}),
+                                                call("submit_report", report)]),
+                                traces=TraceWriter(run_dir / "traces"))
+    loop.investigate(CountingToolSet(ToolSet(observable)), observable.scenario_id)
+    dump_json(run_dir / "summary.json", {"metadata": {"backend": "mock", "model": "scripted"}, "runs": [],
+                                         "rule": {"verdict": "not applicable (mock backend)"}})
+    monkeypatch.setenv(PILOT_ENV, str(tmp_path / "pilot"))
+    return run_dir
+
+
+def test_m3_page_shows_untrusted_text_only_in_code_blocks(hostile_pilot: Path) -> None:
+    testing = pytest.importorskip("streamlit.testing.v1")
+    at = testing.AppTest.from_file(str(M3_PAGE), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    at.selectbox(key="pilot_call").set_value(1).run()  # the model's search_logs call
+    assert not at.exception
+    codes = [c.value for c in at.code]
+    assert any("**bold** <script>" in c for c in codes)  # tool output, verbatim
+    assert any(HOSTILE in c for c in codes)  # the model-written report rationale, verbatim
+    assert not any("bold" in m.value or "script" in m.value for m in at.markdown)
+    assert any(m.value == "sufficient_evidence" for m in at.metric)
+
+
+def test_m3_page_skips_malformed_trace_lines(hostile_pilot: Path) -> None:
+    testing = pytest.importorskip("streamlit.testing.v1")
+    trace = next((hostile_pilot / "traces").glob("*.jsonl"))
+    trace.write_text(trace.read_text() + "{not json\n[1, 2]\n")
+    at = testing.AppTest.from_file(str(M3_PAGE), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Skipped 2 malformed line(s)" in i.value for i in at.info)
+
+
+def test_pilot_readers_refuse_heldout_and_escapes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.dev_data import PILOT_ENV, pilot_root, pilot_summary, pilot_trace
+
+    monkeypatch.setenv(PILOT_ENV, str(tmp_path / "heldout" / "pilot"))
+    with pytest.raises(ViewerDataError):
+        pilot_root()
+    for bad in ("../x", "generator-v5/../../etc", "generator-v5"):
+        with pytest.raises(ViewerDataError):
+            pilot_summary(tmp_path, bad)
+    with pytest.raises(ViewerDataError):
+        pilot_trace(tmp_path, "generator-v5/mock-scripted", "../summary.json")
+
+
+@pytest.mark.skipif(not any(COMMITTED_PILOT.glob("generator-v*/*/summary.json")), reason="no committed pilot runs")
+def test_m3_page_renders_every_committed_trace(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Render against the real eval/pilot: each trace's steps and stop reason must match its file."""
+    testing = pytest.importorskip("streamlit.testing.v1")
+    from app.dev_data import PILOT_ENV, pilot_runs, pilot_trace, pilot_traces
+
+    monkeypatch.setenv(PILOT_ENV, str(COMMITTED_PILOT))
+    at = testing.AppTest.from_file(str(M3_PAGE), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    for run in pilot_runs(COMMITTED_PILOT):
+        at.selectbox(key="pilot_run").set_value(run).run()
+        for name in pilot_traces(COMMITTED_PILOT, run):
+            at.selectbox(key="pilot_trace").set_value(name).run()
+            assert not at.exception, (run, name, [e.value for e in at.exception])
+            events, skipped = pilot_trace(COMMITTED_PILOT, run, name)
+            steps = next(df.value for df in at.dataframe if "step" in df.value.columns)
+            assert len(steps) == sum(e["event"] in ("model", "tool") for e in events) and not skipped
+            stop = next(e for e in events if e["event"] == "stop")
+            assert at.metric[0].value == stop["stop_reason"]

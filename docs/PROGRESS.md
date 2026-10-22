@@ -1,6 +1,12 @@
 # SentinelOps progress
 
 ## Current milestone
+**M3 stage A is done and awaiting review** on `m3-stage-a` (2026-10-23). The plan is in `docs/M3_PLAN.md`, on branch `m3-plan`.
+- **What stage A added:** an LLM client interface, a scripted mock, the Ollama client (never run against a server), tool schemas, the tool loop, JSONL traces, crash-catching in the harness, the pilot CLI, the network guard and the M3 viewer page.
+- **What has not happened:** no model has been pulled or called, nothing was installed, and nothing touched the network except the two D1 page fetches.
+- **Mock traces:** the committed traces in `eval/pilot/generator-v5/mock-scripted/` come from a scripted policy, not a model.
+- **Stage B** (first real local run) needs approval.
+
 **M2 is complete (2026-10-22).** All of it is merged into `main`: tiers, split, baseline, harness, generator v5 with paired twins and ablation, and the M2 viewer page. **M3 planning is approved but not started**; no M3 code exists. No held-out run has happened.
 
 **M2 findings (dev only, synthetic, author-built data):**
@@ -59,6 +65,17 @@
 | **M2b:** Held-out refused unless `--final`, before any file is read; final runs append to `eval/heldout_runs.jsonl` | Enforces the freeze rule mechanically |
 | **M2b:** Evidence validity pooled over top-1 citations, lenient and strict, with no interval | Citations within a scenario are correlated, so a binomial interval would overstate precision |
 | **M2b:** Per-fault results are descriptive counts only | Cells of 8 cannot support claims |
+| **M3:** LLM clients return `LLMResponse \| LLMError` and never raise | The loop handles model failures the way it handles tool failures (`ok=False`), with no try/except around calls |
+| **M3:** Tool specs are generated from `TOOL_INPUT_MODELS` (now a module constant in `toolset.py`, used by the registry) | What the model is told and what `ToolSet.call` validates cannot drift apart. Investigators only get a `ToolCaller`, so schemas must not need a scenario |
+| **M3:** A run with no valid report raises `InvestigationFailed(stop_reason)`, and the harness records an error row (scored as wrong, never dropped). Only `HarnessAbort` stops a whole run | No report is ever invented. A crash or a stuck model can't stop or silently shrink an evaluation |
+| **M3:** The loop fetches the alert itself (1 of the 30 calls) and puts it in the first user message as data | It saves the small model a turn. The fetch is counted and traced, and excluded from the valid-call share, which is about the model's own calls |
+| **M3:** `submit_report` doesn't consume the 30-call read budget, but it counts toward the valid-call share | The budget bounds evidence gathering. A valid report is part of using tools correctly |
+| **M3:** Text-only model replies count toward the 3-in-a-row malformed streak | Otherwise a model that only chats would run until the turn cap |
+| **M3:** Frozen prompt sha256 `0f97fb44c2549794f7ba1be577d8d01392422e30b8752f4fd2ba640a88c2d2ea`, pinned by `test_prompt_is_frozen` | Change 3. Any revision changes the hash, fails the test, and must be logged here first |
+| **M3:** Memory signals come from `sysctl kern.memorystatus_vm_pressure_level` (1 normal, 2 warn, 4 critical) and `vm.swapusage` | The `memory_pressure` command named in the plan *applies* memory pressure (`man memory_pressure`), so it is never run. A test asserts only `sysctl` is called |
+| **M3:** Free disk is checked in decimal GB (`shutil.disk_usage`), not the GiB that `df -h` shows | 10 GB decimal is about 9.3 GiB, so the guard is slightly looser than `df` would suggest. Recorded so the two aren't confused |
+| **M3:** The mock backend's verdict is "not applicable" | A scripted policy can't pass or fail model thresholds. The rule's raw value is kept under `mechanics_check_only` |
+| **M3:** The network guard patches `socket` at conftest import and raises a non-`OSError` `NetworkBlocked`; Unix-domain sockets are allowed | Covers session fixtures too, and HTTP clients can't turn it into an ordinary connection error. Local IPC (event loops) still works |
 | **v5:** One seeded stream per mechanism (injection, overlap, decoy, gap) plus a base stream; every log line rendered from a sub-stream seeded by one 64-bit draw | Turning one mechanism off must not shift any other draw. Without per-line sub-streams, `rng.choice` over service-dependent lists consumes a variable number of draws |
 | **v5:** Gap applied after rendering; alert's random choice drawn unconditionally | Same reason: the base stream's position must not depend on which records a mechanism removes or which services breach |
 | **v5:** Injection twins written with each split under `twins/`, covered by the content hash | Final held-out runs need twins without regenerating held-out in the harness; the hash freezes them with the split |
@@ -335,6 +352,51 @@ Code e8c9279, dev only, no `--final` run. Full tables:
 5. **These are counts on n = 10–12.** They show which mechanism acts on which investigator; they are not effect sizes.
 6. **Certificate expiry is 0/8 for `rule_based` on both v4 and v5 dev,** across all tiers. I missed this in the v4 write-up. Callers log the TLS errors, so the rules blame the caller. It is a baseline v1 weakness, recorded and not tuned.
 
+## M3 pilot: questions and decision rule (recorded 2026-10-23, before any M3 code)
+The full plan is in `docs/M3_PLAN.md`. Dev only; held-out data is never used.
+
+**Fixed pilot set:**
+- Runs 1–5 are the first dev scenario of each fault type in manifest order (generator v5, sha256 `5a35c45a…`): `sc-06b280fbed`, `sc-1499febf6f`, `sc-203fe8a4ca`, `sc-2d438d4575`, `sc-32aaf79bfd`.
+- Runs 6–7 are an injection probe pair: `sc-4141664f86` and its twin.
+- No pilot scenario is ambiguous, so the pilot says nothing about that tier.
+
+**Fixed bounds:**
+- 30 tool calls
+- 40 model turns
+- 180 s per model call (2 consecutive timeouts end the run)
+- 20 min per scenario
+- a 4,000-character cap on each tool result shown to the model
+- `num_ctx` 8192
+
+The pilot's 30-call budget is not the rule baseline's 52 calls. The M4/M5 budget will be pre-registered separately, and any comparison states both budgets.
+
+**Questions, reported as counts:**
+1. **Valid tool calls:** valid / all tool calls, pooled over runs. Valid means the call parses, names a known tool, and passes the schema.
+2. **Inside budget:** runs ending in `sufficient_evidence`.
+3. **Valid reports:** runs whose report validates against `InvestigationReport`, directly or after one repair turn (counted separately).
+4. **Real citations:** cited IDs that exist in the scenario / all cited IDs. The 4,000-character cap can hide source IDs from the model.
+5. **Top-1:** k/5, descriptive only. Five scenarios cannot support an accuracy claim.
+
+**Also recorded:**
+- wall time, tokens, swap growth and memory pressure per run
+- whether the model has a thinking mode, how it is configured, and its effect on time and tokens
+- the probe pair's answer change
+- the SHA-256 of the frozen system prompt and tool descriptions
+
+**Decision rule** (over runs 1–5; top-1 is not part of it):
+- **Local is feasible for M4** if all of these hold:
+  - valid tool calls ≥ 80%
+  - ≥ 4 of 5 runs end in `sufficient_evidence` with a valid report (repair allowed)
+  - real citations ≥ 90%
+  - median wall time ≤ 10 min per scenario
+- **Propose a hosted pilot** if any of these hold:
+  - valid tool calls < 60%
+  - ≤ 2 of 5 valid reports
+  - median wall time > 20 min
+- **In between:** one logged prompt revision (new hash) and a single re-run on the same 5 scenarios. If the result is still in between, propose hosted.
+
+A hosted pilot needs explicit user approval, a $5 hard cap in the provider console, and httpx only.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 
@@ -379,6 +441,10 @@ Planned pages:
   - A mutation that routes overlap and injection lines back to the base stream fails 8 of 13 tests.
 - **The solvability test is lenient:** some evidence path survives, not a discriminating one (see README limitations).
 - **Twin runs double LLM cost for roughly a third of scenarios** (12/40 dev).
+- **The Ollama request and response shape is written from the documented API and tested only against `httpx.MockTransport`.** The stage B smoke run is the first real check. A mismatch will show up as `bad_response` errors.
+- **Thinking mode is unverified.** The Ollama page lists `qwen3:4b` with a `thinking` tag but doesn't say how to configure it. The client sends `think` only when `--think on|off` is given, and records `thinking_chars` per turn.
+- **Untrusted text in the M3 page.** Tool names chosen by the model appear in a selectbox label. Everything else model- or log-written is in dataframes or code blocks.
+- **`apply_rule` takes the median wall time over core runs that have one.** A run with no stop event (an aborted batch) has none, so it is excluded from the median, though it still counts against valid reports.
 
 ## Open questions
 - ~~**Benchmark difficulty.**~~ Decided and done: generator v4 (see "Harder benchmark" above). Original question: should the tiers be strengthened before the first `--final` run? The freeze rule allows regenerating held-out until then. Options:
@@ -394,6 +460,8 @@ Planned pages:
 - ~~**Ambiguous tier vs `rule_based`.**~~ Decided: no further difficulty revision (user decision, 2026-10-22). The v5 ablation shows why it doesn't bite: overlap changes none of `rule_based`'s answers.
 
 ## Next action
+**Review M3 stage A on `m3-stage-a`; stage B (first real local run) needs approval.** Earlier note, kept for history:
+
 **M3 planning: approved, not started.** The plan (LLM adapter interface, local Ollama/Qwen pilot on 5 dev scenarios plus twins, optional hosted model with cost estimates) is in the 2026-10-22 conversation. Before any code, settle the open choices:
 - installing Ollama
 - the model size, given 8 GB RAM and about 9 GB free disk

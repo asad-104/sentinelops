@@ -68,6 +68,16 @@ class InvestigationReport(_Model):
         return self.hypotheses[0]
 
 
+class InvestigationFailed(Exception):
+    """Raised by an investigator that stops without a valid report (budget, timeout, no new evidence,
+    error). The harness records it as an error row with this stop reason; no report is invented."""
+
+    def __init__(self, stop_reason: StopReason, message: str) -> None:
+        super().__init__(message)
+        self.stop_reason = stop_reason
+        self.message = message
+
+
 class ToolCaller(Protocol):
     def call(self, name: str, arguments: Any = None) -> ToolResult: ...
 

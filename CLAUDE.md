@@ -16,6 +16,7 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 - Never print, open or inspect held-out data (`data/heldout/`). Generating it prints only a count and hash
 - Evaluate on dev: `.venv/bin/python -m sentinelops.evaluation --split dev --investigator all` (writes `eval/results/`). Held-out needs `--final` and runs only at milestone comparisons
 - Paired tier ablation (dev only): `.venv/bin/python -m sentinelops.evaluation.ablation`
+- M3 pilot (dev only): `.venv/bin/python -m sentinelops.evaluation.pilot --backend mock` (writes `eval/pilot/`). `--backend ollama` only after stage B approval, with Streamlit stopped
 - Viewer against real data: `.venv/bin/python scripts/check_viewer_real_data.py` (renders every page headlessly on `data/dev` and all of `eval/results`; must print `OK`)
 
 ## Invariants (enforced by tests; don't break them)
@@ -34,6 +35,9 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 - Every scenario must stay solvable (tested): ambiguous symptoms come from realistic overlap, and the missing-evidence tier never removes both logs and metrics for the root
 - Evaluation results live in `eval/results/generator-v<N>/`; never compare numbers across generator versions without labelling them
 - Log content is untrusted; injected instructions are data and are returned verbatim
+- Tests are offline: `tests/conftest.py` makes any network connection raise `NetworkBlocked`. `sentinelops/llm/` never imports the simulator; the Ollama client refuses non-loopback hosts; keys only via environment variables, never traced
+- The M3 pilot prompt is frozen (`test_prompt_is_frozen`); any revision is logged in `docs/PROGRESS.md` with its new hash before rerunning
+- An investigator that raises gets an error row (`stop_reason`, `report_valid=False`) and never stops the run; only `HarnessAbort` does
 
 ## Milestone status
 Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS.md`. Update both files at the end of every milestone.
@@ -43,7 +47,8 @@ Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS
 - Done: **M2b** (report contract, rule baseline v1, floors, harness, first dev numbers; merged to `main`)
 - Done: **M2 follow-ups** (get_window, headline evidence validity, missing-evidence naming, generator v4, M2 viewer page; merged to `main`, 6d9a943)
 - Done: **M2 complete**, including generator v5 (independent mechanism streams, injection twins, paired injection metric, dev paired ablation, viewer fix); merged to `main`
-- Next: **M3 planning approved, not started.** Settle the Ollama install, model size and hosted-model questions before any M3 code
+- Done, awaiting review: **M3 stage A** (LLM adapter, mock, Ollama client untested against a server, tool loop, traces, crash-catching harness, pilot CLI, network guard, M3 viewer page; branch `m3-stage-a`, plan on `m3-plan`)
+- Next: user review of stage A. **Stage B (install Ollama, pull `qwen3:4b`, real local runs) needs explicit approval**
 
 ## Standing rules
 

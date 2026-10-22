@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 
 from sentinelops.evaluation.__main__ import main
-from sentinelops.evaluation.harness import CountingToolSet, DataMismatch, HeldOutLocked, run_split
+from sentinelops.evaluation.harness import CountingToolSet, DataMismatch, HarnessAbort, HeldOutLocked, run_split
 from sentinelops.models import FaultType
-from sentinelops.report import Hypothesis, InvestigationReport
+from sentinelops.report import Hypothesis, InvestigationFailed, InvestigationReport
 from sentinelops.scenario_files import dump_json
 from sentinelops.simulator import generate_scenario
 from sentinelops.simulator.datasets import build_manifest, content_sha256, manifest_path, write_split
@@ -136,3 +136,58 @@ def test_cli_writes_result_files(tmp_dev: tuple[Path, Path], tmp_path: Path, cap
     for name in ("rule_based", "alert_service", "latest_change", "keyword_only", "random (analytical"):
         assert name in summary_md
     assert "# dev results" in capsys.readouterr().out
+
+
+class Flaky:
+    """Crashes on one scenario, stops without a report on another, reports on the rest (twins included)."""
+
+    name = "flaky"
+
+    def __init__(self, crash: str, stop: str) -> None:
+        self.crash, self.stop = crash, stop
+
+    def investigate(self, tools, scenario_id: str) -> InvestigationReport:
+        tools.call("get_alert")
+        if scenario_id == self.crash:
+            raise RuntimeError("investigator bug")
+        if scenario_id == self.stop:
+            raise InvestigationFailed("budget_exhausted", "ran out of calls")
+        return SelfReportingLiar().investigate(tools, scenario_id)
+
+
+def test_investigator_crashes_become_error_rows_and_the_run_continues(tmp_dev: tuple[Path, Path]) -> None:
+    data_root, manifest_dir = tmp_dev
+    ids = json.loads(manifest_path(Split.DEV, manifest_dir).read_text())["scenario_ids"]
+    result = run_split(Flaky(ids[0], ids[1]), Split.DEV, data_root, manifest_dir=manifest_dir, scenario_ids=ids)
+    crashed, stopped, *rest = result.scores
+    assert (crashed.stop_reason, crashed.report_valid, crashed.top1) == ("error", False, False)
+    assert crashed.error == "RuntimeError: investigator bug" and crashed.tool_calls == 1
+    assert (stopped.stop_reason, stopped.report_valid, stopped.error) == ("budget_exhausted", False,
+                                                                          "ran out of calls")
+    assert all(s.report_valid for s in rest) and len(result.scores) == len(ids)
+
+
+def test_harness_abort_stops_the_whole_run(tmp_dev: tuple[Path, Path]) -> None:
+    data_root, manifest_dir = tmp_dev
+
+    class Aborts:
+        name = "aborts"
+
+        def investigate(self, tools, scenario_id):
+            raise HarnessAbort("disk below minimum")
+
+    with pytest.raises(HarnessAbort):
+        run_split(Aborts(), Split.DEV, data_root, manifest_dir=manifest_dir)
+
+
+def test_scenario_subset_is_honoured_in_order(tmp_dev: tuple[Path, Path]) -> None:
+    data_root, manifest_dir = tmp_dev
+    ids = json.loads(manifest_path(Split.DEV, manifest_dir).read_text())["scenario_ids"]
+    subset = [ids[2], ids[0]]
+    result = run_split(SelfReportingLiar(), Split.DEV, data_root, manifest_dir=manifest_dir, scenario_ids=subset)
+    assert [s.scenario_id for s in result.scores] == subset
+    with pytest.raises(DataMismatch):
+        run_split(SelfReportingLiar(), Split.DEV, data_root, manifest_dir=manifest_dir,
+                  scenario_ids=["sc-0000000000"])
+    with pytest.raises(HeldOutLocked):
+        run_split(SelfReportingLiar(), Split.HELDOUT, data_root, manifest_dir=manifest_dir, scenario_ids=subset)

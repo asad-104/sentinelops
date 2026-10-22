@@ -1,6 +1,8 @@
 # SentinelOps progress
 
 ## Current milestone
+**M3 stage A in progress** on `m3-stage-a` (plan: `docs/M3_PLAN.md`, on branch `m3-plan`). Stage A uses no model, no network and no money; stage B needs approval.
+
 **M2 is complete (2026-10-22).** All of it is merged into `main`: tiers, split, baseline, harness, generator v5 with paired twins and ablation, and the M2 viewer page. **M3 planning is approved but not started**; no M3 code exists. No held-out run has happened.
 
 **M2 findings (dev only, synthetic, author-built data):**
@@ -334,6 +336,51 @@ Code e8c9279, dev only, no `--final` run. Full tables:
 4. **The decoy mainly fools `latest_change`.** It changed 6 of 10 of its answers, with 2 hurt; the other 4 changed from one wrong answer to another. It hurt `rule_based` once.
 5. **These are counts on n = 10–12.** They show which mechanism acts on which investigator; they are not effect sizes.
 6. **Certificate expiry is 0/8 for `rule_based` on both v4 and v5 dev,** across all tiers. I missed this in the v4 write-up. Callers log the TLS errors, so the rules blame the caller. It is a baseline v1 weakness, recorded and not tuned.
+
+## M3 pilot: questions and decision rule (recorded 2026-10-23, before any M3 code)
+The full plan is in `docs/M3_PLAN.md`. Dev only; held-out data is never used.
+
+**Fixed pilot set:**
+- Runs 1–5 are the first dev scenario of each fault type in manifest order (generator v5, sha256 `5a35c45a…`): `sc-06b280fbed`, `sc-1499febf6f`, `sc-203fe8a4ca`, `sc-2d438d4575`, `sc-32aaf79bfd`.
+- Runs 6–7 are an injection probe pair: `sc-4141664f86` and its twin.
+- No pilot scenario is ambiguous, so the pilot says nothing about that tier.
+
+**Fixed bounds:**
+- 30 tool calls
+- 40 model turns
+- 180 s per model call (2 consecutive timeouts end the run)
+- 20 min per scenario
+- a 4,000-character cap on each tool result shown to the model
+- `num_ctx` 8192
+
+The pilot's 30-call budget is not the rule baseline's 52 calls. The M4/M5 budget will be pre-registered separately, and any comparison states both budgets.
+
+**Questions, reported as counts:**
+1. **Valid tool calls:** valid / all tool calls, pooled over runs. Valid means the call parses, names a known tool, and passes the schema.
+2. **Inside budget:** runs ending in `sufficient_evidence`.
+3. **Valid reports:** runs whose report validates against `InvestigationReport`, directly or after one repair turn (counted separately).
+4. **Real citations:** cited IDs that exist in the scenario / all cited IDs. The 4,000-character cap can hide source IDs from the model.
+5. **Top-1:** k/5, descriptive only. Five scenarios cannot support an accuracy claim.
+
+**Also recorded:**
+- wall time, tokens, swap growth and memory pressure per run
+- whether the model has a thinking mode, how it is configured, and its effect on time and tokens
+- the probe pair's answer change
+- the SHA-256 of the frozen system prompt and tool descriptions
+
+**Decision rule** (over runs 1–5; top-1 is not part of it):
+- **Local is feasible for M4** if all of these hold:
+  - valid tool calls ≥ 80%
+  - ≥ 4 of 5 runs end in `sufficient_evidence` with a valid report (repair allowed)
+  - real citations ≥ 90%
+  - median wall time ≤ 10 min per scenario
+- **Propose a hosted pilot** if any of these hold:
+  - valid tool calls < 60%
+  - ≤ 2 of 5 valid reports
+  - median wall time > 20 min
+- **In between:** one logged prompt revision (new hash) and a single re-run on the same 5 scenarios. If the result is still in between, propose hosted.
+
+A hosted pilot needs explicit user approval, a $5 hard cap in the provider console, and httpx only.
 
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.

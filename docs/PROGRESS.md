@@ -48,8 +48,65 @@ Freeze log:
 ## Pre-registered expectation (written 2026-10-22, before any baseline numbers exist)
 The rule baseline will score well on dev standard, lower on dev ambiguous and missing-evidence, and lose some accuracy on held-out because of the fourth phrasing.
 
+## Baseline specification v1 (recorded 2026-10-22, before any baseline code was run)
+The signatures and thresholds below are exactly as planned in the approved M2 plan. Where the plan left something unspecified, I fixed it here before seeing any results, so it cannot be adjusted silently afterwards.
+
+**Inputs.** The baseline uses `ToolSet.call` only.
+- `t_a` is the alert timestamp.
+- The lookback start is `max(window start, t_a − 30 min)`. The window start is taken from the first gateway metric point, because tools don't expose the window.
+
+**Keyword signatures** (case-insensitive `contains`, per service, from the lookback start to the window end). Each keyword's count is the tool's `total_matches`, so truncation does not matter.
+
+| Fault | Keywords |
+|---|---|
+| `bad_deployment` | `exception` |
+| `connection_pool_exhaustion` | `connection` |
+| `certificate_expiry` | `certificate`, `x509` |
+| `memory_leak` | `gc pause`, `memory` |
+| `config_error` | `timeout`, `rate limit`, `cache miss` |
+
+**Metric thresholds** (maximum value from the lookback start to the window end):
+- `db_pool_utilization_pct` > 95 supports `connection_pool_exhaustion` on that service.
+- `memory_pct` > 85 supports `memory_leak` on that service.
+
+**Changes** in [lookback start, `t_a`]:
+- A deployment on a service supports `bad_deployment` on that service.
+- A config change on a service supports `config_error` on that service, if the keyword matching its key has more than zero matches on that service. The key-to-keyword mapping:
+  - `http_client.timeout_ms` → `timeout`
+  - `rate_limit.rps` → `rate limit`
+  - `cache.ttl_seconds` → `cache miss`
+  - `db.pool_max` → `connection`
+
+**Score per (service, fault):**
+- Start with keyword evidence: `min(sum of keyword matches, 20) / 20`, so between 0 and 1.
+- Add **+1** if the fault's metric threshold is breached on that service.
+- Add **+1** if a supporting change exists on that service.
+- Pairs scoring 0 are dropped. The rest are ranked by score, ties broken by service order (gateway, auth, orders, payments) then fault order (as listed in `FaultType`), and the top 3 are reported.
+- If nothing scores above 0, the baseline reports one hypothesis: (alert service, `bad_deployment`), with low confidence.
+
+**Confidence** is a qualitative label, not a probability:
+- Top hypothesis: `high` if its score is ≥ 1.5 and it leads the second by ≥ 0.5.
+- Any hypothesis: `medium` if its score is ≥ 0.75, otherwise `low`.
+
+**Stop reason:** `sufficient_evidence` if the top score is ≥ 1, otherwise `no_new_evidence`.
+
+**Citations:**
+- up to 2 matching log IDs per keyword
+- the breaching metric point
+- the supporting change
+
+**Missing evidence:** a service with zero logs in [`t_a` − 5 min, `t_a` + 5 min] while another service has logs in that window.
+
+**Injection lines are not special-cased.**
+
+**Floors** are reported beside the rule baseline:
+- `alert_service`: (alert service, faults in alphabetical order), top 3.
+- `latest_change`: the most recent deployments and config changes before `t_a`, newest first, each mapped to `bad_deployment` or `config_error`, top 3.
+- `keyword_only`: the keyword evidence above, with no metric or change bonuses.
+- Random guessing, reported analytically: 1/19 top-1, 3/19 top-3, 1/4 service.
+
 ## Baseline tuning log
-Every change to the rule baseline's keywords or thresholds is recorded here with a date and reason. Tuning uses dev data only.
+Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 
 | Date | Change | Reason |
 |---|---|---|

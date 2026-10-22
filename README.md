@@ -2,7 +2,7 @@
 
 SentinelOps is an AI agent that investigates simulated production incidents in a small e-commerce system. It works only through bounded, read-only tools, and it will be evaluated against a rule-based baseline and a single-pass LLM. Full requirements are in [docs/project_brief.md](docs/project_brief.md), and progress is tracked in [docs/PROGRESS.md](docs/PROGRESS.md).
 
-**Status: Milestone 1.** The seeded incident simulator, the read-only validated tools and their tests are done. The agent, the baselines and the evaluation do not exist yet, so there are no results.
+**Status: Milestone 2a.** The seeded simulator, read-only tools, difficulty tiers and a frozen dev/held-out split are done. The baselines and the evaluation come in M2b. There are no results yet.
 
 ## Setup
 
@@ -14,9 +14,11 @@ python3.12 -m venv .venv
 ## Generate scenarios
 
 ```bash
-.venv/bin/python -m sentinelops.simulator --seed 1 --n 5          # writes to ./data
-.venv/bin/python -m sentinelops.simulator --seed 1 --n 5 --out /tmp/x
+.venv/bin/python -m sentinelops.simulator --split dev             # frozen dev split -> data/dev/
+.venv/bin/python -m sentinelops.simulator --seed 1 --n 5          # ad-hoc standard scenarios -> data/
 ```
+
+`--split` checks the generated data against `eval/manifests/<split>.json` and reports whether it matches. `--freeze` rewrites the manifest (see the freeze rule in [docs/PROGRESS.md](docs/PROGRESS.md)). The held-out split is never inspected during development: generating it prints only a scenario count and a hash.
 
 ```
 data/
@@ -76,6 +78,23 @@ A diagnosis is a **(service, fault type)** pair. Five fault types are assigned i
 
 Symptoms spread to all transitive callers, halving per hop. Every scenario also contains a harmless latency blip with retry logs as a distractor.
 
+### Difficulty tiers and splits
+
+| Tier | What changes |
+|---|---|
+| `standard` | as described above |
+| `ambiguous` | distinctive fault logs appear at 40% of their usual rate, and one red-herring change is moved to 1–6 min before onset on an affected service |
+| `missing_evidence` | the root service's logs *or* metrics are removed from 5 min before to 20 min after onset; nothing in the data marks the gap |
+
+| Split | Seed | Scenarios | Per fault (standard / ambiguous / missing) | Phrasings | Trigger → onset lag |
+|---|---|---|---|---|---|
+| dev | 1001 | 40 | 4 / 2 / 2 | 1–3 | 1–6 min |
+| held-out | 2002 | 60 | 6 / 3 / 3 | 1–4 | 1–12 min |
+
+**Held-out differs from dev in two ways at once:** a fourth log phrasing that never appears in dev, and a longer trigger-to-onset lag. Any accuracy drop on held-out therefore cannot be attributed to either difference alone.
+
+In the missing-evidence tier the alert is still computed from the full metric series. This models an alerting pipeline that is separate from the store the investigator queries.
+
 Two pairs of faults are deliberately confusable:
 
 - A too-small `db.pool_max` and connection pool exhaustion both saturate the pool and log pool waits. Only the config change and the logged pool size separate them.
@@ -87,7 +106,7 @@ Two pairs of faults are deliberately confusable:
 
 **Source IDs are assigned after merging and sorting.** All records are rendered, merged, sorted by timestamp and only then numbered (`LOG-00001`, …), so an ID's position reveals nothing about the fault. A test checks that fault logs are interleaved with other records.
 
-**Real and red-herring changes come from the same draw.** Deployments and config changes are drawn first, with the same author pool, version format (`vX.Y.Z`), summaries, keys and timing window. A fault then picks its trigger uniformly from them. Tests compare the trigger's timing against red herrings with a two-sample KS test, and also check author spread, key coverage and version-bump rates. The one deliberate difference is that a config trigger's new value is harmful (e.g. a timeout of 3000 → 150 ms). That is diagnostic signal, not leakage.
+**Real and red-herring changes come from the same draw** (standard tier). Deployments and config changes are drawn first, with the same author pool, version format (`vX.Y.Z`), summaries, keys and timing window. A fault then picks its trigger uniformly from them. Tests compare the trigger's timing against red herrings with a two-sample KS test, and also check author spread, key coverage and version-bump rates. The one deliberate difference is that a config trigger's new value is harmful (e.g. a timeout of 3000 → 150 ms). That is diagnostic signal, not leakage.
 
 **Alerts describe symptoms only.** An alert summary names a service, a metric, a 5-minute average and a threshold, and nothing else. A leakage test rejects fault names and cause words.
 
@@ -97,13 +116,13 @@ Two pairs of faults are deliberately confusable:
 
 **Ground truth is unreachable from the tools.** Tools load one scenario directory by an ID matching `^sc-[0-9a-f]{10}$`, and the resolved path must stay inside the scenarios root. The tools package and the observable models never import `sentinelops.simulator`, and an AST-based test enforces this. Scenario IDs are hashes, so they reveal neither the seed nor the fault.
 
-**Tools are read-only, bounded and never raise.** `ToolSet.call` validates arguments with Pydantic:
+**Tools are read-only, bounded by result limits and call budget, and never raise.** There is no maximum time span per call. Instead every list tool has a capped `limit` and returns `truncated`, `get_alert` and `get_record` return at most one item, and the call budget is enforced by the evaluation harness and, later, the agent. `ToolSet.call` validates arguments with Pydantic:
 
 - unknown fields are rejected
 - enums are enforced
 - datetimes must be timezone-aware and inside the scenario window
 - `contains` is at most 200 characters
-- `limit` is capped (200 logs, 500 metric points)
+- `limit` is capped (200 logs, 500 metric points, 100 changes, 200 timeline events, 50 dependencies)
 
 Every outcome comes back as a `ToolResult`. A failure carries `ok=False` and a code: `unknown_tool`, `invalid_arguments`, `out_of_window`, `unsupported_metric`, `not_found` or `internal_error`. This lets an agent loop recover instead of crashing. Results include `total_matches` and `truncated`. Records are frozen.
 
@@ -112,6 +131,6 @@ Every outcome comes back as a `ToolResult`. A failure carries `ok=False` and a c
 - The data is synthetic and author-built. The same person writes the simulator, the baseline and the prompts, so they risk being co-adapted.
 - There is one fault per scenario and no concurrent incidents. Symptom propagation is a simple "halve per hop" model, and the metrics are smoother than real telemetry.
 - Truncation keeps the *earliest* matches. An agent must narrow the time window to see later records.
-- The time-window cap only bounds queries to the scenario window. There is no shorter maximum span per call yet.
 - Logs are English-only and templated. Even with three phrasings each, they are more regular than real logs.
-- Difficulty tiers and the dev/held-out split are not built yet (M2).
+- The dev split has only 40 scenarios (8 per fault type, 2 per fault in each harder tier), and held-out has 60. Per-fault and per-tier numbers will have wide intervals.
+- Ambiguity is limited to two mechanisms (fewer distinctive logs, one decoy change). Missing evidence covers only one gap per scenario, on the root service.

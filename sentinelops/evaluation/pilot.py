@@ -27,9 +27,9 @@ from sentinelops.evaluation.harness import (
     CountingToolSet,
     DataMismatch,
     HarnessAbort,
-    RunResult,
     git_commit,
     run_split,
+    verify_split,
 )
 from sentinelops.llm.client import ChatMessage, LLMClient, LLMError, LLMResponse, ToolSpec
 from sentinelops.llm.loop import LoopBounds, ToolLoopInvestigator
@@ -53,6 +53,10 @@ DEFAULT_OUT_ROOT = Path("eval/pilot")
 MIN_FREE_GB = 10.0
 MAX_SWAP_GROWTH_GB = 2.0
 CRITICAL_PRESSURE = 4  # kern.memorystatus_vm_pressure_level: 1 normal, 2 warn, 4 critical
+
+
+class OutputExists(Exception):
+    """Raised instead of overwriting an output directory that already holds traces or a run log."""
 
 
 def _sysctl(name: str) -> str | None:
@@ -130,8 +134,11 @@ class GuardedInvestigator:
     """Checks disk and memory before each run and logs stats before and after it."""
 
     def __init__(self, inner: ToolLoopInvestigator, run_log: Path, disk_path: Path, *, min_free_gb: float,
-                 max_swap_growth_gb: float, stats: Any = system_stats, progress: Progress | None = None) -> None:
-        self.inner, self.name, self.progress = inner, inner.name, progress
+                 max_swap_growth_gb: float, stats: Any = system_stats, progress: Progress | None = None,
+                 after_run: Callable[[], Any] | None = None) -> None:
+        """``after_run`` (e.g. unloading the model) runs after every run's ``run_end`` line; the next run's
+        guard check then reads the post-unload stats."""
+        self.inner, self.name, self.progress, self.after_run = inner, inner.name, progress, after_run
         self.run_log, self.disk_path, self.stats = run_log, disk_path, stats
         self.min_free_gb, self.max_swap_growth_gb = min_free_gb, max_swap_growth_gb
         self.baseline = stats(disk_path)
@@ -172,12 +179,26 @@ class GuardedInvestigator:
             if self.progress:
                 self.progress.end_run(stop_reason)
             self._log({"event": "run_end", "scenario_id": scenario_id, **self.stats(self.disk_path)})
+            if self.after_run is not None:
+                error = self.after_run()
+                self._log({"event": "unload", "scenario_id": scenario_id, "error": None if error is None else
+                           f"{error.code}: {error.message}", **self.stats(self.disk_path)})
 
 
 def _cited(report: dict[str, Any] | None) -> list[str]:
     if not report:
         return []
     return [i for h in report["hypotheses"] for i in (*h["supporting_evidence"], *h["contradicting_evidence"])]
+
+
+def context_overflow(prompt_tokens: list[int | None], num_ctx: int | None) -> dict[str, Any]:
+    """Likely context overflow: the reported prompt shrank while the conversation only grows, or reached
+    ``num_ctx``. A heuristic: a backend that excludes cached tokens from its count could also shrink it."""
+    counts = [c for c in prompt_tokens if c is not None]
+    drops = sum(b < a for a, b in zip(counts, counts[1:]))
+    peak = max(counts, default=None)
+    at_limit = num_ctx is not None and peak is not None and peak >= 0.98 * num_ctx
+    return {"prompt_drops": drops, "max_prompt_tokens": peak, "likely_context_overflow": drops > 0 or at_limit}
 
 
 def run_rows(trace_dir: Path, data_root: Path) -> list[dict[str, Any]]:
@@ -219,12 +240,16 @@ def run_rows(trace_dir: Path, data_root: Path) -> list[dict[str, Any]]:
             "top1": None if top is None else top == (truth.diagnosis.service.value,
                                                      truth.diagnosis.fault_type.value),
             "top": None if top is None else list(top),
+            "load_s": [e.get("load_s") for e in model_turns if e.get("load_s") is not None][:1] or None,
+            **context_overflow([e.get("prompt_tokens") for e in model_turns], start["client"].get("num_ctx")),
         })
     return rows
 
 
-def apply_rule(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """The pre-registered decision rule, over the core (non-probe) runs only."""
+def apply_rule(rows: list[dict[str, Any]], complete: bool = True) -> dict[str, Any]:
+    """The pre-registered decision rule, over the core (non-probe) runs only. An incomplete batch (aborted
+    by a guard) is applied as written to the runs that exist and counts as the "propose hosted" branch
+    (user decision, 2026-10-23)."""
     core = [r for r in rows if r["role"] == "core"]
     calls, valid = sum(r["model_calls"] for r in core), sum(r["valid_calls"] for r in core)
     good = sum(r["stop_reason"] == "sufficient_evidence" and r["report_valid"] for r in core)
@@ -238,8 +263,9 @@ def apply_rule(rows: list[dict[str, Any]]) -> dict[str, Any]:
     hosted = share < 0.6 or good <= 2 or (median is not None and median > 1200)
     return {"n_core": len(core), "valid_calls": [valid, calls], "valid_call_share": share,
             "sufficient_with_valid_report": good, "citations_real": [real, cited], "citation_share": citations,
-            "median_wall_s": median,
-            "verdict": "local_feasible" if feasible else "propose_hosted" if hosted else "in_between"}
+            "median_wall_s": median, "complete": complete,
+            "verdict": ("propose_hosted" if not complete else
+                        "local_feasible" if feasible else "propose_hosted" if hosted else "in_between")}
 
 
 def summary_markdown(summary: dict[str, Any]) -> str:
@@ -255,15 +281,19 @@ def summary_markdown(summary: dict[str, Any]) -> str:
         "about that tier. The 4,000-character cap on tool results can hide source IDs from the model.",
         "",
         "| Run | Scenario | Variant | Tier | Stop reason | Valid report | Valid calls | Turns | Wall s "
-        "| Tokens (prompt / completion) | Thinking chars | Cited real | Top-1 |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| Tokens (prompt / completion) | Thinking chars | Max prompt (likely overflow?) | Cited real | Top-1 |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
+    if m.get("aborted"):
+        lines[2:2] = [f"**Aborted batch (attempt {m.get('attempt')}): {m['aborted']}. Incomplete: the decision rule "
+                      "is applied as written to the runs that exist and counts as \"propose hosted\".**", ""]
     for r in summary["runs"]:
         wall = "–" if r["elapsed_s"] is None else f"{r['elapsed_s']:.1f}"
         lines.append(f"| {r['run']} | {r['scenario_id']} | {r['variant']} | {r['tier']} | {r['stop_reason']} "
                      f"| {'yes' + (' (repaired)' if r['repaired'] else '') if r['report_valid'] else 'no'} "
                      f"| {r['valid_calls']}/{r['model_calls']} | {r['turns']} | {wall} "
                      f"| {r['prompt_tokens']} / {r['completion_tokens']} | {r['thinking_chars']} "
+                     f"| {r['max_prompt_tokens']} ({'yes' if r['likely_context_overflow'] else 'no'}) "
                      f"| {r['cited_existing']}/{r['cited']} | {'–' if r['top1'] is None else r['top1']} |")
     share = rule["citation_share"]
     median = "–" if rule["median_wall_s"] is None else f"{rule['median_wall_s']:.1f} s"
@@ -306,38 +336,52 @@ def run_pilot(client: LLMClient, backend: str, model: str, data_root: Path, out_
               manifest_dir: Path = DEFAULT_MANIFEST_DIR, bounds: LoopBounds = LoopBounds(),
               min_free_gb: float = MIN_FREE_GB, max_swap_growth_gb: float = MAX_SWAP_GROWTH_GB,
               stats: Any = None, smoke: str | None = None, progress: bool = False,
-              clock: Callable[[], float] = time.monotonic, progress_stream: Any = None) -> dict[str, Any]:
-    """``smoke``: run only this one non-pilot scenario, to check the client and tool-call parsing.
-    A smoke run is never scored against the decision rule."""
+              clock: Callable[[], float] = time.monotonic, progress_stream: Any = None,
+              attempt: int = 1) -> dict[str, Any]:
+    """Run the pilot set (or, with ``smoke``, one non-pilot scenario that is never scored).
+
+    Refuses to start in a directory that already holds traces or a run log: earlier attempts are never
+    overwritten. A client with ``unload()`` is unloaded after every run. If a guard aborts the batch, the
+    summary is still written (marked aborted, rule applied as incomplete) and ``HarnessAbort`` re-raised.
+    ``stats`` defaults to ``system_stats``, looked up at call time so tests can replace it.
+    """
     if smoke is not None and smoke in PILOT_SCENARIOS:
         raise ValueError("the smoke scenario must not be in the pilot set")
-    """``stats`` defaults to ``system_stats`` (looked up at call time, so tests can replace it)."""
     trace_dir = out_dir / "traces"
-    for stale in (*trace_dir.glob("*.jsonl"), out_dir / "run_log.jsonl"):
-        stale.unlink(missing_ok=True)
+    if any(trace_dir.glob("*.jsonl")) or (out_dir / "run_log.jsonl").exists():
+        raise OutputExists(f"{out_dir} already holds a pilot attempt; use a new --attempt number")
+    manifest = verify_split(Split.DEV, data_root, manifest_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stats = stats or system_stats
     ids = PILOT_SCENARIOS if smoke is None else (smoke,)
+    twins = sum(GroundTruth.model_validate_json((data_root / "ground_truth" / f"{sid}.json").read_text(
+        encoding="utf-8")).injection is not None for sid in ids)
+    unload = getattr(client, "unload", None)
     reporter = None
     if progress:
-        twins = sum(GroundTruth.model_validate_json((data_root / "ground_truth" / f"{sid}.json").read_text(
-            encoding="utf-8")).injection is not None for sid in ids if (data_root / "ground_truth" /
-                                                                        f"{sid}.json").is_file())
         reporter = Progress(len(ids) + twins, bounds.max_tool_calls, stats, out_dir, progress_stream)
         client = ProgressClient(client, reporter)
     inner = ToolLoopInvestigator(client, bounds=bounds, traces=TraceWriter(trace_dir), clock=clock)
     guarded = GuardedInvestigator(inner, out_dir / "run_log.jsonl", out_dir, min_free_gb=min_free_gb,
-                                  max_swap_growth_gb=max_swap_growth_gb, stats=stats, progress=reporter)
-    result: RunResult = run_split(guarded, Split.DEV, data_root, manifest_dir=manifest_dir, scenario_ids=ids)
+                                  max_swap_growth_gb=max_swap_growth_gb, stats=stats, progress=reporter,
+                                  after_run=unload)
+    aborted: HarnessAbort | None = None
+    try:
+        run_split(guarded, Split.DEV, data_root, manifest_dir=manifest_dir, scenario_ids=ids)
+    except HarnessAbort as exc:
+        aborted = exc
     rows = run_rows(trace_dir, data_root)
+    complete = aborted is None and len(rows) == len(ids) + twins
     summary = {
         "metadata": {"backend": backend, "model": model, "client": client.describe(),
                      "prompt_sha256": prompt_sha256(), "bounds": asdict(bounds),
-                     "generator_version": result.metadata["generator_version"],
-                     "manifest_sha256": result.metadata["manifest_sha256"], "git_commit": git_commit(),
-                     "scenarios": list(PILOT_SCENARIOS) if smoke is None else [smoke], "smoke": smoke is not None},
+                     "generator_version": manifest["generator_version"],
+                     "manifest_sha256": manifest["content_sha256"], "git_commit": git_commit(),
+                     "scenarios": list(PILOT_SCENARIOS) if smoke is None else [smoke], "smoke": smoke is not None,
+                     "attempt": attempt, "aborted": None if aborted is None else str(aborted),
+                     "unload_between_runs": unload is not None},
         "runs": rows,
-        "rule": apply_rule(rows),
+        "rule": apply_rule(rows, complete),
         "probe": probe_note(rows),
     }
     if backend == "mock" or smoke is not None:  # the rule is for the pilot set run by a model
@@ -345,6 +389,8 @@ def run_pilot(client: LLMClient, backend: str, model: str, data_root: Path, out_
         summary["rule"]["verdict"] = "not applicable (smoke run)" if smoke else "not applicable (mock backend)"
     dump_json(out_dir / "summary.json", summary)
     (out_dir / "summary.md").write_text(summary_markdown(summary), encoding="utf-8", newline="\n")
+    if aborted is not None:
+        raise aborted
     return summary
 
 
@@ -361,6 +407,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest-dir", type=Path, default=DEFAULT_MANIFEST_DIR, help=argparse.SUPPRESS)
     parser.add_argument("--min-free-gb", type=float, default=MIN_FREE_GB, help=argparse.SUPPRESS)
     parser.add_argument("--quiet", action="store_true", help="no progress display on stderr")
+    parser.add_argument("--attempt", type=int, default=1,
+                        help="attempt number; attempt N > 1 writes to <backend>-<model>-attemptN")
     parser.add_argument("--smoke", metavar="SCENARIO_ID",
                         help="run one non-pilot dev scenario only (client check; never scored)")
     args = parser.parse_args(argv)
@@ -369,14 +417,17 @@ def main(argv: list[str] | None = None) -> int:
     model = "scripted" if args.backend == "mock" else args.model
     slug = re.sub(r"[^A-Za-z0-9._-]+", "-", model)
     prefix = "smoke-" if args.smoke else ""
-    out_dir = args.out_root / f"generator-v{GENERATOR_VERSION}" / f"{prefix}{args.backend}-{slug}"
+    suffix = f"-attempt{args.attempt}" if args.attempt > 1 else ""
+    out_dir = args.out_root / f"generator-v{GENERATOR_VERSION}" / f"{prefix}{args.backend}-{slug}{suffix}"
+    if args.attempt < 1:
+        parser.error("--attempt must be at least 1")
     if args.smoke in PILOT_SCENARIOS:
         parser.error("--smoke must name a dev scenario outside the pilot set")
     try:
         summary = run_pilot(build_client(args, bounds), args.backend, model, args.data_root, out_dir,
                             args.manifest_dir, bounds, min_free_gb=args.min_free_gb, smoke=args.smoke,
-                            progress=not args.quiet)
-    except (DataMismatch, HarnessAbort) as exc:
+                            progress=not args.quiet, attempt=args.attempt)
+    except (DataMismatch, HarnessAbort, OutputExists) as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 2
     print(summary_markdown(summary))

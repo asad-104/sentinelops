@@ -227,3 +227,88 @@ def test_quiet_turns_progress_off(dev, tmp_path: Path, monkeypatch: pytest.Monke
     assert main([*args, "--out-root", str(tmp_path / "b")]) == 0
     err = capsys.readouterr().err
     assert "run 1/7 sc-06b280fbed | turn 1 |" in err and err.count("done:") == 7
+
+
+class UnloadingMock(DemoPolicyClient):
+    """Mock with a model that is 'loaded' while chatting and freed by unload()."""
+
+    def __init__(self) -> None:
+        self.loaded, self.unloads = False, 0
+
+    def chat(self, messages, tools):
+        self.loaded = True
+        return super().chat(messages, tools)
+
+    def unload(self):
+        self.loaded, self.unloads = False, self.unloads + 1
+        return None
+
+
+def test_model_is_unloaded_after_every_run_and_the_guard_sees_the_post_unload_reading(dev, tmp_path: Path) -> None:
+    data_root, manifest_dir, _ = dev
+    client = UnloadingMock()
+
+    def stats(path):  # swap is high only while the model is loaded: a check before unloading would abort
+        return {"free_disk_gb": 50.0, "swap_used_mb": 3500.0 if client.loaded else 100.0, "pressure_level": 1}
+
+    summary = run_pilot(client, "fake", "scripted", data_root, tmp_path, manifest_dir, stats=stats)
+    assert client.unloads == 7 and summary["metadata"]["unload_between_runs"] is True
+    log = [json.loads(line) for line in (tmp_path / "run_log.jsonl").read_text().splitlines()]
+    events = [e["event"] for e in log]
+    assert events == ["batch_start"] + ["run_start", "run_end", "unload"] * 7
+    assert all(e["swap_used_mb"] == 3500.0 for e in log if e["event"] == "run_end")
+    assert all(e["swap_used_mb"] == 100.0 and e["error"] is None for e in log if e["event"] == "unload")
+    assert summary["rule"]["complete"] is True
+
+
+def test_a_single_run_that_grows_swap_too_much_still_trips_the_guard(dev, tmp_path: Path) -> None:
+    data_root, manifest_dir, _ = dev
+    client = UnloadingMock()
+    readings = iter([100.0, 100.0, 2500.0, 2400.0, 2400.0])  # baseline, check 1, run_end, unload, check 2
+
+    def stats(path):
+        return {"free_disk_gb": 50.0, "swap_used_mb": next(readings), "pressure_level": 1}
+
+    with pytest.raises(HarnessAbort, match="swap grew"):
+        run_pilot(client, "fake", "scripted", data_root, tmp_path, manifest_dir, stats=stats)
+
+
+def test_an_aborted_batch_still_writes_a_summary_marked_incomplete(dev, tmp_path: Path) -> None:
+    data_root, manifest_dir, _ = dev
+    readings = iter([_calm(tmp_path)] * 5 + [{"free_disk_gb": 50.0, "swap_used_mb": 9000.0, "pressure_level": 1}])
+    with pytest.raises(HarnessAbort):
+        run_pilot(DemoPolicyClient(), "fake", "scripted", data_root, tmp_path, manifest_dir,
+                  stats=lambda path: next(readings, {"free_disk_gb": 50.0, "swap_used_mb": 9000.0,
+                                                     "pressure_level": 1}), attempt=2)
+    summary = json.loads((tmp_path / "summary.json").read_text())
+    assert summary["metadata"]["aborted"].startswith("swap grew") and summary["metadata"]["attempt"] == 2
+    assert 0 < len(summary["runs"]) < 7
+    assert summary["rule"]["complete"] is False and summary["rule"]["verdict"] == "propose_hosted"
+    assert "Aborted batch (attempt 2)" in (tmp_path / "summary.md").read_text()
+
+
+def test_an_existing_attempt_is_never_overwritten(dev, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    data_root, manifest_dir, _ = dev
+    monkeypatch.setattr(pilot, "system_stats", _calm)
+    out = tmp_path / "generator-v5" / "mock-scripted"
+    (out / "traces").mkdir(parents=True)
+    old = out / "traces" / "01-sc-06b280fbed.jsonl"
+    old.write_text('{"event": "start"}\n')
+    with pytest.raises(pilot.OutputExists):
+        run_pilot(DemoPolicyClient(), "mock", "scripted", data_root, out, manifest_dir)
+    args = ["--backend", "mock", "--data-root", str(data_root), "--out-root", str(tmp_path),
+            "--manifest-dir", str(manifest_dir), "--quiet"]
+    assert main(args) == 2 and old.read_text() == '{"event": "start"}\n'
+    assert main([*args, "--attempt", "2"]) == 0
+    assert (tmp_path / "generator-v5" / "mock-scripted-attempt2" / "summary.json").is_file()
+
+
+def test_context_overflow_heuristic() -> None:
+    from sentinelops.evaluation.pilot import context_overflow
+
+    growing = context_overflow([1645, 2728, 5592], 8192)
+    assert growing == {"prompt_drops": 0, "max_prompt_tokens": 5592, "likely_context_overflow": False}
+    attempt1_run3 = context_overflow([1645, 2449, 4436, 5676, 7046, 4098, 8095, 6834], 8192)
+    assert attempt1_run3["prompt_drops"] == 2 and attempt1_run3["likely_context_overflow"] is True
+    assert context_overflow([1000, 8100], 8192)["likely_context_overflow"] is True  # reached ~num_ctx
+    assert context_overflow([None, 10, 10], None)["likely_context_overflow"] is False  # mock

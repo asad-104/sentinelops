@@ -399,6 +399,20 @@ The pilot's 30-call budget is not the rule baseline's 52 calls. The M4/M5 budget
 
 A hosted pilot needs explicit user approval, a $5 hard cap in the provider console, and httpx only.
 
+## M3 stage B: smoke run and the thinking-mode decision (recorded 2026-10-23, before the 7 pilot runs)
+**Smoke run.** `sc-2c422896a9` is not in the pilot set and is not scored. Settings: `qwen3:4b` (ID `359d7dd4bcda`), Ollama 0.40.8, `--think off`, frozen prompt `0f97fb44…`.
+- **Format works.** There were no `bad_response` errors, all 3 model tool calls parsed and were valid (`get_window`, `search_logs`, `submit_report`), and the report validated on the first try. No client fix was needed.
+- **Thinking off was honoured:** 0 thinking characters on every turn.
+- **Time per turn:** 38.1 s, 35.7 s and 102.7 s. Prompt tokens were 1,651, 2,289 and 4,914; completion tokens 522, 834 and 1,876. The run took 176.6 s in total.
+- **Shallow investigation.** The model reported after only 2 tool calls, so pilot runs with more turns will take longer. At about 40–100 s per turn, 15 or more turns would approach the 20-minute cap.
+- **Memory:** swap grew from 1,098 MB to 3,039 MB during the run (+1.94 GB, just under the 2 GB abort threshold), and the kernel pressure level went from 1 to 2 (warn). Free disk fell from 26.5 to 24.7 GB as swap grew.
+
+**Thinking-mode decision: off (`--think off`) for all 7 pilot runs.** It will not change after the runs start. Reasons:
+1. With thinking off, turns already take 36–103 s and the memory guard nearly fired. Thinking would add generated tokens to every turn, and so time, with no memory headroom left.
+2. The pilot tests whether the model can drive the tools at all. Thinking is a separate variable that the 5-scenario rule cannot separate from tool use.
+
+**Limitation.** Thinking is the model's default (`ollama show`: thinking default true), and it was not measured in a smoke run. The pilot therefore measures `qwen3:4b` without thinking, not the model at its default. A thinking-on comparison is left for later, if the memory budget allows.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

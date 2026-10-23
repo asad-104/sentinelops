@@ -1,7 +1,7 @@
 # SentinelOps progress
 
 ## Current milestone
-**M3 stage B: complete** (2026-10-23) on `m3-stage-b`, awaiting the user's review before it is merged.
+**M3: complete** (2026-10-23). Merged into `main` (8eacfd0) and tagged `m3-complete`. M4 hasn't started; its carry-forward list is below.
 - **Attempt 1** was aborted by the swap guard after 3 of 7 runs. It is recorded and kept, and never merged with attempt 2.
 - **Attempt 2** completed all 7 runs. The pre-registered rule gives `local_feasible`, with the caveats below.
 

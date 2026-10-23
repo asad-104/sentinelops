@@ -173,3 +173,19 @@ def test_cli_uses_the_live_stats_and_refuses_on_low_disk(dev, tmp_path: Path,
                                                              "pressure_level": None})
     assert main(["--backend", "mock", "--data-root", str(data_root), "--out-root", str(tmp_path),
                  "--manifest-dir", str(manifest_dir)]) == 2
+
+
+def test_smoke_runs_one_non_pilot_scenario_and_is_never_scored(dev, tmp_path: Path,
+                                                               monkeypatch: pytest.MonkeyPatch) -> None:
+    data_root, manifest_dir, _ = dev
+    monkeypatch.setattr(pilot, "system_stats", _calm)
+    order = json.loads(manifest_path(Split.DEV, manifest_dir).read_text())["scenario_ids"]
+    smoke = next(i for i in order if i not in PILOT_SCENARIOS)
+    assert main(["--backend", "mock", "--smoke", smoke, "--data-root", str(data_root), "--out-root",
+                 str(tmp_path), "--manifest-dir", str(manifest_dir)]) == 0
+    summary = json.loads((tmp_path / "generator-v5" / "smoke-mock-scripted" / "summary.json").read_text())
+    assert [r["scenario_id"] for r in summary["runs"]] == [smoke] and summary["metadata"]["smoke"] is True
+    assert summary["rule"]["verdict"] == "not applicable (smoke run)"
+    with pytest.raises(SystemExit):
+        main(["--backend", "mock", "--smoke", PILOT_SCENARIOS[0]])
+

@@ -55,6 +55,20 @@ class OllamaClient:
             body["think"] = self.think
         return body
 
+    def unload(self) -> LLMError | None:
+        """Ask the server to unload the model now (``keep_alive: 0``), freeing its memory between runs."""
+        started = time.monotonic()
+        try:
+            response = self._http.post("/api/generate", json={"model": self.model, "keep_alive": 0})
+        except httpx.TimeoutException as exc:
+            return LLMError("timeout", f"{type(exc).__name__}", time.monotonic() - started)
+        except httpx.TransportError as exc:
+            return LLMError("connection", f"{type(exc).__name__}", time.monotonic() - started)
+        if response.status_code != 200:
+            return LLMError("http_status", f"HTTP {response.status_code}: {response.text[:300]}",
+                            time.monotonic() - started)
+        return None
+
     def chat(self, messages: list[ChatMessage], tools: list[ToolSpec]) -> LLMResponse | LLMError:
         started = time.monotonic()
         try:
@@ -98,6 +112,8 @@ def _parse(data: dict[str, Any], latency: float) -> LLMResponse:
         arguments = fn.get("arguments", {})
         raw = arguments if isinstance(arguments, str) else json.dumps(arguments)
         calls.append(ToolCallRequest(tc.get("id") or f"call-{i}", str(fn["name"]), raw))
+    load = data.get("load_duration")  # nanoseconds
     return LLMResponse(text=message.get("content") or "", tool_calls=tuple(calls),
                        usage=Usage(data.get("prompt_eval_count"), data.get("eval_count")), latency_s=latency,
-                       thinking_chars=len(message.get("thinking") or ""))
+                       thinking_chars=len(message.get("thinking") or ""),
+                       load_s=load / 1e9 if isinstance(load, (int, float)) else None)

@@ -457,6 +457,32 @@ There is **no `summary.json` or `summary.md`**: `HarnessAbort` propagates before
   - **Not confirmed:** the server log isn't available, and Ollama's count could also exclude cached tokens.
   - This is a property of the pre-registered `num_ctx`, not of the model.
 
+## M3 stage B: attempt 2 configuration (recorded 2026-10-23, BEFORE attempt 2)
+User decision: option A + C, plus two additions and five conditions. Code is in commit `3c28b0b`. The prompt sha256 stays `0f97fb44c2549794f7ba1be577d8d01392422e30b8752f4fd2ba640a88c2d2ea` (unchanged, pinned by `test_prompt_is_frozen`).
+
+**Unchanged from the pre-registration, and the same as attempt 1:**
+- model and settings: `qwen3:4b` `359d7dd4bcda`, Ollama 0.40.8, `--think off`, `num_ctx` 8192, temperature 0, seed 0
+- the 7 scenarios and their order
+- all loop bounds
+- the decision rule
+- the guard: abort before a run if free disk is below 10 GB, if swap has grown more than 2.0 GB since batch start, or if the kernel pressure level is critical
+
+**Changes, applied to all 7 runs:**
+1. **Unload after every run (A).** At the end of each run, after its `run_end` line, the model is unloaded with `keep_alive: 0`, and an `unload` line with the post-unload stats is written to the run log.
+   - The next run's guard check happens at its start and reads the post-unload stats.
+   - The guard's threshold and measurement are unchanged: growth since batch start.
+   - **A single run that grows swap by more than 2 GB on its own can still trip the guard** at the next check.
+   - The model reloads on each run's first turn. Ollama's `load_duration` is recorded per turn as `load_s` (shown as `load_s` per run in the summary), so load time can be told apart from model time. Wall time still includes it.
+2. **Clean restart of the Mac (C)** before the batch, with only Terminal open. Streamlit is stopped, the laptop is on power, and the batch runs under `caffeinate -i`.
+3. **New output directory.** `eval/pilot/generator-v5/ollama-qwen3-4b-attempt2/`, selected with `--attempt 2`. The pilot refuses to start in a directory that already holds traces or a run log, so attempt 1 can't be overwritten.
+4. **Context-overflow indicator.** Each run's summary row gets `prompt_drops`, `max_prompt_tokens` and `likely_context_overflow`: the reported prompt shrinking while the conversation grows, or reaching 98% of `num_ctx`. It is a heuristic, because a backend that excludes cached tokens from its count could also shrink it.
+5. **Summary written even on abort.** If attempt 2 aborts, the summary is still written and marked `aborted`.
+
+**Conditions:**
+- **No third attempt.** If attempt 2 aborts, the recorded outcome is: **"local pilot cannot complete on this 8 GB machine under the pre-registered bounds"**. The decision rule is then applied as written to the data that exists, and an incomplete batch counts as the **"propose hosted"** branch (`complete: false` forces `propose_hosted`). There is no retry.
+- **Server log.** The user runs `ollama serve` with its log redirected to a file outside the repo. After the batch, only the lines relevant to truncation or context are extracted into the attempt directory, with a count. The full log is not committed.
+- **Comparison with attempt 1.** Runs 1–3 of attempt 2 will be compared with runs 1–3 of attempt 1, as description only: whether the answers and stop reasons match. Attempt 1's run 3 probably overflowed the context. The attempts are never merged.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

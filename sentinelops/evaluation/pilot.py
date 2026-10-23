@@ -243,7 +243,11 @@ def build_client(args: argparse.Namespace, bounds: LoopBounds) -> LLMClient:
 def run_pilot(client: LLMClient, backend: str, model: str, data_root: Path, out_dir: Path,
               manifest_dir: Path = DEFAULT_MANIFEST_DIR, bounds: LoopBounds = LoopBounds(),
               min_free_gb: float = MIN_FREE_GB, max_swap_growth_gb: float = MAX_SWAP_GROWTH_GB,
-              stats: Any = None) -> dict[str, Any]:
+              stats: Any = None, smoke: str | None = None) -> dict[str, Any]:
+    """``smoke``: run only this one non-pilot scenario, to check the client and tool-call parsing.
+    A smoke run is never scored against the decision rule."""
+    if smoke is not None and smoke in PILOT_SCENARIOS:
+        raise ValueError("the smoke scenario must not be in the pilot set")
     """``stats`` defaults to ``system_stats`` (looked up at call time, so tests can replace it)."""
     trace_dir = out_dir / "traces"
     for stale in (*trace_dir.glob("*.jsonl"), out_dir / "run_log.jsonl"):
@@ -253,21 +257,21 @@ def run_pilot(client: LLMClient, backend: str, model: str, data_root: Path, out_
     guarded = GuardedInvestigator(inner, out_dir / "run_log.jsonl", out_dir, min_free_gb=min_free_gb,
                                   max_swap_growth_gb=max_swap_growth_gb, stats=stats or system_stats)
     result: RunResult = run_split(guarded, Split.DEV, data_root, manifest_dir=manifest_dir,
-                                  scenario_ids=PILOT_SCENARIOS)
+                                  scenario_ids=PILOT_SCENARIOS if smoke is None else (smoke,))
     rows = run_rows(trace_dir, data_root)
     summary = {
         "metadata": {"backend": backend, "model": model, "client": client.describe(),
                      "prompt_sha256": prompt_sha256(), "bounds": asdict(bounds),
                      "generator_version": result.metadata["generator_version"],
                      "manifest_sha256": result.metadata["manifest_sha256"], "git_commit": git_commit(),
-                     "scenarios": list(PILOT_SCENARIOS)},
+                     "scenarios": list(PILOT_SCENARIOS) if smoke is None else [smoke], "smoke": smoke is not None},
         "runs": rows,
         "rule": apply_rule(rows),
         "probe": probe_note(rows),
     }
-    if backend == "mock":  # the rule's thresholds are for models; a scripted policy cannot pass or fail them
+    if backend == "mock" or smoke is not None:  # the rule is for the pilot set run by a model
         summary["rule"]["mechanics_check_only"] = summary["rule"].pop("verdict")
-        summary["rule"]["verdict"] = "not applicable (mock backend)"
+        summary["rule"]["verdict"] = "not applicable (smoke run)" if smoke else "not applicable (mock backend)"
     dump_json(out_dir / "summary.json", summary)
     (out_dir / "summary.md").write_text(summary_markdown(summary), encoding="utf-8", newline="\n")
     return summary
@@ -285,15 +289,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-root", type=Path, default=DEFAULT_OUT_ROOT)
     parser.add_argument("--manifest-dir", type=Path, default=DEFAULT_MANIFEST_DIR, help=argparse.SUPPRESS)
     parser.add_argument("--min-free-gb", type=float, default=MIN_FREE_GB, help=argparse.SUPPRESS)
+    parser.add_argument("--smoke", metavar="SCENARIO_ID",
+                        help="run one non-pilot dev scenario only (client check; never scored)")
     args = parser.parse_args(argv)
 
     bounds = LoopBounds()
     model = "scripted" if args.backend == "mock" else args.model
     slug = re.sub(r"[^A-Za-z0-9._-]+", "-", model)
-    out_dir = args.out_root / f"generator-v{GENERATOR_VERSION}" / f"{args.backend}-{slug}"
+    prefix = "smoke-" if args.smoke else ""
+    out_dir = args.out_root / f"generator-v{GENERATOR_VERSION}" / f"{prefix}{args.backend}-{slug}"
+    if args.smoke in PILOT_SCENARIOS:
+        parser.error("--smoke must name a dev scenario outside the pilot set")
     try:
         summary = run_pilot(build_client(args, bounds), args.backend, model, args.data_root, out_dir,
-                            args.manifest_dir, bounds, min_free_gb=args.min_free_gb)
+                            args.manifest_dir, bounds, min_free_gb=args.min_free_gb, smoke=args.smoke)
     except (DataMismatch, HarnessAbort) as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 2

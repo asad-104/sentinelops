@@ -189,3 +189,41 @@ def test_smoke_runs_one_non_pilot_scenario_and_is_never_scored(dev, tmp_path: Pa
     with pytest.raises(SystemExit):
         main(["--backend", "mock", "--smoke", PILOT_SCENARIOS[0]])
 
+
+def _files(out: Path) -> dict[str, bytes]:
+    return {p.relative_to(out).as_posix(): p.read_bytes() for p in sorted(out.rglob("*")) if p.is_file()}
+
+
+def test_progress_display_changes_no_output_file(dev, tmp_path: Path) -> None:
+    """Traces, summary and run log are byte-identical with progress on and off (fixed clock and stats)."""
+    import io
+
+    from sentinelops.llm.prompt import prompt_sha256
+    from test_llm_schemas import FROZEN_PROMPT_SHA256
+
+    data_root, manifest_dir, _ = dev
+    stream = io.StringIO()
+    outputs = {}
+    for flag in (False, True):
+        out = tmp_path / ("on" if flag else "off")
+        run_pilot(DemoPolicyClient(), "mock", "scripted", data_root, out, manifest_dir, stats=_calm,
+                  clock=lambda: 0.0, progress=flag, progress_stream=stream)
+        outputs[flag] = _files(out)
+    assert outputs[True] == outputs[False] and len(outputs[True]) == 10  # 7 traces, 2 summaries, run log
+    assert prompt_sha256() == FROZEN_PROMPT_SHA256
+    lines = stream.getvalue().splitlines()
+    assert lines[0] == "run 1/7 sc-06b280fbed | turn 1 | tool calls 1/30 | 0 s | swap 1000 MB | free disk 50.0 GB"
+    assert "run 7/7 sc-4141664f86 done: sufficient_evidence" in lines[-1]
+    assert sum("done:" in line for line in lines) == 7
+
+
+def test_quiet_turns_progress_off(dev, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                  capsys: pytest.CaptureFixture) -> None:
+    data_root, manifest_dir, _ = dev
+    monkeypatch.setattr(pilot, "system_stats", _calm)
+    args = ["--backend", "mock", "--data-root", str(data_root), "--manifest-dir", str(manifest_dir)]
+    assert main([*args, "--out-root", str(tmp_path / "a"), "--quiet"]) == 0
+    assert capsys.readouterr().err == ""
+    assert main([*args, "--out-root", str(tmp_path / "b")]) == 0
+    err = capsys.readouterr().err
+    assert "run 1/7 sc-06b280fbed | turn 1 |" in err and err.count("done:") == 7

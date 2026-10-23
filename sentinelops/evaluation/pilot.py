@@ -17,6 +17,8 @@ import shutil
 import statistics
 import subprocess
 import sys
+import time
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -29,13 +31,13 @@ from sentinelops.evaluation.harness import (
     git_commit,
     run_split,
 )
-from sentinelops.llm.client import LLMClient
+from sentinelops.llm.client import ChatMessage, LLMClient, LLMError, LLMResponse, ToolSpec
 from sentinelops.llm.loop import LoopBounds, ToolLoopInvestigator
 from sentinelops.llm.mock import DemoPolicyClient
 from sentinelops.llm.ollama import OllamaClient
 from sentinelops.llm.prompt import prompt_sha256
 from sentinelops.llm.trace import TraceWriter, read_trace
-from sentinelops.report import InvestigationReport
+from sentinelops.report import InvestigationFailed, InvestigationReport
 from sentinelops.scenario_files import dump_json, load_observable
 from sentinelops.simulator.datasets import DEFAULT_MANIFEST_DIR, TWINS_DIR
 from sentinelops.simulator.generator import GENERATOR_VERSION
@@ -74,12 +76,62 @@ def system_stats(path: Path) -> dict[str, Any]:
             "pressure_level": int(level) if level and level.isdigit() else None}
 
 
+class Progress:
+    """Plain-text progress on stderr: one line per model turn, one summary line per run. Display only:
+    it reads counters and stats and never changes the loop, traces or result files."""
+
+    def __init__(self, total_runs: int, budget: int, stats: Any, disk_path: Path, stream: Any = None) -> None:
+        self.total, self.budget, self.stats, self.disk_path = total_runs, budget, stats, disk_path
+        self.stream = stream if stream is not None else sys.stderr
+        self.run, self.turn, self.scenario_id, self.tools, self.started = 0, 0, "", None, 0.0
+
+    def _write(self, text: str, final: bool = False) -> None:
+        live = hasattr(self.stream, "isatty") and self.stream.isatty()
+        if live:
+            self.stream.write("\r\033[K" + text + ("\n" if final else ""))
+        else:
+            self.stream.write(text + "\n")
+        self.stream.flush()
+
+    def start_run(self, scenario_id: str, tools: CountingToolSet) -> None:
+        self.run, self.turn, self.scenario_id, self.tools = self.run + 1, 0, scenario_id, tools
+        self.started = time.monotonic()
+
+    def on_turn(self) -> None:
+        self.turn += 1
+        now = self.stats(self.disk_path)
+        swap = "–" if now["swap_used_mb"] is None else f"{now['swap_used_mb']:.0f} MB"
+        used = len(self.tools.calls) if self.tools is not None else 0
+        self._write(f"run {self.run}/{self.total} {self.scenario_id} | turn {self.turn} | tool calls "
+                    f"{used}/{self.budget} | {time.monotonic() - self.started:.0f} s | swap {swap} | "
+                    f"free disk {now['free_disk_gb']} GB")
+
+    def end_run(self, stop_reason: str) -> None:
+        self._write(f"run {self.run}/{self.total} {self.scenario_id} done: {stop_reason}, "
+                    f"{time.monotonic() - self.started:.1f} s", final=True)
+
+
+class ProgressClient:
+    """Delegates every call to the real client unchanged, then reports the turn."""
+
+    def __init__(self, inner: LLMClient, progress: Progress) -> None:
+        self.inner, self.progress = inner, progress
+
+    def chat(self, messages: list[ChatMessage], tools: list[ToolSpec]) -> LLMResponse | LLMError:
+        response = self.inner.chat(messages, tools)
+        self.progress.on_turn()
+        return response
+
+    def describe(self) -> dict[str, Any]:
+        return self.inner.describe()
+
+
 class GuardedInvestigator:
     """Checks disk and memory before each run and logs stats before and after it."""
 
     def __init__(self, inner: ToolLoopInvestigator, run_log: Path, disk_path: Path, *, min_free_gb: float,
-                 max_swap_growth_gb: float, stats: Any = system_stats) -> None:
-        self.inner, self.name = inner, inner.name
+                 max_swap_growth_gb: float, stats: Any = system_stats, progress: Progress | None = None) -> None:
+        self.inner, self.name, self.progress = inner, inner.name, progress
         self.run_log, self.disk_path, self.stats = run_log, disk_path, stats
         self.min_free_gb, self.max_swap_growth_gb = min_free_gb, max_swap_growth_gb
         self.baseline = stats(disk_path)
@@ -106,9 +158,19 @@ class GuardedInvestigator:
 
     def investigate(self, tools: CountingToolSet, scenario_id: str) -> InvestigationReport:
         self._log({"event": "run_start", "scenario_id": scenario_id, **self._check(scenario_id)})
+        if self.progress:
+            self.progress.start_run(scenario_id, tools)
+        stop_reason = "error"
         try:
-            return self.inner.investigate(tools, scenario_id)
+            report = self.inner.investigate(tools, scenario_id)
+            stop_reason = report.stop_reason
+            return report
+        except InvestigationFailed as failed:
+            stop_reason = failed.stop_reason
+            raise
         finally:
+            if self.progress:
+                self.progress.end_run(stop_reason)
             self._log({"event": "run_end", "scenario_id": scenario_id, **self.stats(self.disk_path)})
 
 
@@ -243,7 +305,8 @@ def build_client(args: argparse.Namespace, bounds: LoopBounds) -> LLMClient:
 def run_pilot(client: LLMClient, backend: str, model: str, data_root: Path, out_dir: Path,
               manifest_dir: Path = DEFAULT_MANIFEST_DIR, bounds: LoopBounds = LoopBounds(),
               min_free_gb: float = MIN_FREE_GB, max_swap_growth_gb: float = MAX_SWAP_GROWTH_GB,
-              stats: Any = None, smoke: str | None = None) -> dict[str, Any]:
+              stats: Any = None, smoke: str | None = None, progress: bool = False,
+              clock: Callable[[], float] = time.monotonic, progress_stream: Any = None) -> dict[str, Any]:
     """``smoke``: run only this one non-pilot scenario, to check the client and tool-call parsing.
     A smoke run is never scored against the decision rule."""
     if smoke is not None and smoke in PILOT_SCENARIOS:
@@ -253,11 +316,19 @@ def run_pilot(client: LLMClient, backend: str, model: str, data_root: Path, out_
     for stale in (*trace_dir.glob("*.jsonl"), out_dir / "run_log.jsonl"):
         stale.unlink(missing_ok=True)
     out_dir.mkdir(parents=True, exist_ok=True)
-    inner = ToolLoopInvestigator(client, bounds=bounds, traces=TraceWriter(trace_dir))
+    stats = stats or system_stats
+    ids = PILOT_SCENARIOS if smoke is None else (smoke,)
+    reporter = None
+    if progress:
+        twins = sum(GroundTruth.model_validate_json((data_root / "ground_truth" / f"{sid}.json").read_text(
+            encoding="utf-8")).injection is not None for sid in ids if (data_root / "ground_truth" /
+                                                                        f"{sid}.json").is_file())
+        reporter = Progress(len(ids) + twins, bounds.max_tool_calls, stats, out_dir, progress_stream)
+        client = ProgressClient(client, reporter)
+    inner = ToolLoopInvestigator(client, bounds=bounds, traces=TraceWriter(trace_dir), clock=clock)
     guarded = GuardedInvestigator(inner, out_dir / "run_log.jsonl", out_dir, min_free_gb=min_free_gb,
-                                  max_swap_growth_gb=max_swap_growth_gb, stats=stats or system_stats)
-    result: RunResult = run_split(guarded, Split.DEV, data_root, manifest_dir=manifest_dir,
-                                  scenario_ids=PILOT_SCENARIOS if smoke is None else (smoke,))
+                                  max_swap_growth_gb=max_swap_growth_gb, stats=stats, progress=reporter)
+    result: RunResult = run_split(guarded, Split.DEV, data_root, manifest_dir=manifest_dir, scenario_ids=ids)
     rows = run_rows(trace_dir, data_root)
     summary = {
         "metadata": {"backend": backend, "model": model, "client": client.describe(),
@@ -289,6 +360,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-root", type=Path, default=DEFAULT_OUT_ROOT)
     parser.add_argument("--manifest-dir", type=Path, default=DEFAULT_MANIFEST_DIR, help=argparse.SUPPRESS)
     parser.add_argument("--min-free-gb", type=float, default=MIN_FREE_GB, help=argparse.SUPPRESS)
+    parser.add_argument("--quiet", action="store_true", help="no progress display on stderr")
     parser.add_argument("--smoke", metavar="SCENARIO_ID",
                         help="run one non-pilot dev scenario only (client check; never scored)")
     args = parser.parse_args(argv)
@@ -302,7 +374,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--smoke must name a dev scenario outside the pilot set")
     try:
         summary = run_pilot(build_client(args, bounds), args.backend, model, args.data_root, out_dir,
-                            args.manifest_dir, bounds, min_free_gb=args.min_free_gb, smoke=args.smoke)
+                            args.manifest_dir, bounds, min_free_gb=args.min_free_gb, smoke=args.smoke,
+                            progress=not args.quiet)
     except (DataMismatch, HarnessAbort) as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 2

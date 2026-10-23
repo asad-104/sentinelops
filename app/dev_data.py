@@ -214,3 +214,15 @@ def pilot_trace(root: Path, run: str, name: str) -> tuple[list[dict[str, Any]], 
         else:
             skipped.append(number)
     return events, skipped
+
+
+AGENT_ROOT = REPO_ROOT / "eval" / "agent"
+AGENT_ENV = "SENTINELOPS_VIEWER_AGENT"
+
+
+def agent_root() -> Path:
+    """The M4 trace directory: the SENTINELOPS_VIEWER_AGENT parameter, defaulting to eval/agent/. Same layout
+    and guards as the pilot readers (pilot_runs, pilot_summary, pilot_traces, pilot_trace take it as root)."""
+    root = Path(os.environ.get(AGENT_ENV) or AGENT_ROOT).resolve()
+    _refuse_heldout(root)
+    return root

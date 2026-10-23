@@ -91,4 +91,22 @@ for run in runs:
     rows = json.loads((pilot / run / "summary.json").read_text())["runs"]
     print(f"M3 {run}: {len(names)} traces render without exceptions; steps and stop reasons match files; "
           f"{len(rows)} summary rows")
+
+# M4: the real eval/agent/ (empty until stage B: stage A mock traces go to a temporary directory only).
+from app.dev_data import agent_root  # noqa: E402
+
+m4 = AppTest.from_file(str(repo / "app/pages/m4_agent_runs.py"), default_timeout=60)
+m4.run()
+assert not m4.exception, [e.value for e in m4.exception]
+agent_runs = pilot_runs(agent_root())
+if agent_runs:
+    for run in agent_runs:
+        m4.selectbox(key="agent_run").set_value(run).run()
+        for name in pilot_traces(agent_root(), run):
+            m4.selectbox(key="agent_trace").set_value(name).run()
+            assert not m4.exception, (run, name, [e.value for e in m4.exception])
+    print(f"M4: {len(agent_runs)} runs render without exceptions")
+else:
+    assert any("No M4 agent runs yet" in i.value for i in m4.info), "M4 empty state not shown"
+    print("M4: eval/agent/ is empty; the page shows its empty state without exceptions")
 print("OK: viewer renders against real data")

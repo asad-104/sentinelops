@@ -15,7 +15,9 @@ from sentinelops.tools import ToolResult
 
 # A qualitative label, not a calibrated probability.
 Confidence = Literal["high", "medium", "low"]
-StopReason = Literal["sufficient_evidence", "budget_exhausted", "timeout", "no_new_evidence", "error"]
+# context_exhausted (M4): even the pinned content plus a minimal ledger cannot fit the prompt budget.
+StopReason = Literal["sufficient_evidence", "budget_exhausted", "timeout", "no_new_evidence", "error",
+                     "context_exhausted"]
 
 
 class _Model(BaseModel):

@@ -447,3 +447,82 @@ def test_m3_page_renders_every_committed_trace(monkeypatch: pytest.MonkeyPatch) 
             assert len(steps) == sum(e["event"] in ("model", "tool") for e in events) and not skipped
             stop = next(e for e in events if e["event"] == "stop")
             assert at.metric[0].value == stop["stop_reason"]
+
+
+M4_PAGE = REPO_ROOT / "app" / "pages" / "m4_agent_runs.py"
+
+
+@pytest.fixture()
+def agent_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Mock agent traces written to a temporary directory (never eval/agent/), passed to the page as a parameter."""
+    from agent_sets import generated_set
+    from app.dev_data import AGENT_ENV
+    from sentinelops.agent.mock import DemoAgentPolicy
+    from sentinelops.evaluation import agent_run
+
+    data_root, manifest_dir, scenarios = generated_set(tmp_path / "set")
+    monkeypatch.setattr(agent_run, "system_stats", lambda p: {"free_disk_gb": 50.0, "swap_used_mb": 1.0,
+                                                               "pressure_level": 1})
+    out_root = tmp_path / "agent"
+    agent_run.run_agent(DemoAgentPolicy(), "mock", "scripted", data_root, out_root / "generator-v5" / "mock-scripted",
+                        [o.scenario_id for o, _ in scenarios], manifest_dir)
+    monkeypatch.setenv(AGENT_ENV, str(out_root))
+    monkeypatch.setenv(ROOT_ENV, str(data_root / "scenarios"))  # so cited IDs resolve to their records
+    return out_root
+
+
+def test_m4_page_renders_mock_traces_from_a_parameter_directory(agent_runs: Path) -> None:
+    testing = pytest.importorskip("streamlit.testing.v1")
+    at = testing.AppTest.from_file(str(M4_PAGE), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert [h.value for h in at.subheader] == ["States in order", "Tool calls and evidence", "Hypotheses re-ranking",
+                                               "Claims and their source records", "Context per turn"]
+    states = next(df.value for df in at.dataframe if "reason" in df.value.columns and "order" in df.value.columns)
+    assert list(states["state"]) == ["TRIAGE", "GATHER", "HYPOTHESIZE", "VERIFY", "REPORT"]
+    ranking = next(df.value for df in at.dataframe if "snapshot" in df.value.columns)
+    assert "rank 1" in ranking.columns and "rank 2" in ranking.columns
+    assert at.metric[0].value == "sufficient_evidence"
+    codes = [c.value for c in at.code]
+    assert any('"source_id"' in c for c in codes)  # a cited ID resolved to its record via ToolSet.get_record
+    assert not any("record not available" in c for c in codes)
+    for name in [o for o in at.selectbox(key="agent_trace").options]:
+        at.selectbox(key="agent_trace").set_value(name).run()
+        assert not at.exception
+
+
+def test_m4_page_empty_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    testing = pytest.importorskip("streamlit.testing.v1")
+    from app.dev_data import AGENT_ENV
+
+    monkeypatch.setenv(AGENT_ENV, str(tmp_path / "empty"))
+    at = testing.AppTest.from_file(str(M4_PAGE), default_timeout=60)
+    at.run()
+    assert not at.exception and any("No M4 agent runs yet" in i.value for i in at.info)
+
+
+def test_m4_page_shows_untrusted_text_only_in_code_blocks(dev_root: tuple[Path, list], tmp_path: Path,
+                                                          monkeypatch: pytest.MonkeyPatch) -> None:
+    testing = pytest.importorskip("streamlit.testing.v1")
+    from app.dev_data import AGENT_ENV
+    from sentinelops.agent.machine import StateMachineInvestigator
+    from sentinelops.evaluation.harness import CountingToolSet
+    from sentinelops.llm.mock import ScriptedClient, call
+    from sentinelops.llm.trace import TraceWriter
+    from sentinelops.report import InvestigationFailed
+    from sentinelops.tools import ToolSet
+
+    observable = dev_root[1][0][0]
+    run_dir = tmp_path / "agent" / "generator-v5" / "mock-hostile"
+    agent = StateMachineInvestigator(ScriptedClient([call("search_logs", {"contains": "bold"})]),
+                                     traces=TraceWriter(run_dir / "traces"))
+    with pytest.raises(InvestigationFailed):  # the script runs out: the page must still render the partial run
+        agent.investigate(CountingToolSet(ToolSet(observable)), observable.scenario_id)
+    dump_json(run_dir / "summary.json", {"metadata": {"backend": "mock"}, "runs": [], "rule": {}})
+    monkeypatch.setenv(AGENT_ENV, str(tmp_path / "agent"))
+    at = testing.AppTest.from_file(str(M4_PAGE), default_timeout=60)
+    at.run()
+    at.selectbox(key="agent_call").set_value(3).run()  # the model's search_logs (after 3 TRIAGE calls)
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("**bold** <script>" in c.value for c in at.code)
+    assert not any("bold" in m.value or "script" in m.value for m in at.markdown)

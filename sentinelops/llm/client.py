@@ -54,6 +54,9 @@ class LLMResponse:
     latency_s: float = 0.0
     thinking_chars: int = 0  # length of any separate reasoning text the backend returned
     load_s: float | None = None  # time the backend spent loading the model for this call, if it reports it
+    prompt_eval_s: float | None = None  # time spent evaluating the prompt (M4: cache reuse is only inferred from it)
+    total_s: float | None = None  # the backend's own total time for the call
+    truncated: bool = False  # generation stopped at the output-token cap (done_reason "length")
 
 
 @dataclass(frozen=True)

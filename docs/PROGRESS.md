@@ -680,6 +680,54 @@ How the model moves between states:
 - "Investigated" is the author's definition and measures process, not insight.
 - The data is synthetic and author-built, and the simulator, baseline and prompts share an author.
 
+## M4 stage A: design correction to the context design (recorded 2026-10-23, user-approved, before stage B)
+**Measured problem.** At the most compact pre-registered level, the fixed part of every request took about **3,870 of the 6,144 estimated tokens**, of which the tool specs (8,019 characters) were about **2,560**. Each ledger entry cost about **19 estimated tokens**, leaving room for about 117 IDs. A single default `get_metrics` call returns 120 points. The scripted mock reached compaction level 3 after 9 calls.
+
+So a real 40-call run would hit `context_exhausted` by design. The ledger also recorded items beyond the 4,000-character cap that the model never saw.
+
+**What this replaces.** The pre-registered "ledger lists every ID; level 4 = IDs only" becomes the following (user-approved options 1–3):
+1. **Only shown items enter the ledger.** An item is added only if its ID appears in the capped result text shown to the model.
+2. **Metric series are summarised.** Metric points render as one line per (service, metric) series: point count, minimum, maximum, and the first, peak and last IDs.
+3. **The ledger is bounded as rendered.**
+   - **What stays citable:** every ID the model was shown. Citations in hypotheses and reports are checked against this full seen set.
+   - **What is rendered:**
+     - per (kind, service) group, a count with first and last ID, plus the most recent N entries
+     - the metric series lines
+     - every ID cited in the current ranking
+4. **Compacted older results are bounded too** (needed for item 3 to work, stated explicitly). Their summaries no longer list every ID, only a count of new IDs and up to 3 sample IDs; the ledger holds the IDs. From level 2, only the last M compacted results are rendered, plus a count of the rest.
+5. **`claim_check` records the source of each cited ID:** whether it was rendered in that request (`rendered_in_request`) or was only in the full seen set (`in_seen_set`).
+
+**Frozen parameters (condition 1).** These were set from the synthetic worst-case test only (`tests/agent_worstcase.py`; no scenario data):
+
+| Level | Recent results in full | Recent cap | Compacted shown | Compacted excerpt | Ledger recent N per group | Ledger excerpt | Series detail | Series shown |
+|---|---|---|---|---|---|---|---|---|
+| 0 | 2 | – | all | 120 | 4 | 100 | first/last t | all |
+| 1 | 1 | – | all | 80 | 3 | 80 | first/last t | all |
+| 2 | 1 | – | last 12 | 40 | 2 | 40 | no | all |
+| 3 | 1 | 1,500 chars | last 6 | none | 1 | none | no | last 12 |
+| 4 | 0 | – | last 3 | none | 1 | none | no | last 6 |
+
+**Metric summary format:** `{"series": "service/metric", "points": n, "min": v, "max": v, "ids": [first, peak, last]}`, plus `first_t` and `last_t` at levels 0–1. **Any change after stage B starts is a logged context revision, and later results are reported separately.**
+
+**Worst-case result with these parameters:**
+- **The run:** 40 read calls, each returning a maximum-size result (120 metric points, or 200 long log lines past the cap), all IDs distinct. It reached 869 seen IDs and ended with a valid report through both GATHER passes.
+- **Peak size:** a maximum estimate of **6,109 of 6,144** tokens.
+- **Compaction:** levels 0–3 were used, so level 4 is spare.
+- **Option 4** (sending only the current state's tools) is **not used**.
+
+**Unchanged:**
+- the 40-call budget and its per-state split
+- the estimator (characters ÷ 3.6 × 1.15) and its calibration against server counts
+- both safeguards (the client estimate and the 90% server-count guard)
+- `context_exhausted` when level 4 doesn't fit
+- `num_ctx` 8192, `num_predict` 2,048, and the prompt budget of 6,144
+- the prompt text and its hash procedure
+- the fixed set, "investigated" (a)–(f), the decision rule, the no-tuning rule and the limitations
+
+**New limitations:**
+- The model sees a bounded view, so it may not see an ID it could cite, unless it re-fetches it with `get_record`.
+- The worst-case margin is thin: 35 estimated tokens at peak.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

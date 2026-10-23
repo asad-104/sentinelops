@@ -1,7 +1,9 @@
 # SentinelOps progress
 
 ## Current milestone
-**M4 stage A: done, awaiting review** on `m4-stage-a` (2026-10-23).
+**M4 stage B: part 1 (smoke run)** on `m4-stage-b` (2026-10-24); stage A approved.
+
+**M4 stage A: done and approved** on `m4-stage-a` (2026-10-23).
 - **Commits:** pre-registration 855af4d, design correction a58b589, code 7745302.
 - **Status:** 350 tests passing; the viewer renders against real data, with the M4 page in its empty state.
 - **Not done in stage A:** no model, network or installs; Ollama stopped. `eval/agent/` is empty, and the mock traces were written to temporary directories only.
@@ -750,6 +752,29 @@ So a real 40-call run would hit `context_exhausted` by design. The ledger also r
   - compacted results: 6,181 at level 0, 463 at level 4
   - total: 12,510 at level 0 (doesn't fit), 6,516 at level 2 (doesn't fit), 5,006 at level 3 and 4,512 at level 4
   - so the builder uses level 3 or 4 there; the full table is in the stage A report.
+
+## M4 stage B: pre-registration (recorded 2026-10-24, before any stage B run)
+Branch `m4-stage-b`, created from `m4-stage-a`. The configuration is unchanged from stage A:
+- agent prompt sha256 `bd63ce71…`
+- frozen compaction parameters (design correction a58b589)
+- bounds: 40 calls, 180 s per call, 30 min per run, `num_ctx` 8192, `num_predict` 2,048, prompt budget 6,144
+- `--think off`
+- the M3 restart-and-unload procedure
+
+**Hardware aborts.**
+- If the swap or disk guard aborts the batch, one new attempt is allowed, in a fresh directory, after the M3 restart-and-unload procedure.
+- A second hardware abort makes the result **"incomplete"**, which counts as "propose hosted".
+- An abort caused by model behaviour (timeouts, `context_exhausted`, `error`) is **not retried**.
+
+**Smoke scenario.** `sc-45fa1390ea`: the first dev scenario in manifest order that is not in the M3 pilot set, not the M3 smoke scenario, and not in the M4 core set. Its data has not been inspected.
+
+**Revisions.**
+- Context, prompt or tool-spec revisions based on the smoke run are allowed before the core runs. Each is logged here with a new hash and a reason, and needs user approval.
+- **After the first core run starts, nothing changes.** A later change is a logged revision, and later results are reported separately.
+
+**Order of work:**
+1. **Part 1, smoke run only.** Report: stop reason, states reached, use of the state tools, estimate against reported prompt count per turn, compaction level per turn, `claim_check` (rendered versus seen only), `prompt_eval_duration` per turn, server-log context shifts or truncations (must be 0), wall time, swap and free disk. Then stop.
+2. **Part 2, only after approval.** The 12 core runs under the M3 procedure, with the pre-registered decision rule applied as written.
 
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.

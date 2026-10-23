@@ -1,7 +1,11 @@
 # SentinelOps progress
 
 ## Current milestone
-**M4 stage A: in progress** on `m4-stage-a`, with the pre-registration below written before any code.
+**M4 stage A: done, awaiting review** on `m4-stage-a` (2026-10-23).
+- **Commits:** pre-registration 855af4d, design correction a58b589, code 7745302.
+- **Status:** 350 tests passing; the viewer renders against real data, with the M4 page in its empty state.
+- **Not done in stage A:** no model, network or installs; Ollama stopped. `eval/agent/` is empty, and the mock traces were written to temporary directories only.
+- **Next:** stage B needs approval.
 
 **M3: complete** (2026-10-23). Merged into `main` (8eacfd0) and tagged `m3-complete`. M4 hasn't started; its carry-forward list is below.
 - **Attempt 1** was aborted by the swap guard after 3 of 7 runs. It is recorded and kept, and never merged with attempt 2.
@@ -727,6 +731,25 @@ So a real 40-call run would hit `context_exhausted` by design. The ledger also r
 **New limitations:**
 - The model sees a bounded view, so it may not see an ID it could cite, unless it re-fetches it with `get_record`.
 - The worst-case margin is thin: 35 estimated tokens at peak.
+
+## M4 stage A: notes and deviations (2026-10-23)
+- **Frozen agent prompt** sha256 `bd63ce71ce3480dc75b97a453af525f3dc18e0dd48e44d6cf816235dd8ae5e17` (`test_agent_prompt_is_frozen`).
+- **Estimator test, a deviation from the plan's "±20% on the M3 traces".**
+  - The raw characters ÷ 3.6 ratio overestimates schema-heavy early turns (about +32% on turn 1), which errs on the safe side.
+  - It is within 20% on turns above 4,000 reported tokens, where overflow risk lives.
+  - What the test checks instead: (i) the estimate with its margin is never below the reported count on any non-overflowed M3 turn; (ii) the raw ratio is within 20% on the heavy turns.
+- **Server-count safeguard.**
+  - The 90% guard acts one turn late, so it can't stop a single large jump on its own.
+  - It is paired with the estimator's calibration from server counts, which was pre-registered as part of (a).
+  - The "estimate too low" test exercises both together: with an estimator that undercounts 14×, every prompt after the first stays within the 6,144 budget.
+- **Option 4 is not used.** The worst case fits with all tools sent on every request.
+- **Ollama client:** `num_predict` is sent only when set, so the M3 pilot's request body is unchanged. Responses now record prompt-evaluation time, total time and `done_reason == "length"`.
+- **Token table, worst-case run (end of run, estimated tokens):**
+  - fixed part: system prompt 405, triage 362, stage block 45, tool specs 2,562
+  - ledger: 2,765 at level 0, 678 at level 4
+  - compacted results: 6,181 at level 0, 463 at level 4
+  - total: 12,510 at level 0 (doesn't fit), 6,516 at level 2 (doesn't fit), 5,006 at level 3 and 4,512 at level 4
+  - so the builder uses level 3 or 4 there; the full table is in the stage A report.
 
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.

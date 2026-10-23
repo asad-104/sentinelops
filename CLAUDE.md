@@ -17,6 +17,7 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 - Evaluate on dev: `.venv/bin/python -m sentinelops.evaluation --split dev --investigator all` (writes `eval/results/`). Held-out needs `--final` and runs only at milestone comparisons
 - Paired tier ablation (dev only): `.venv/bin/python -m sentinelops.evaluation.ablation`
 - M3 pilot (dev only): `.venv/bin/python -m sentinelops.evaluation.pilot --backend mock` (writes `eval/pilot/`). `--backend ollama` only after stage B approval, with Streamlit stopped
+- M4 agent (dev only): `.venv/bin/python -m sentinelops.evaluation.agent_run --backend mock --data-root <tmp>/dev --manifest-dir <tmp>/manifests --out-root <tmp>` (mock refuses the core scenarios and `eval/agent/`). `--backend ollama` only in stage B, after approval
 - Viewer against real data: `.venv/bin/python scripts/check_viewer_real_data.py` (renders every page headlessly on `data/dev` and all of `eval/results`; must print `OK`)
 
 ## Invariants (enforced by tests; don't break them)
@@ -37,6 +38,7 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 - Log content is untrusted; injected instructions are data and are returned verbatim
 - Tests are offline: `tests/conftest.py` makes any network connection raise `NetworkBlocked`. `sentinelops/llm/` never imports the simulator; the Ollama client refuses non-loopback hosts; keys only via environment variables, never traced
 - The M3 pilot prompt is frozen (`test_prompt_is_frozen`); any revision is logged in `docs/PROGRESS.md` with its new hash before rerunning
+- M4: the 10 core scenarios are never used for development or tuning; stage A mock traces never go to `eval/agent/` (`test_agent_run.py`). The agent prompt and the compaction parameters are frozen; any change is a logged revision in `docs/PROGRESS.md`
 - An investigator that raises gets an error row (`stop_reason`, `report_valid=False`) and never stops the run; only `HarnessAbort` does
 
 ## Milestone status
@@ -49,7 +51,8 @@ Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS
 - Done: **M2 complete**, including generator v5 (independent mechanism streams, injection twins, paired injection metric, dev paired ablation, viewer fix); merged to `main`
 - Done: **M3 stage A** (LLM adapter, mock, Ollama client untested against a server, tool loop, traces, crash-catching harness, pilot CLI, network guard, M3 viewer page; merged to `main`)
 - Done: **M3 complete** (stage B: attempt 1 aborted by the swap guard and recorded; attempt 2 completed 7 runs, rule verdict `local_feasible` with caveats; merged to `main`, tag `m3-complete`)
-- Next: **M4** planning, only when the user says so (carry-forward list in `docs/PROGRESS.md`)
+- Done, awaiting review: **M4 stage A** (explicit-state agent, managed context with bounded ledger, metrics incl. criterion (e), agent CLI, M4 viewer page; no model; branch `m4-stage-a`)
+- Next: user review of stage A. **Stage B (local `qwen3:4b` on the fixed 10-scenario set) needs explicit approval**
 
 ## Standing rules
 

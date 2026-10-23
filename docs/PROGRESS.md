@@ -413,6 +413,50 @@ A hosted pilot needs explicit user approval, a $5 hard cap in the provider conso
 
 **Limitation.** Thinking is the model's default (`ollama show`: thinking default true), and it was not measured in a smoke run. The pilot therefore measures `qwen3:4b` without thinking, not the model at its default. A thinking-on comparison is left for later, if the memory budget allows.
 
+## M3 stage B: first pilot attempt, aborted by the swap guard (2026-10-23)
+**Status: aborted after 3 of 7 runs. This attempt is on record and is never merged with a later attempt. The decision rule is NOT applied to partial data.**
+
+**Files.** All under `eval/pilot/generator-v5/ollama-qwen3-4b/`, committed unchanged. sha256 prefixes:
+- `run_log.jsonl` (`ee5007b3…`)
+- `traces/01-sc-06b280fbed.jsonl` (`8dfc0b22…`)
+- `traces/02-sc-1499febf6f.jsonl` (`3df180e0…`)
+- `traces/03-sc-203fe8a4ca.jsonl` (`231b2722…`)
+
+There is **no `summary.json` or `summary.md`**: `HarnessAbort` propagates before the summary is written. The only abort marker in the files is the run log's `"event": "abort"` line, and the trace files don't mark themselves as part of an aborted attempt.
+
+**Conditions** (as reported by the user, plus the run log):
+- VS Code closed; the batch was run from Terminal under `caffeinate -i`.
+- The Ollama server was run by the user; its log is not available.
+- Settings: `qwen3:4b` `359d7dd4bcda`, Ollama 0.40.8, `--think off`, `num_ctx` 8192, temperature 0, seed 0, frozen prompt `0f97fb44…` (confirmed in each trace).
+- Swap at start: the user read 515 MB before the batch. The run log's `batch_start` reading is 0.0 MB, so the guard's baseline was 0.0 MB.
+
+**Swap, memory pressure and free disk around each run** (from the run log):
+
+| Point | Swap used (MB) | Pressure level | Free disk (GB) |
+|---|---|---|---|
+| batch start | 0.0 | 1 | 45.88 |
+| run 1 end | 466.6 | 1 | 44.82 |
+| run 2 end | 1,057.7 | 2 | 43.75 |
+| run 3 end | 4,231.2 | 2 | 38.56 |
+| abort check, before run 4 | 4,223.2 | 2 | 38.56 |
+
+- **User readings:** about 2,351 MB during run 3, from the progress line. After stopping Ollama, `vm.swapusage` showed 959.5 MB used out of 2,048 MB, which suggests the server's memory was a major contributor to the swap growth.
+- **Guard message:** `swap grew by more than 2.0 GB`, raised before run 4 (`sc-2d438d4575`). Growth from the batch baseline was 4.2 GB.
+
+**The three completed runs:**
+
+| Run | Scenario | Stop | Wall time | Turns | Valid calls | Median turn latency | Tokens (prompt / completion) |
+|---|---|---|---|---|---|---|---|
+| 1 | sc-06b280fbed | sufficient_evidence | 207.4 s | 3 | 3/3 | 50.6 s | 9,965 / 4,126 |
+| 2 | sc-1499febf6f | sufficient_evidence | 332.4 s | 5 | 5/5 | 68.5 s | 20,037 / 5,474 |
+| 3 | sc-203fe8a4ca | sufficient_evidence | 755.9 s | 8 | 6/7 | 96.1 s | 40,279 / 8,536 |
+
+**Reading these:**
+- **Run 3's 756 s probably includes swap slowdown.** Swap grew about 3.2 GB during that run. It must not be read as model slowness. Turn latency also grows with prompt length, so the two effects aren't separated.
+- **Likely context overflow in run 3.** Up to turn 5, Ollama's reported prompt tokens track an estimate from the trace, at about 3.6 characters per token. From turn 6 the full conversation is about 8,300–8,900 tokens, over `num_ctx` 8192, and the reported counts drop (7,046 → 4,098 at turn 6, then 8,095 and 6,834). That pattern fits Ollama truncating the conversation, so run 3's turns 6–8 likely saw only part of it.
+  - **Not confirmed:** the server log isn't available, and Ollama's count could also exclude cached tokens.
+  - This is a property of the pre-registered `num_ctx`, not of the model.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

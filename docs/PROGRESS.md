@@ -1,6 +1,8 @@
 # SentinelOps progress
 
 ## Current milestone
+**M4 stage A: in progress** on `m4-stage-a`, with the pre-registration below written before any code.
+
 **M3: complete** (2026-10-23). Merged into `main` (8eacfd0) and tagged `m3-complete`. M4 hasn't started; its carry-forward list is below.
 - **Attempt 1** was aborted by the swap guard after 3 of 7 runs. It is recorded and kept, and never merged with attempt 2.
 - **Attempt 2** completed all 7 runs. The pre-registered rule gives `local_feasible`, with the caveats below.
@@ -561,6 +563,122 @@ Whether the second timeout in each pair waited behind the first (the server may 
    - **Held-out:** 60 scenarios plus an unknown number of twins (about 24 if the dev rate of 12/40 holds) is about 84 runs, about 8.5 h.
    - **Worst case:** 20 min per run, so about 17 h for dev.
    - **What would change it:** M4's agent will make more calls than the pilot's 3–7 per run, so expect more.
+
+## M4: pre-registration (recorded 2026-10-23, before any M4 code)
+The plan is approved with changes; the full plan is in the 2026-10-23 conversation. Scope now: **stage A only**, with no model, no network and no money. Stage B (local `qwen3:4b`) needs separate approval.
+
+**Decisions:**
+- **D1. New stop reason.** `context_exhausted` is added to `StopReason`. It is used when even the pinned content plus a minimal ledger cannot fit the prompt budget. Every test and viewer page that lists stop reasons is updated.
+- **D2. Tool-call budget: 40 read-tool calls per run, including TRIAGE's 3.**
+  - Per-state split: TRIAGE 3; GATHER at most 16 on the first pass; VERIFY at most 8, **counting both VERIFY passes together**. GATHER calls after the return to GATHER come **out of the global 40, with no separate allowance**.
+  - **Every comparison states both budgets: M4 agent 40, rule baseline about 52.**
+- **D3. Timeouts.**
+  - 180 s per model call, and 30 minutes in total per scenario.
+  - After a per-call timeout, the model is unloaded and the call retried once. Two consecutive timeouts end the run with `timeout`.
+  - The bounds are not loosened if timeouts recur.
+- **D4. Context.** `num_ctx` 8192, a prompt budget of 6,144 estimated tokens, `num_predict` 2,048.
+- **D5. The fixed 10-scenario dev set** (below).
+- **D6. The "investigated" definition** (below), with criterion (e) made precise.
+- **D7. Compaction is deterministic,** never written by the model.
+- **D8. TRIAGE is issued by the loop** (`get_alert`, `get_window`, `get_dependencies`). This is recorded as a limitation.
+
+**State machine.** The table is authoritative, and the corrected diagram is:
+
+`TRIAGE → GATHER → HYPOTHESIZE → VERIFY → (back to GATHER at most once, then HYPOTHESIZE → VERIFY again) → REPORT`
+
+How the model moves between states:
+- **Tools for changing state:** `finish_gathering` (GATHER → HYPOTHESIZE), `submit_hypotheses` (in HYPOTHESIZE it moves to VERIFY; in VERIFY it re-ranks), `return_to_gather` (VERIFY → GATHER, once), `finish_verifying` (VERIFY → REPORT) and `submit_report` (REPORT).
+- **Preconditions:**
+  - `finish_gathering` on the first pass needs at least 4 GATHER evidence calls.
+  - `finish_verifying` needs at least 1 VERIFY read call.
+  - A failed precondition returns a structured error that counts toward the malformed streak.
+- **Automatic moves:** at the GATHER first-pass cap of 16 the loop moves to HYPOTHESIZE, and at the VERIFY cap of 8 it moves to REPORT.
+- **Out-of-state tools.** Any tool not allowed in the current state returns a structured `wrong_state` error, which counts toward the malformed streak. In particular, **HYPOTHESIZE → GATHER is rejected as `wrong_state`** (tested).
+- **Other limits:**
+  - **Model turns:** 60.
+  - **Malformed streak:** 3 in a row → `error`.
+  - **Repeated calls:** 3 identical calls in a row, or 3 GATHER calls in a row with no new source IDs → `no_new_evidence`.
+  - **Global budget:** reaching the 40-call budget before a valid report → `budget_exhausted`.
+  - **Report repair:** one repair turn for an invalid report, including fabricated citations not in the ledger; still invalid → `error`.
+
+**Context management (central requirement).** Each request is rebuilt from structured state, never from appended history.
+- **Message order (stable first, for the prefix cache):**
+  1. the system prompt, pinned
+  2. the alert, as data
+  3. the evidence ledger, as data
+  4. compacted older results, as data
+  5. the recent window of tool calls and results
+  6. the current state, remaining budget and state instruction, written by the loop and always last
+- **Untrusted content only in user and tool messages.** Ledger excerpts and tool results are untrusted. They are length-capped, JSON-encoded (so a payload can't start a new line or imitate an entry), labelled as data, and **never placed in a system-role message**.
+- **Two safeguards against the prompt budget** (6,144 + 2,048 = 8,192, with no slack):
+  - **(a) Client-side estimate:** characters ÷ 3.6 × 1.15, with the 3.6 calibrated on M3 attempt 2. It also calibrates against server counts: once the server has reported a prompt count, the estimate is never lower than what the observed characters-per-token ratio implies.
+  - **(b) Server-count guard:** if the last reported `prompt_eval_count` exceeds 90% of `num_ctx`, the next turn's compaction level is raised, and it stays raised.
+- **Compaction levels:** 0 (recent window of 2 results, excerpts) up to 4 (ledger IDs only). If level 4 still exceeds the budget → `context_exhausted`.
+- **Truncated output.** A completion cut off by the `num_predict` cap (`done_reason == "length"`) is treated as malformed output: its tool calls are not executed, and a repair turn follows.
+- **Tests required:** both safeguards, plus a test where the estimate is deliberately too low and the server-count guard still prevents overflow.
+
+**Prefix cache, amendment 3 as reworded.** Per turn, the trace records the prompt-evaluation time and the reported prompt count, plus `load_duration` and `total_duration`. **Cache reuse is inferred, not measured. No threshold or claim depends on that inference; it is reported descriptively only.** If the stage B server log has per-request cache lines, they are extracted separately and labelled as server-log evidence.
+
+**Fixed M4 dev set.** The rule is: the first 2 scenarios of each fault type in dev manifest order, excluding the M3 pilot and smoke scenarios.
+- **Core:** `sc-30385ffc64`, `sc-3836c69ef7`, `sc-3e3ceb314e`, `sc-4001bf784c`, `sc-408b514aeb`, `sc-4251e8920a`, `sc-497fd61898`, `sc-5b55b772de`, `sc-5c5b9b9197`, `sc-91404ea5fc`.
+- **Coverage:** 5 standard, 2 ambiguous, 3 missing-evidence. 2 are injected (`sc-5b55b772de`, `sc-5c5b9b9197`), so with twins there are 12 runs.
+
+**"Investigated" (per run).** All of the following must hold. **It measures process, not insight.**
+- **(a) Valid report:** the run ended with a valid report (`sufficient_evidence`).
+- **(b) Enough gathering:** at least 4 GATHER evidence calls. An evidence call is a model-issued read call that returned `ok` with at least 1 source ID not seen before in the run.
+- **(c) Data variety:** the model-issued read calls returned source IDs of at least 2 kinds among logs (`LOG-`), metrics (`MET-`) and changes (`DPL-`/`CFG-`).
+- **(d) Supported top hypothesis:** the final top hypothesis cites at least 2 IDs that exist in the scenario, at least 1 of them not the alert.
+- **(e) Verification:** **at least one VERIFY read call, in either pass, tests rank 2 or tests a contradiction of rank 1, against the ranking in force at the time of that call.** The ranking in force is the latest `submit_hypotheses` before the call. A call qualifies only if all of these hold:
+  - It returned `ok`.
+  - It is **not an exact repeat** of any earlier call in the run (same tool and the same parsed arguments). A VERIFY call that repeats a GATHER call therefore doesn't count.
+  - It **targets a service S**: its `service` argument is S, or it is `get_record` of an ID whose record belongs to S.
+  - Then either:
+    - **it tests rank 2:** rank 2 exists and S is rank 2's service; or
+    - **it tests a contradiction of rank 1:** S is rank 1's service, and the call's data kind is one of logs, metrics or changes and is not among the data kinds of rank 1's cited IDs. The data kind of a call is: `search_logs` → logs; `get_metrics` → metrics; `list_deployments`, `list_config_changes` and `get_timeline` → changes; `get_record` → the kind of the record's ID.
+
+  It is implemented as a tested function, covering met, not met and boundary cases.
+- **(f) No context overflow:**
+  - no request was sent above the client budget (true by construction, and tested)
+  - no reported prompt count reached `num_ctx`
+  - in stage B, 0 context shifts or truncations in the server log. The server log overrides the trace.
+
+**Shallow-run measures:**
+- tool calls per run (against 40 and about 52)
+- evidence calls
+- distinct tools, data kinds and services examined
+- the share of runs that meet "investigated" and each of (a)–(f)
+- headline evidence validity and unsupported claims
+
+**Questions** (counts only):
+1. valid tool-call share
+2. runs that are "investigated" and end with `sufficient_evidence`
+3. valid reports, directly and after repair
+4. real citations
+5. context-overflow events, client-side and server-confirmed
+6. timeouts, and how much unloading after a timeout helped
+7. median and maximum wall time
+8. top-1 and top-3, description only, n = 10
+9. the injection pairs' answer changes, description only, n = 2
+
+**Decision rule** (stage B; thresholds are judgement):
+- **Works locally:** "investigated" in at least 6 of 10, and valid reports in at least 8 of 10, and 0 server-confirmed overflows, and median wall time ≤ 15 min.
+- **Propose hosted** for M5: "investigated" in 3 or fewer of 10, or any server-confirmed overflow, or median wall time > 25 min.
+- **In between:** one logged prompt revision, with a new hash.
+- **Incomplete or aborted batch:** counts as "propose hosted". There is one attempt and no retry loop.
+- **Hosted conditions:** propose only. A hosted run needs explicit approval, prices re-verified on the day, a $5 hard cap, the key in an environment variable only, and httpx only.
+
+**No-tuning rule.**
+- Development uses the mock client, scenarios generated in a temporary directory and, in stage B, the smoke scenario only.
+- **Nothing is tuned on the 10 core scenarios.** Stage A mock traces never use them and are never written to `eval/agent/`; a test enforces this.
+- Any prompt revision is logged here with a new hash, and later results are reported separately.
+- The M5 headline comparison will be on held-out, run once with `--final`.
+
+**Limitations, recorded now:**
+- The forced structure (minimum GATHER calls, mandatory VERIFY) produces some depth by design.
+- 40 calls against the baseline's about 52 is not a like-for-like comparison.
+- TRIAGE is issued by the loop, so the agent never decides how to begin.
+- "Investigated" is the author's definition and measures process, not insight.
+- The data is synthetic and author-built, and the simulator, baseline and prompts share an author.
 
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.

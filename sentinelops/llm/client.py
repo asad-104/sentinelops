@@ -53,6 +53,7 @@ class LLMResponse:
     usage: Usage = field(default_factory=Usage)
     latency_s: float = 0.0
     thinking_chars: int = 0  # length of any separate reasoning text the backend returned
+    load_s: float | None = None  # time the backend spent loading the model for this call, if it reports it
 
 
 @dataclass(frozen=True)

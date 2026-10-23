@@ -91,3 +91,23 @@ def test_describe_is_plain_configuration() -> None:
     described = OllamaClient("qwen3:4b").describe()
     assert described["backend"] == "ollama" and described["model"] == "qwen3:4b"
     assert not any("key" in k.lower() or "token" in k.lower() for k in described)
+
+
+def test_unload_asks_the_server_to_free_the_model_and_errors_are_values() -> None:
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"], seen["body"] = request.url.path, json.loads(request.content)
+        return httpx.Response(200, json={"done": True})
+
+    assert _client(handler).unload() is None
+    assert seen == {"path": "/api/generate", "body": {"model": "qwen3:4b", "keep_alive": 0}}
+    failing = _client(lambda r: (_ for _ in ()).throw(httpx.ConnectError("refused", request=r)))
+    error = failing.unload()
+    assert isinstance(error, LLMError) and error.code == "connection"
+
+
+def test_load_duration_is_reported_in_seconds() -> None:
+    response = _client(lambda r: _ok({"role": "assistant", "content": ""}, load_duration=2_500_000_000)).chat(
+        [ChatMessage("user", "u")], [])
+    assert isinstance(response, LLMResponse) and response.load_s == 2.5

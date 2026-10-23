@@ -1,0 +1,238 @@
+1:time=2026-10-23T11:53:48.283+08:00 level=INFO source=routes.go:2450 msg="server config" env="map[HTTPS_PROXY: HTTP_PROXY: LLAMA_ARG_FIT: LLAMA_ARG_FIT_TARGET: NO_PROXY: OLLAMA_CONTEXT_LENGTH:0 OLLAMA_CREATE_REMOTE:false OLLAMA_DEBUG:INFO OLLAMA_DEBUG_LOG_REQUESTS:false OLLAMA_EDITOR: OLLAMA_FLASH_ATTENTION:false OLLAMA_GO_TEMPLATE:true OLLAMA_GPU_OVERHEAD:0 OLLAMA_HOST:http://127.0.0.1:11434 OLLAMA_IGPU_ENABLE: OLLAMA_KEEP_ALIVE:5m0s OLLAMA_KV_CACHE_TYPE: OLLAMA_LLM_LIBRARY: OLLAMA_LOAD_TIMEOUT:5m0s OLLAMA_MAX_LOADED_MODELS:1 OLLAMA_MAX_QUEUE:512 OLLAMA_MAX_TRANSFER_STREAMS:4 OLLAMA_MODELS:~/.ollama/models OLLAMA_NOHISTORY:false OLLAMA_NOPRUNE:false OLLAMA_NO_CLOUD:false OLLAMA_NUM_PARALLEL:1 OLLAMA_ORIGINS:[http://localhost https://localhost http://localhost:* https://localhost:* http://127.0.0.1 https://127.0.0.1 http://127.0.0.1:* https://127.0.0.1:* http://0.0.0.0 https://0.0.0.0 http://0.0.0.0:* https://0.0.0.0:* app://* file://* tauri://* vscode-webview://* vscode-file://*] OLLAMA_REMOTES:[ollama.com] OLLAMA_SCHED_SPREAD:false http_proxy: https_proxy: no_proxy:]"
+8:time=2026-10-23T11:53:48.486+08:00 level=INFO source=routes.go:2562 msg="vram-based default context" total_vram="5.3 GiB" default_num_ctx=4096
+11:time=2026-10-23T11:54:14.278+08:00 level=INFO source=llama_server.go:457 msg="starting llama-server" cmd="/opt/homebrew/Cellar/ollama/0.40.8/libexec/lib/ollama/llama-server --model ~/.ollama/models/blobs/sha256-3e4cb14174460404e7a233e531675303b2fbf7749c02f91864fe311ab6344e4f --port 49161 --host 127.0.0.1 --no-webui --offline -c 8192 -np 1 --log-verbosity 4 --no-log-prefix --no-log-timestamps --no-jinja --chat-template chatml --flash-attn auto -b 512 -ub 512 --context-shift --keep 4"
+50:common_memory_breakdown_print: | memory breakdown [MiB] | total   free    self   model   context   compute    unaccounted |
+78:llama_model_loader: - kv  19:                       qwen3.context_length u32              = 262144
+113:print_info: n_ctx_train           = 262144
+148:print_info: n_ctx_orig_yarn       = 262144
+187:llama_context: constructing llama_context
+188:llama_context: n_seq_max             = 1
+189:llama_context: n_ctx                 = 8192
+190:llama_context: n_ctx_seq             = 8192
+191:llama_context: n_batch               = 512
+192:llama_context: n_ubatch              = 512
+193:llama_context: causal_attn           = 1
+194:llama_context: flash_attn            = auto
+195:llama_context: kv_unified            = false
+196:llama_context: freq_base             = 5000000.0
+197:llama_context: freq_scale            = 1
+198:llama_context: n_rs_seq              = 0
+199:llama_context: n_outputs_max         = 1
+200:llama_context: n_outputs_max_per_seq = 1
+201:llama_context: n_ctx_seq (8192) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+208:llama_context:        CPU  output buffer size =     0.58 MiB
+225:srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+227:slot   load_model: id  0 | task -1 | new slot, n_ctx = 8192
+231:srv    load_model: context checkpoints enabled, max = 32, min spacing = 8192
+267:slot   operator(): id  0 | task 0 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 1645
+290:slot      release: id  0 | task 0 | stop processing: n_tokens = 2613, truncated = 0
+303:slot   operator(): id  0 | task 973 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 2728
+327:slot      release: id  0 | task 973 | stop processing: n_tokens = 3879, truncated = 0
+340:slot   operator(): id  0 | task 2128 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 5592
+386:slot      release: id  0 | task 2128 | stop processing: n_tokens = 7596, truncated = 0
+391:time=2026-10-23T11:57:41.634+08:00 level=INFO source=llama_server.go:457 msg="starting llama-server" cmd="/opt/homebrew/Cellar/ollama/0.40.8/libexec/lib/ollama/llama-server --model ~/.ollama/models/blobs/sha256-3e4cb14174460404e7a233e531675303b2fbf7749c02f91864fe311ab6344e4f --port 49191 --host 127.0.0.1 --no-webui --offline -c 8192 -np 1 --log-verbosity 4 --no-log-prefix --no-log-timestamps --no-jinja --chat-template chatml --flash-attn auto -b 1024 -ub 1024 --context-shift --keep 4"
+430:common_memory_breakdown_print: | memory breakdown [MiB] | total   free    self   model   context   compute    unaccounted |
+458:llama_model_loader: - kv  19:                       qwen3.context_length u32              = 262144
+493:print_info: n_ctx_train           = 262144
+528:print_info: n_ctx_orig_yarn       = 262144
+567:llama_context: constructing llama_context
+568:llama_context: n_seq_max             = 1
+569:llama_context: n_ctx                 = 8192
+570:llama_context: n_ctx_seq             = 8192
+571:llama_context: n_batch               = 1024
+572:llama_context: n_ubatch              = 1024
+573:llama_context: causal_attn           = 1
+574:llama_context: flash_attn            = auto
+575:llama_context: kv_unified            = false
+576:llama_context: freq_base             = 5000000.0
+577:llama_context: freq_scale            = 1
+578:llama_context: n_rs_seq              = 0
+579:llama_context: n_outputs_max         = 1
+580:llama_context: n_outputs_max_per_seq = 1
+581:llama_context: n_ctx_seq (8192) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+588:llama_context:        CPU  output buffer size =     0.58 MiB
+605:srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+607:slot   load_model: id  0 | task -1 | new slot, n_ctx = 8192
+611:srv    load_model: context checkpoints enabled, max = 32, min spacing = 8192
+647:slot   operator(): id  0 | task 0 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 1649
+672:slot      release: id  0 | task 0 | stop processing: n_tokens = 2704, truncated = 0
+685:slot   operator(): id  0 | task 1058 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 2819
+702:slot      release: id  0 | task 1058 | stop processing: n_tokens = 3325, truncated = 0
+715:slot   operator(): id  0 | task 1567 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 3910
+743:slot      release: id  0 | task 1567 | stop processing: n_tokens = 5018, truncated = 0
+756:slot   operator(): id  0 | task 2678 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 5249
+787:slot      release: id  0 | task 2678 | stop processing: n_tokens = 6367, truncated = 0
+800:slot   operator(): id  0 | task 3799 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 6410
+844:slot      release: id  0 | task 3799 | stop processing: n_tokens = 8092, truncated = 0
+849:time=2026-10-23T12:03:44.778+08:00 level=INFO source=llama_server.go:457 msg="starting llama-server" cmd="/opt/homebrew/Cellar/ollama/0.40.8/libexec/lib/ollama/llama-server --model ~/.ollama/models/blobs/sha256-3e4cb14174460404e7a233e531675303b2fbf7749c02f91864fe311ab6344e4f --port 49221 --host 127.0.0.1 --no-webui --offline -c 8192 -np 1 --log-verbosity 4 --no-log-prefix --no-log-timestamps --no-jinja --chat-template chatml --flash-attn auto -b 1024 -ub 1024 --context-shift --keep 4"
+888:common_memory_breakdown_print: | memory breakdown [MiB] | total   free    self   model   context   compute    unaccounted |
+916:llama_model_loader: - kv  19:                       qwen3.context_length u32              = 262144
+951:print_info: n_ctx_train           = 262144
+986:print_info: n_ctx_orig_yarn       = 262144
+1025:llama_context: constructing llama_context
+1026:llama_context: n_seq_max             = 1
+1027:llama_context: n_ctx                 = 8192
+1028:llama_context: n_ctx_seq             = 8192
+1029:llama_context: n_batch               = 1024
+1030:llama_context: n_ubatch              = 1024
+1031:llama_context: causal_attn           = 1
+1032:llama_context: flash_attn            = auto
+1033:llama_context: kv_unified            = false
+1034:llama_context: freq_base             = 5000000.0
+1035:llama_context: freq_scale            = 1
+1036:llama_context: n_rs_seq              = 0
+1037:llama_context: n_outputs_max         = 1
+1038:llama_context: n_outputs_max_per_seq = 1
+1039:llama_context: n_ctx_seq (8192) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+1046:llama_context:        CPU  output buffer size =     0.58 MiB
+1063:srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+1065:slot   load_model: id  0 | task -1 | new slot, n_ctx = 8192
+1069:srv    load_model: context checkpoints enabled, max = 32, min spacing = 8192
+1105:slot   operator(): id  0 | task 0 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 1645
+1124:slot      release: id  0 | task 0 | stop processing: n_tokens = 2334, truncated = 0
+1137:slot   operator(): id  0 | task 692 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 2449
+1181:slot      release: id  0 | task 692 | stop processing: n_tokens = 4375, truncated = 0
+1194:slot   operator(): id  0 | task 2620 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4436
+1224:slot      release: id  0 | task 2620 | stop processing: n_tokens = 5488, truncated = 0
+1237:slot   operator(): id  0 | task 3675 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 5676
+1267:slot      release: id  0 | task 3675 | stop processing: n_tokens = 6629, truncated = 0
+1280:slot   operator(): id  0 | task 4631 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 7046
+1310:slot   operator(): id  0 | task 4631 | slot context shift, n_keep = 4, n_left = 8187, n_discard = 4093
+1319:slot      release: id  0 | task 4631 | stop processing: n_tokens = 4243, truncated = 1
+1322:time=2026-10-23T12:10:43.234+08:00 level=WARN source=llama_server.go:334 msg="truncating input prompt" limit=4098 prompt=8192 keep=4 new=4098
+1340:slot   operator(): id  0 | task 5924 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4098
+1362:slot      release: id  0 | task 5924 | stop processing: n_tokens = 4599, truncated = 0
+1384:slot   operator(): id  0 | task 6430 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 8095
+1400:slot   operator(): id  0 | task 6430 | slot context shift, n_keep = 4, n_left = 8187, n_discard = 4093
+1421:slot      release: id  0 | task 6430 | stop processing: n_tokens = 4743, truncated = 1
+1445:slot   operator(): id  0 | task 7180 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 6834
+1490:slot   operator(): id  0 | task 7180 | slot context shift, n_keep = 4, n_left = 8187, n_discard = 4093
+1496:slot      release: id  0 | task 7180 | stop processing: n_tokens = 4117, truncated = 1
+1501:time=2026-10-23T12:15:41.732+08:00 level=INFO source=llama_server.go:457 msg="starting llama-server" cmd="/opt/homebrew/Cellar/ollama/0.40.8/libexec/lib/ollama/llama-server --model ~/.ollama/models/blobs/sha256-3e4cb14174460404e7a233e531675303b2fbf7749c02f91864fe311ab6344e4f --port 49276 --host 127.0.0.1 --no-webui --offline -c 8192 -np 1 --log-verbosity 4 --no-log-prefix --no-log-timestamps --no-jinja --chat-template chatml --flash-attn auto -b 1024 -ub 1024 --context-shift --keep 4"
+1539:common_memory_breakdown_print: | memory breakdown [MiB] | total   free    self   model   context   compute    unaccounted |
+1567:llama_model_loader: - kv  19:                       qwen3.context_length u32              = 262144
+1603:print_info: n_ctx_train           = 262144
+1638:print_info: n_ctx_orig_yarn       = 262144
+1677:llama_context: constructing llama_context
+1678:llama_context: n_seq_max             = 1
+1679:llama_context: n_ctx                 = 8192
+1680:llama_context: n_ctx_seq             = 8192
+1681:llama_context: n_batch               = 1024
+1682:llama_context: n_ubatch              = 1024
+1683:llama_context: causal_attn           = 1
+1684:llama_context: flash_attn            = auto
+1685:llama_context: kv_unified            = false
+1686:llama_context: freq_base             = 5000000.0
+1687:llama_context: freq_scale            = 1
+1688:llama_context: n_rs_seq              = 0
+1689:llama_context: n_outputs_max         = 1
+1690:llama_context: n_outputs_max_per_seq = 1
+1691:llama_context: n_ctx_seq (8192) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+1698:llama_context:        CPU  output buffer size =     0.58 MiB
+1715:srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+1717:slot   load_model: id  0 | task -1 | new slot, n_ctx = 8192
+1721:srv    load_model: context checkpoints enabled, max = 32, min spacing = 8192
+1757:slot   operator(): id  0 | task 0 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 1651
+1802:slot      release: id  0 | task 0 | stop processing: n_tokens = 3478, truncated = 0
+1821:slot   operator(): id  0 | task 1830 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 2474
+1857:slot      release: id  0 | task 1830 | stop processing: n_tokens = 4001, truncated = 0
+1870:slot   operator(): id  0 | task 3359 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 6647
+1917:slot   operator(): id  0 | task 3359 | slot context shift, n_keep = 4, n_left = 8187, n_discard = 4093
+1931:slot      release: id  0 | task 3359 | stop processing: n_tokens = 4640, truncated = 1
+1952:slot   operator(): id  0 | task 5452 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 6647
+1998:slot   operator(): id  0 | task 5452 | slot context shift, n_keep = 4, n_left = 8187, n_discard = 4093
+2013:time=2026-10-23T12:25:16.066+08:00 level=INFO source=llama_server.go:457 msg="starting llama-server" cmd="/opt/homebrew/Cellar/ollama/0.40.8/libexec/lib/ollama/llama-server --model ~/.ollama/models/blobs/sha256-3e4cb14174460404e7a233e531675303b2fbf7749c02f91864fe311ab6344e4f --port 49304 --host 127.0.0.1 --no-webui --offline -c 8192 -np 1 --log-verbosity 4 --no-log-prefix --no-log-timestamps --no-jinja --chat-template chatml --flash-attn auto -b 1024 -ub 1024 --context-shift --keep 4"
+2052:common_memory_breakdown_print: | memory breakdown [MiB] | total   free    self   model   context   compute    unaccounted |
+2080:llama_model_loader: - kv  19:                       qwen3.context_length u32              = 262144
+2115:print_info: n_ctx_train           = 262144
+2150:print_info: n_ctx_orig_yarn       = 262144
+2189:llama_context: constructing llama_context
+2190:llama_context: n_seq_max             = 1
+2191:llama_context: n_ctx                 = 8192
+2192:llama_context: n_ctx_seq             = 8192
+2193:llama_context: n_batch               = 1024
+2194:llama_context: n_ubatch              = 1024
+2195:llama_context: causal_attn           = 1
+2196:llama_context: flash_attn            = auto
+2197:llama_context: kv_unified            = false
+2198:llama_context: freq_base             = 5000000.0
+2199:llama_context: freq_scale            = 1
+2200:llama_context: n_rs_seq              = 0
+2201:llama_context: n_outputs_max         = 1
+2202:llama_context: n_outputs_max_per_seq = 1
+2203:llama_context: n_ctx_seq (8192) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+2210:llama_context:        CPU  output buffer size =     0.58 MiB
+2227:srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+2229:slot   load_model: id  0 | task -1 | new slot, n_ctx = 8192
+2233:srv    load_model: context checkpoints enabled, max = 32, min spacing = 8192
+2269:slot   operator(): id  0 | task 0 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 1643
+2294:slot      release: id  0 | task 0 | stop processing: n_tokens = 2574, truncated = 0
+2307:slot   operator(): id  0 | task 934 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 2688
+2327:slot      release: id  0 | task 934 | stop processing: n_tokens = 3274, truncated = 0
+2340:slot   operator(): id  0 | task 1523 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 3405
+2357:slot      release: id  0 | task 1523 | stop processing: n_tokens = 3923, truncated = 0
+2370:slot   operator(): id  0 | task 2043 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4439
+2420:slot      release: id  0 | task 2043 | stop processing: n_tokens = 6352, truncated = 0
+2425:time=2026-10-23T12:29:53.880+08:00 level=INFO source=llama_server.go:457 msg="starting llama-server" cmd="/opt/homebrew/Cellar/ollama/0.40.8/libexec/lib/ollama/llama-server --model ~/.ollama/models/blobs/sha256-3e4cb14174460404e7a233e531675303b2fbf7749c02f91864fe311ab6344e4f --port 49329 --host 127.0.0.1 --no-webui --offline -c 8192 -np 1 --log-verbosity 4 --no-log-prefix --no-log-timestamps --no-jinja --chat-template chatml --flash-attn auto -b 1024 -ub 1024 --context-shift --keep 4"
+2463:common_memory_breakdown_print: | memory breakdown [MiB] | total   free    self   model   context   compute    unaccounted |
+2491:llama_model_loader: - kv  19:                       qwen3.context_length u32              = 262144
+2527:print_info: n_ctx_train           = 262144
+2562:print_info: n_ctx_orig_yarn       = 262144
+2601:llama_context: constructing llama_context
+2602:llama_context: n_seq_max             = 1
+2603:llama_context: n_ctx                 = 8192
+2604:llama_context: n_ctx_seq             = 8192
+2605:llama_context: n_batch               = 1024
+2606:llama_context: n_ubatch              = 1024
+2607:llama_context: causal_attn           = 1
+2608:llama_context: flash_attn            = auto
+2609:llama_context: kv_unified            = false
+2610:llama_context: freq_base             = 5000000.0
+2611:llama_context: freq_scale            = 1
+2612:llama_context: n_rs_seq              = 0
+2613:llama_context: n_outputs_max         = 1
+2614:llama_context: n_outputs_max_per_seq = 1
+2615:llama_context: n_ctx_seq (8192) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+2622:llama_context:        CPU  output buffer size =     0.58 MiB
+2639:srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+2641:slot   load_model: id  0 | task -1 | new slot, n_ctx = 8192
+2645:srv    load_model: context checkpoints enabled, max = 32, min spacing = 8192
+2681:slot   operator(): id  0 | task 0 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 1655
+2700:slot      release: id  0 | task 0 | stop processing: n_tokens = 2234, truncated = 0
+2713:slot   operator(): id  0 | task 582 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 2351
+2739:slot      release: id  0 | task 582 | stop processing: n_tokens = 3341, truncated = 0
+2752:slot   operator(): id  0 | task 1574 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 5137
+2812:slot      release: id  0 | task 1574 | stop processing: n_tokens = 7171, truncated = 0
+2822:slot   operator(): id  0 | task 3613 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 5137
+2890:time=2026-10-23T12:37:42.418+08:00 level=INFO source=llama_server.go:457 msg="starting llama-server" cmd="/opt/homebrew/Cellar/ollama/0.40.8/libexec/lib/ollama/llama-server --model ~/.ollama/models/blobs/sha256-3e4cb14174460404e7a233e531675303b2fbf7749c02f91864fe311ab6344e4f --port 49357 --host 127.0.0.1 --no-webui --offline -c 8192 -np 1 --log-verbosity 4 --no-log-prefix --no-log-timestamps --no-jinja --chat-template chatml --load-mode none --flash-attn auto -b 512 -ub 512 --context-shift --keep 4"
+2929:common_memory_breakdown_print: | memory breakdown [MiB] | total   free    self   model   context   compute    unaccounted |
+2957:llama_model_loader: - kv  19:                       qwen3.context_length u32              = 262144
+2992:print_info: n_ctx_train           = 262144
+3027:print_info: n_ctx_orig_yarn       = 262144
+3066:llama_context: constructing llama_context
+3067:llama_context: n_seq_max             = 1
+3068:llama_context: n_ctx                 = 8192
+3069:llama_context: n_ctx_seq             = 8192
+3070:llama_context: n_batch               = 512
+3071:llama_context: n_ubatch              = 512
+3072:llama_context: causal_attn           = 1
+3073:llama_context: flash_attn            = auto
+3074:llama_context: kv_unified            = false
+3075:llama_context: freq_base             = 5000000.0
+3076:llama_context: freq_scale            = 1
+3077:llama_context: n_rs_seq              = 0
+3078:llama_context: n_outputs_max         = 1
+3079:llama_context: n_outputs_max_per_seq = 1
+3080:llama_context: n_ctx_seq (8192) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+3087:llama_context:        CPU  output buffer size =     0.58 MiB
+3104:srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+3106:slot   load_model: id  0 | task -1 | new slot, n_ctx = 8192
+3110:srv    load_model: context checkpoints enabled, max = 32, min spacing = 8192
+3146:slot   operator(): id  0 | task 0 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 1655
+3167:slot      release: id  0 | task 0 | stop processing: n_tokens = 2234, truncated = 0
+3180:slot   operator(): id  0 | task 584 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 2351
+3207:slot      release: id  0 | task 584 | stop processing: n_tokens = 3341, truncated = 0
+3220:slot   operator(): id  0 | task 1577 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 5137
+3286:slot      release: id  0 | task 1577 | stop processing: n_tokens = 7125, truncated = 0
+3296:slot   operator(): id  0 | task 3573 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 5137
+3353:slot      release: id  0 | task 3573 | stop processing: n_tokens = 7280, truncated = 0

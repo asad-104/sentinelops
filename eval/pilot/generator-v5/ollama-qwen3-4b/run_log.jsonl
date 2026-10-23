@@ -1,0 +1,8 @@
+{"event": "batch_start", "free_disk_gb": 45.88, "pressure_level": 1, "swap_used_mb": 0.0}
+{"event": "run_start", "free_disk_gb": 45.88, "pressure_level": 1, "scenario_id": "sc-06b280fbed", "swap_used_mb": 0.0}
+{"event": "run_end", "free_disk_gb": 44.82, "pressure_level": 1, "scenario_id": "sc-06b280fbed", "swap_used_mb": 466.56}
+{"event": "run_start", "free_disk_gb": 44.82, "pressure_level": 1, "scenario_id": "sc-1499febf6f", "swap_used_mb": 466.56}
+{"event": "run_end", "free_disk_gb": 43.75, "pressure_level": 2, "scenario_id": "sc-1499febf6f", "swap_used_mb": 1057.69}
+{"event": "run_start", "free_disk_gb": 43.75, "pressure_level": 2, "scenario_id": "sc-203fe8a4ca", "swap_used_mb": 1050.75}
+{"event": "run_end", "free_disk_gb": 38.56, "pressure_level": 2, "scenario_id": "sc-203fe8a4ca", "swap_used_mb": 4231.19}
+{"event": "abort", "free_disk_gb": 38.56, "pressure_level": 2, "reasons": ["swap grew by more than 2.0 GB"], "scenario_id": "sc-2d438d4575", "swap_used_mb": 4223.19}

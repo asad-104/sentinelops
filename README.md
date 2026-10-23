@@ -123,6 +123,15 @@ M3 is a feasibility test, not the agent. A minimal tool loop (`sentinelops/llm/l
 - **Failures:** every failure is a structured value, and a run with no valid report becomes an error row.
 - **Pre-registration:** the questions and decision rule were written down before any code (`docs/PROGRESS.md`). The plan is in `docs/M3_PLAN.md`.
 
+**Pilot result** (dev only, `qwen3:4b`, thinking off, an 8 GB M2):
+- **Attempt 1** was aborted by the swap guard after 3 runs and is kept on record.
+- **Attempt 2** unloaded the model after every run and completed all 7 runs. The pre-registered rule gives `local_feasible`:
+  - 22/23 valid tool calls
+  - 4/5 core runs with a valid report
+  - 33/33 real citations
+  - median 363 s per run
+- **Caveats:** n = 5. The model used only 3–7 tool calls per run, so a valid report says nothing about investigation depth. Two runs timed out. Runs longer than about 5 turns overflowed the 8,192-token context, and the server then dropped the system prompt. Top-1 (2/5) is description only. Details are in `docs/PROGRESS.md`.
+
 ## Architecture (Milestone 1)
 
 ```

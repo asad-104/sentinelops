@@ -1,0 +1,3 @@
+{"event": "batch_start", "free_disk_gb": 26.48, "pressure_level": 1, "swap_used_mb": 1098.0}
+{"event": "run_start", "free_disk_gb": 26.48, "pressure_level": 1, "scenario_id": "sc-2c422896a9", "swap_used_mb": 1098.0}
+{"event": "run_end", "free_disk_gb": 24.67, "pressure_level": 2, "scenario_id": "sc-2c422896a9", "swap_used_mb": 3038.94}

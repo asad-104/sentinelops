@@ -48,7 +48,8 @@ Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS
 - Done: **M2 follow-ups** (get_window, headline evidence validity, missing-evidence naming, generator v4, M2 viewer page; merged to `main`, 6d9a943)
 - Done: **M2 complete**, including generator v5 (independent mechanism streams, injection twins, paired injection metric, dev paired ablation, viewer fix); merged to `main`
 - Done: **M3 stage A** (LLM adapter, mock, Ollama client untested against a server, tool loop, traces, crash-catching harness, pilot CLI, network guard, M3 viewer page; merged to `main`)
-- In progress: **M3 stage B** (Ollama + `qwen3:4b`, smoke run, 7 pilot runs; branch `m3-stage-b`)
+- Done, awaiting review: **M3 stage B** (attempt 1 aborted by the swap guard and recorded; attempt 2 completed 7 runs, rule verdict `local_feasible` with caveats; branch `m3-stage-b`)
+- Next: user review; merge `m3-stage-b`. M4 does not start until the user says so (carry-forward list in `docs/PROGRESS.md`)
 
 ## Standing rules
 

@@ -165,7 +165,7 @@ class _Run:
     def trace_model(self, r: LLMResponse) -> None:
         self.trace.event("model", turn=self.turn, error=None, latency_s=r.latency_s,
                          prompt_tokens=r.usage.prompt_tokens, completion_tokens=r.usage.completion_tokens,
-                         thinking_chars=r.thinking_chars, text=r.text[:TRACE_TEXT_CAP],
+                         thinking_chars=r.thinking_chars, load_s=r.load_s, text=r.text[:TRACE_TEXT_CAP],
                          tool_calls=[c.name for c in r.tool_calls])
 
     def count_malformed(self, why: str) -> None:

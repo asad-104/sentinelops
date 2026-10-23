@@ -1,0 +1,85 @@
+{
+  "metadata": {
+    "backend": "ollama",
+    "bounds": {
+      "call_timeout_s": 180.0,
+      "max_consecutive_client_errors": 2,
+      "max_consecutive_malformed": 3,
+      "max_consecutive_timeouts": 2,
+      "max_identical_calls": 3,
+      "max_report_repairs": 1,
+      "max_tool_calls": 30,
+      "max_turns": 40,
+      "result_char_cap": 4000,
+      "total_timeout_s": 1200.0
+    },
+    "client": {
+      "backend": "ollama",
+      "base_url": "http://127.0.0.1:11434",
+      "keep_alive": "5m",
+      "model": "qwen3:4b",
+      "num_ctx": 8192,
+      "seed": 0,
+      "temperature": 0,
+      "think": false,
+      "timeout_s": 180.0
+    },
+    "generator_version": "5",
+    "git_commit": "e25480b-dirty",
+    "manifest_sha256": "5a35c45a7e8fdcee94b4be82c000a0d62de04d56b25404d5c647d51bd1eb0397",
+    "model": "qwen3:4b",
+    "prompt_sha256": "0f97fb44c2549794f7ba1be577d8d01392422e30b8752f4fd2ba640a88c2d2ea",
+    "scenarios": [
+      "sc-2c422896a9"
+    ],
+    "smoke": true
+  },
+  "probe": "not run",
+  "rule": {
+    "citation_share": 1.0,
+    "citations_real": [
+      6,
+      6
+    ],
+    "mechanics_check_only": "propose_hosted",
+    "median_wall_s": 176.58113808398775,
+    "n_core": 1,
+    "sufficient_with_valid_report": 1,
+    "valid_call_share": 1.0,
+    "valid_calls": [
+      3,
+      3
+    ],
+    "verdict": "not applicable (smoke run)"
+  },
+  "runs": [
+    {
+      "cited": 6,
+      "cited_existing": 6,
+      "completion_tokens": 3232,
+      "elapsed_s": 176.58113808398775,
+      "model_calls": 3,
+      "model_errors": 0,
+      "prompt_tokens": 8854,
+      "repaired": false,
+      "report_valid": true,
+      "role": "core",
+      "run": 1,
+      "scenario_id": "sc-2c422896a9",
+      "stop_reason": "sufficient_evidence",
+      "thinking_chars": 0,
+      "tier": "ambiguous",
+      "tool_calls": 3,
+      "top": [
+        "orders",
+        "connection_pool_exhaustion"
+      ],
+      "top1": true,
+      "trace": "01-sc-2c422896a9.jsonl",
+      "truncated_results": 1,
+      "turns": 3,
+      "valid_calls": 3,
+      "variant": "original"
+    }
+  ]
+}

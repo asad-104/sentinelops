@@ -13,7 +13,14 @@ import pytest
 
 from agent_worstcase import SCENARIO_ID, WorstCaseClient, WorstCaseTools
 from conftest import REPO_ROOT
-from sentinelops.agent.context import ContextBuilder, Ledger, TokenEstimator, request_chars
+from sentinelops.agent.context import (
+    CHARS_PER_TOKEN,
+    ESTIMATE_MARGIN,
+    ContextBuilder,
+    Ledger,
+    TokenEstimator,
+    request_chars,
+)
 from sentinelops.agent.machine import StateMachineInvestigator
 from sentinelops.agent.prompt import STATE_INSTRUCTIONS, SYSTEM_PROMPT
 from sentinelops.agent.schemas import agent_tool_specs
@@ -58,7 +65,7 @@ def test_acceptance_forty_maximum_size_calls_stay_within_budget(traces) -> None:
     assert contexts[-1]["ledger_size"] > 800  # hundreds of distinct IDs seen, bounded view rendered
     assert not any(e["event"] == "stop" and e["stop_reason"] == "context_exhausted" for e in events)
     for messages in client.requests:  # independent check of the estimate the loop used
-        estimate = math.ceil(request_chars(messages, agent.specs) / 3.6 * 1.15)
+        estimate = math.ceil(request_chars(messages, agent.specs) / CHARS_PER_TOKEN * ESTIMATE_MARGIN)
         assert estimate <= 6144
 
 
@@ -204,7 +211,8 @@ def _m3_estimates() -> list[tuple[int, int, int]]:
             if e["event"] == "model":
                 reported = e.get("prompt_tokens")
                 if reported and reported >= last:  # stop at the first drop (overflow / context shift)
-                    out.append((reported, math.ceil(chars / 3.6 * 1.15), math.ceil(chars / 3.6)))
+                    out.append((reported, math.ceil(chars / CHARS_PER_TOKEN * ESTIMATE_MARGIN),
+                                math.ceil(chars / CHARS_PER_TOKEN)))
                     last = reported
                 elif reported:
                     break
@@ -214,14 +222,15 @@ def _m3_estimates() -> list[tuple[int, int, int]]:
     return out
 
 
-def test_estimator_on_m3_traces_never_undercounts_and_is_accurate_where_it_matters() -> None:
-    """Deviation from the planned '+-20% everywhere': schema-heavy early turns are overestimated (safe side);
-    on turns above 4,000 reported tokens, where overflow risk lives, the raw ratio is within 20%."""
+def test_estimator_on_m3_traces_never_undercounts_and_bounds_its_overestimate() -> None:
+    """Context revision 1 (base 3.1): on the log-heavy M3 turns the estimate never undercounts, and the raw ratio
+    overestimates heavy turns (above 4,000 reported tokens) by at most 30% (measured max +25.3%) - the price of covering metric-heavy
+    prompts. (At the old base 3.6 the raw ratio was within 20% here, but undercounted metric-heavy M4 turns.)"""
     rows = _m3_estimates()
     assert len(rows) >= 15
     assert all(estimate >= reported for reported, estimate, _ in rows)
     heavy = [(reported, raw) for reported, _, raw in rows if reported > 4000]
-    assert heavy and all(abs(raw - reported) <= 0.2 * reported for reported, raw in heavy)
+    assert heavy and all(reported <= raw <= 1.30 * reported for reported, raw in heavy)
 
 
 def test_claim_check_distinguishes_rendered_from_seen_only(traces) -> None:
@@ -241,3 +250,21 @@ def test_trace_records_components_and_timing_fields(traces) -> None:
     model = next(e for e in traces[-1].events if e["event"] == "model")
     assert {"prompt_eval_s", "load_s", "total_s", "truncated", "prompt_tokens"} <= set(model)
     assert re.fullmatch(r"[0-9a-f]{64}", traces[-1].events[0]["prompt_sha256"])
+
+
+def test_estimator_never_undercounts_any_turn_of_the_m4_smoke_runs() -> None:
+    """Context revision 1: at 3.1 chars/token x 1.15, every request sent in both M4 smoke attempts is estimated at
+    or above the server's reported prompt count, including the metric-heavy run 1 turn 4 of smoke run 2
+    (19,167 characters, reported 6,176, which the old 3.6 ratio estimated at 6,123)."""
+    estimator = TokenEstimator()
+    assert estimator.estimate(19167) >= 6176 and math.ceil(19167 / 3.6 * 1.15) == 6123
+    checked = 0
+    for attempt in ("smoke-ollama-qwen3-4b", "smoke-ollama-qwen3-4b-attempt2"):
+        for path in sorted((REPO_ROOT / "eval/agent/generator-v5" / attempt / "traces").glob("*.jsonl")):
+            events = read_trace(path)
+            chars = {e["turn"]: e["chars"] for e in events if e["event"] == "context"}
+            for e in events:
+                if e["event"] == "model" and e.get("prompt_tokens"):
+                    assert TokenEstimator().estimate(chars[e["turn"]]) >= e["prompt_tokens"], (path.name, e["turn"])
+                    checked += 1
+    assert checked >= 30

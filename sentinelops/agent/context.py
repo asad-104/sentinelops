@@ -14,7 +14,7 @@ as one summary line per (service, metric) series; and every ID cited in the curr
 that fit in the shown (capped) tool result enter the ledger.
 
 Two safeguards keep the prompt within budget (prompt_budget + num_predict == num_ctx, no slack):
-  (a) a client-side estimate, chars / 3.6 x 1.15, that also never falls below what the server's own
+  (a) a client-side estimate, chars / 3.1 x 1.15, that also never falls below what the server's own
       reported counts imply (characters per token observed so far);
   (b) a server-count guard: a reported prompt above 90% of num_ctx raises the compaction level for
       every later turn.
@@ -38,7 +38,9 @@ ID_KINDS = {"LOG": "logs", "MET": "metrics", "DPL": "changes", "CFG": "changes",
             "DEP": "dependencies"}
 EVIDENCE_KINDS = frozenset({"logs", "metrics", "changes"})
 SOURCE_ID = re.compile(r"\b(?:LOG|MET|DPL|CFG|ALR|DEP)-\d{3,5}\b")
-CHARS_PER_TOKEN = 3.6  # calibrated on M3 attempt 2, turns 1-5
+# Context revision 1 (2026-10-27): 3.6 -> 3.1. 3.6 was calibrated on log-heavy M3 turns; metric-heavy prompts
+# tokenize at about 3.1 (M4 smoke run 2, run 1 turn 4: 19,167 chars, 6,176 reported, estimate 6,123 at 3.6).
+CHARS_PER_TOKEN = 3.1
 ESTIMATE_MARGIN = 1.15
 
 
@@ -204,7 +206,7 @@ MAX_LEVEL = len(LEVELS) - 1
 
 
 class TokenEstimator:
-    """Safeguard (a): chars / 3.6 x 1.15, and never below what the server's reported counts imply."""
+    """Safeguard (a): chars / 3.1 x 1.15, and never below what the server's reported counts imply."""
 
     def __init__(self, chars_per_token: float = CHARS_PER_TOKEN, margin: float = ESTIMATE_MARGIN) -> None:
         self.chars_per_token, self.margin = chars_per_token, margin

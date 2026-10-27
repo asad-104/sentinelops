@@ -837,6 +837,18 @@ The 12 core runs with `qwen3:4b` are therefore **not run**.
 - **The fix:** the wrapper forwards `unload` when the wrapped client has one.
 - **The test:** `test_unload_after_timeout_reaches_the_model_through_the_progress_wrapper` drives a timeout through the real wrapper. It fails without the fix.
 
+## M4 context revision 1: estimator base ratio 3.6 → 3.1 characters per token (2026-10-27, user-approved)
+- **No prompt hash change:** it stays `39a474eb…`.
+- **Reason:** the 3.6 ratio was calibrated on log-heavy M3 turns. Metric-heavy prompts tokenize at about 3.1. In smoke run 2, run 1's turn 4 (19,167 characters) was estimated at 6,123 but reported at **6,176**, above both the estimate and the 6,144 budget.
+- **The change:** the estimate is now characters ÷ **3.1** × 1.15. The margin, the server-count calibration, the 90% guard, the budget and the levels are unchanged.
+- **Tests:**
+  - `test_estimator_never_undercounts_any_turn_of_the_m4_smoke_runs`: every turn of both smoke attempts, including 19,167 characters → estimate ≥ 6,176
+  - the worst-case acceptance test still passes: a 40-call run with a peak estimate of 6,068, levels 0, 3 and 4, and **21 of 43 turns at level 4**
+- **Cost:**
+  - **Log-heavy turns are overestimated.** On log-heavy M3 turns the raw ratio now overestimates by +14% to +25%. The M3 estimator test is restated to "never undercounts, and overestimates heavy turns by at most 30%" (measured maximum +25.3%), where before it read "within 20%".
+  - **Compaction comes earlier.** The agent compacts sooner than strictly needed, which costs evidence the model sees.
+- **Status:** this is the first context revision. Any core run made after it reports it.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

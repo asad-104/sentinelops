@@ -1,0 +1,7 @@
+{"event": "batch_start", "free_disk_gb": 37.87, "pressure_level": 1, "swap_used_mb": 0.0}
+{"event": "run_start", "free_disk_gb": 37.87, "pressure_level": 1, "scenario_id": "sc-45fa1390ea", "swap_used_mb": 0.0}
+{"event": "run_end", "free_disk_gb": 34.34, "pressure_level": 2, "scenario_id": "sc-45fa1390ea", "swap_used_mb": 1816.75}
+{"error": null, "event": "unload", "free_disk_gb": 34.34, "pressure_level": 2, "scenario_id": "sc-45fa1390ea", "swap_used_mb": 1816.75}
+{"event": "run_start", "free_disk_gb": 34.34, "pressure_level": 1, "scenario_id": "sc-45fa1390ea", "swap_used_mb": 1759.81}
+{"event": "run_end", "free_disk_gb": 35.47, "pressure_level": 2, "scenario_id": "sc-45fa1390ea", "swap_used_mb": 1713.19}
+{"error": null, "event": "unload", "free_disk_gb": 35.47, "pressure_level": 2, "scenario_id": "sc-45fa1390ea", "swap_used_mb": 1713.19}

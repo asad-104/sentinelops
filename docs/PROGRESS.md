@@ -849,6 +849,38 @@ The 12 core runs with `qwen3:4b` are therefore **not run**.
   - **Compaction comes earlier.** The agent compacts sooner than strictly needed, which costs evidence the model sees.
 - **Status:** this is the first context revision. Any core run made after it reports it.
 
+## M4 stage B: alternative-model smoke, pre-registration (recorded 2026-10-27, before any pull or run)
+**Candidate.** `qwen3:4b-instruct-2507-q4_K_M`, Qwen3 4B Instruct 2507, the non-thinking variant.
+- Verified on 2026-10-27, read-only, at https://ollama.com/library/qwen3/tags: **2.5 GB**, Q4_K_M, 256K context, ID `0edcdef34593`. This is the same ID as `qwen3:4b-instruct`.
+- A bare `qwen3:4b-instruct-2507` tag is **not listed**; only the -q4_K_M, -q8_0 and -fp16 tags are.
+
+**Finding from the same page, as a fact.** The `qwen3:4b` used in M3 and in both M4 smoke runs has ID `359d7dd4bcda`, which is **identical to `qwen3:4b-thinking` and `qwen3:4b-thinking-2507-q4_K_M`**.
+
+**Diagnosis, not a fact.** The Ollama docs (https://docs.ollama.com/capabilities/thinking) define `think: false` as "request no thinking output, *if the model permits it*". The thinking-only 2507 variant does not permit it. That would explain why `think: false` and `/no_think` had no effect, and why all 32 replies opened with visible reasoning. M3's pilot ran on the same thinking variant.
+
+**Configuration, unchanged apart from the model:**
+- prompt revision 1, `39a474eb`
+- context revision 1 (base 3.1 characters per token)
+- the `unload` forwarding fix
+- `think: false`
+- all bounds and compaction parameters
+
+`/no_think` stays in the system prompt. For a non-thinking model it is inert literal text, and keeping it makes the model the only variable. **Removing it would be the second and last prompt revision. It is not done now.**
+
+**Client compatibility, unverified.** The docs don't state what happens when `think` is sent to a model without thinking support.
+- **A client issue, not the smoke run:** if turn 1 fails with an HTTP or bad-response error that the server's message attributes to the `think` field, the one smoke run is not consumed. A harness-only fix (omit `think`) is logged, and the smoke run is repeated once, in a fresh attempt directory.
+- **Model behaviour, reported as such:** if the model echoes `/no_think` as literal text.
+
+**The smoke run:**
+- **Scenario:** the same one, `sc-45fa1390ea`.
+- **Checks:** the same six start checks.
+- **Output:** `eval/agent/generator-v5/smoke-ollama-qwen3-4b-instruct-2507-q4_K_M/`.
+- **Limit:** **one model, one smoke run, no third candidate.**
+
+**Outcome rule:**
+- **If it passes all six checks:** ask the user before any core run.
+- **If it fails:** **local work stops**, and a hosted proposal is written. It's a proposal only: prices re-verified on the official page that day, a $5 cap, an environment-variable key, httpx only, and the runs it would cover.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

@@ -30,6 +30,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from sentinelops.agent import prompt
 from sentinelops.agent.states import AgentBounds, State
 from sentinelops.llm.client import ChatMessage, ToolCallRequest, ToolSpec
 
@@ -252,10 +253,21 @@ class ContextBuilder:
         self.guard_triggers = 0
         self.last_level = 0
 
-    def stage_block(self, state: State, instruction: str, used: int, notes: list[str]) -> str:
-        lines = [f"STAGE (from the harness): {state.value}", f"Tool calls used: {used} of {self.bounds.max_tool_calls}.",
-                 f"Instruction: {instruction}"]
-        lines += [f"Note from the harness: {n}" for n in notes]
+    def stage_block(self, state: State, instruction: str, used: int, notes: list[str],
+                    progress: dict[str, int] | None = None) -> str:
+        """The harness-authored block, rendered from the hashed STAGE_TEMPLATE (agent/prompt.py)."""
+        t = prompt.STAGE_TEMPLATE
+        p = progress or {}
+        lines = [t["header"].format(state=state.value),
+                 t["budget"].format(used=used, budget=self.bounds.max_tool_calls)]
+        if state is State.GATHER and "evidence" in p:
+            lines.append(t["gather_progress"].format(evidence=p["evidence"], needed=self.bounds.min_gather_evidence))
+        if state is State.VERIFY and "verify" in p:
+            lines.append(t["verify_progress"].format(verify=p["verify"], cap=self.bounds.verify_cap,
+                                                     needed=self.bounds.min_verify_reads))
+        lines.append(t["instruction"].format(instruction=instruction))
+        lines += [t["note"].format(note=n) for n in notes]
+        lines.append(t["reply"])
         return "\n".join(lines)
 
     def render(self, level: int, system: str, triage: str, ledger: Ledger, exchanges: list[Exchange],

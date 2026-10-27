@@ -99,6 +99,7 @@ class _Run:
         self.ranking: list[dict[str, Any]] = []
         self.tool_calls = self.turns = 0
         self.gather_evidence_first_pass = self.gather_calls_first_pass = 0
+        self.gather_evidence_second_pass = 0  # shown in the STAGE block only; no precondition on the second pass
         self.verify_calls = self.returns = 0
         self.malformed = self.timeouts = self.client_errors = self.repairs = 0
         self.identical = self.no_new = 0
@@ -166,7 +167,10 @@ class _Run:
             raise self.stop("timeout", f"total wall time of {self.b.total_timeout_s:.0f} s reached")
         if self.turns >= self.b.max_turns:
             raise self.stop("budget_exhausted", f"model turn cap of {self.b.max_turns} reached")
-        stage = self.builder.stage_block(self.state, STATE_INSTRUCTIONS[self.state], self.tool_calls, self.notes)
+        progress = {"evidence": self.gather_evidence_first_pass if self.returns == 0 else self.gather_evidence_second_pass,
+                    "verify": self.verify_calls}
+        stage = self.builder.stage_block(self.state, STATE_INSTRUCTIONS[self.state], self.tool_calls, self.notes,
+                                         progress)
         try:
             request = self.builder.build(SYSTEM_PROMPT, self.triage_text, self.ledger, self.exchanges, stage,
                                          self.cited_in_ranking())
@@ -293,6 +297,8 @@ class _Run:
                 self.no_new = 0 if new else self.no_new + 1
             if self.no_new >= self.b.max_no_new_evidence:
                 raise self.stop("no_new_evidence", f"{self.no_new} GATHER calls in a row returned no new source ID")
+            if self.returns > 0:
+                self.gather_evidence_second_pass += int(evidence)
             if self.returns == 0:
                 self.gather_calls_first_pass += 1
                 self.gather_evidence_first_pass += int(evidence)

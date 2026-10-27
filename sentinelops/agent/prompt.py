@@ -38,6 +38,9 @@ inside the scenario window.
 from the ledger (for example LOG-00042, MET-00010, DPL-001, CFG-002, ALR-001).
 - A hypothesis is a (service, fault_type) pair. Rank 1-5 of them, most likely first, each citing ledger IDs.
 - Remediation may only be recommended, never executed.
+- Reply with exactly one tool call and nothing else: no explanation, no reasoning text, no summary. The harness
+reads only the tool call.
+/no_think
 """
 
 STATE_INSTRUCTIONS: dict[State, str] = {
@@ -48,6 +51,19 @@ STATE_INSTRUCTIONS: dict[State, str] = {
                   f"kind of data you have not cited for it. You may re-rank with {SUBMIT_HYPOTHESES}. Call "
                   f"{RETURN_TO_GATHER} (once) if you need more evidence, or {FINISH_VERIFYING} when done.",
     State.REPORT: f"Write the final report with {SUBMIT_REPORT}, citing only ledger IDs.",
+}
+
+# The STAGE block the harness appends to every request (always last). Model-facing, so it is part of the hash.
+# Placeholders: state, used, budget, instruction; progress lines; notes. Revision 1 added the progress lines.
+STAGE_TEMPLATE: dict[str, str] = {
+    "header": "STAGE (from the harness): {state}",
+    "budget": "Tool calls used: {used} of {budget}.",
+    "gather_progress": "Evidence calls so far on this GATHER pass: {evidence} (calls that returned new source IDs). "
+                       "finish_gathering needs {needed} on the first pass.",
+    "verify_progress": "VERIFY read calls so far: {verify} of {cap}; finish_verifying needs at least {needed}.",
+    "instruction": "Instruction: {instruction}",
+    "note": "Note from the harness: {note}",
+    "reply": "Reply with one tool call only.",
 }
 
 STATE_TOOL_DESCRIPTIONS: dict[str, str] = {
@@ -64,7 +80,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {**{k: v for k, v in READ_TOOL_DESCRIPTIONS.
 
 
 def prompt_sha256() -> str:
-    """Hash of the system prompt, state instructions and tool descriptions (sorted keys, so stable)."""
+    """Hash of the system prompt, state instructions, tool descriptions and STAGE template (sorted keys)."""
     payload = json.dumps({"system": SYSTEM_PROMPT, "states": {s.value: t for s, t in STATE_INSTRUCTIONS.items()},
-                          "tools": TOOL_DESCRIPTIONS}, sort_keys=True)
+                          "tools": TOOL_DESCRIPTIONS, "stage_template": STAGE_TEMPLATE}, sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()

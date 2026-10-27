@@ -28,7 +28,8 @@ from sentinelops.simulator.profiles import Split
 PREREGISTERED_CORE = ("sc-30385ffc64", "sc-3836c69ef7", "sc-3e3ceb314e", "sc-4001bf784c", "sc-408b514aeb",
                       "sc-4251e8920a", "sc-497fd61898", "sc-5b55b772de", "sc-5c5b9b9197", "sc-91404ea5fc")
 # Frozen 2026-10-23 in stage A; a change needs a logged prompt revision in docs/PROGRESS.md first.
-FROZEN_AGENT_PROMPT_SHA256 = "bd63ce71ce3480dc75b97a453af525f3dc18e0dd48e44d6cf816235dd8ae5e17"
+# Revision 1 (2026-10-27, smoke run 1): reply-only rule, /no_think, STAGE template hashed with progress lines.
+FROZEN_AGENT_PROMPT_SHA256 = "39a474ebdeca7eae8c3442256c6ea3c648dbda875dc1ec25c143f9ec16fbc281"
 
 
 def _calm(path: Path) -> dict:
@@ -78,7 +79,7 @@ def test_mock_cli_refuses_the_real_dev_manifest_and_the_default_output(generated
     data_root, manifest_dir, _ = generated
     assert main(["--backend", "mock", "--data-root", str(data_root), "--manifest-dir", str(manifest_dir),
                  "--quiet"]) == 2  # default --out-root is eval/agent/
-    assert not any(REAL_RESULTS.glob("**/*.jsonl"))
+    assert not any(p.name.startswith("mock-") for p in REAL_RESULTS.glob("*/*"))  # no mock output under eval/agent/
 
 
 def test_mock_runs_end_to_end_on_a_generated_set(generated, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -125,3 +126,27 @@ def test_an_aborted_batch_writes_a_summary_marked_incomplete(generated, tmp_path
 def test_agent_prompt_is_frozen() -> None:
     assert prompt_sha256() == FROZEN_AGENT_PROMPT_SHA256, "agent prompt changed: log a revision first"
     assert "untrusted data" in SYSTEM_PROMPT
+
+
+def test_changing_the_stage_template_changes_the_prompt_hash(monkeypatch: pytest.MonkeyPatch) -> None:
+    from sentinelops.agent import prompt
+
+    before = prompt.prompt_sha256()
+    monkeypatch.setitem(prompt.STAGE_TEMPLATE, "reply", "Reply with two tool calls.")
+    assert prompt.prompt_sha256() != before
+
+
+def test_stage_block_shows_precondition_progress_and_the_reply_rule() -> None:
+    from sentinelops.agent.context import ContextBuilder
+    from sentinelops.agent.prompt import STATE_INSTRUCTIONS
+    from sentinelops.agent.schemas import agent_tool_specs
+    from sentinelops.agent.states import AgentBounds, State
+
+    builder = ContextBuilder(AgentBounds(), agent_tool_specs())
+    gather = builder.stage_block(State.GATHER, STATE_INSTRUCTIONS[State.GATHER], 5, ["n"], {"evidence": 1, "verify": 0})
+    assert gather.splitlines()[0] == "STAGE (from the harness): GATHER"
+    assert "Evidence calls so far on this GATHER pass: 1" in gather and "finish_gathering needs 4" in gather
+    assert gather.splitlines()[-1] == "Reply with one tool call only." and "Note from the harness: n" in gather
+    verify = builder.stage_block(State.VERIFY, STATE_INSTRUCTIONS[State.VERIFY], 9, [], {"evidence": 4, "verify": 2})
+    assert "VERIFY read calls so far: 2 of 8; finish_verifying needs at least 1." in verify
+    assert "Evidence calls" not in verify

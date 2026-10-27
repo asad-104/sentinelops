@@ -804,6 +804,22 @@ Smoke run 1 (`sc-45fa1390ea`, original and twin; outputs in commit 796de66):
 - show 0 shifts and 0 truncations in the server log
 - show the model using `submit_hypotheses` and `finish_verifying`
 
+## M4 prompt revision 1 (2026-10-27, from smoke run 1, user-approved, before any core run)
+- **Hash:** `bd63ce71ce3480dc75b97a453af525f3dc18e0dd48e44d6cf816235dd8ae5e17` → **`39a474ebdeca7eae8c3442256c6ea3c648dbda875dc1ec25c143f9ec16fbc281`** (`test_agent_prompt_is_frozen`).
+- **Reason:** in smoke run 1, `qwen3:4b` (thinking off) wrote 1,100–2,048 tokens of visible reasoning per turn, and 6 of 14 turns hit the `num_predict` cap. It also called `finish_gathering` after 1–2 evidence calls, and the precondition rejected it.
+- **Change A, system prompt:** a rule to reply with exactly one tool call and nothing else (no explanation, no reasoning text), plus Qwen3's `/no_think` switch.
+- **Change B, STAGE block:**
+  - **Progress lines:** the GATHER evidence count against the 4 needed, and the VERIFY read count against the cap and the minimum.
+  - **Closing line:** "Reply with one tool call only."
+  - **Hash coverage:** the STAGE template now lives in `agent/prompt.py` and **is included in the hash**. Before this, it was model-facing but not hashed. `test_changing_the_stage_template_changes_the_prompt_hash` checks it.
+- **Unchanged:**
+  - fix C (precondition failures still count as malformed)
+  - the tool specs and their field descriptions
+  - `num_predict`, all bounds, and the compaction parameters
+  - the fixed set and the decision rule
+- **Verified after the change:** the worst-case acceptance test still passes.
+- **Budget used:** this is revision 1 of the at most 2 allowed.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

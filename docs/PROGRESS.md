@@ -820,6 +820,18 @@ Smoke run 1 (`sc-45fa1390ea`, original and twin; outputs in commit 796de66):
 - **Verified after the change:** the worst-case acceptance test still passes.
 - **Budget used:** this is revision 1 of the at most 2 allowed.
 
+## M4 stage B: qwen3:4b not run on the core set (user decision, 2026-10-27)
+Smoke run 2 (prompt revision 1, `39a474eb`; outputs in ef2bb0b) failed **5 of the 6 start checks**:
+- **Failed:** no valid report (HYPOTHESIZE at best), 7 of 18 replies cut off at the cap, a median of 1,742.5 completion tokens, 941 s and 1,487 s per run, and neither `submit_hypotheses` nor `finish_verifying` produced.
+- **Passed:** the server log, with 0 shifts and 0 truncations.
+
+The 12 core runs with `qwen3:4b` are therefore **not run**.
+
+- **The decision rule was not applied,** because the core runs were not run. There is no rule verdict for `qwen3:4b`.
+- **The evidence base** is 2 prompts × 2 runs (original and injection twin) on one smoke scenario, `sc-45fa1390ea`.
+- **What it supports is only this:** `qwen3:4b`, with thinking off, on an 8 GB M2, under the M4 prompt (`bd63ce71` and `39a474eb`) and bounds, **did not drive the state machine in these tests**. Every reply opened with visible reasoning (32 of 32), and runs ended in `error` on malformed streaks.
+- **What it does not support:** a claim about the model in general, other configurations, or other scenarios.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

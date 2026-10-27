@@ -832,6 +832,11 @@ The 12 core runs with `qwen3:4b` are therefore **not run**.
 - **What it supports is only this:** `qwen3:4b`, with thinking off, on an 8 GB M2, under the M4 prompt (`bd63ce71` and `39a474eb`) and bounds, **did not drive the state machine in these tests**. Every reply opened with visible reasoning (32 of 32), and runs ended in `error` on malformed streaks.
 - **What it does not support:** a claim about the model in general, other configurations, or other scenarios.
 
+## M4 harness fix: unload after a timeout (2026-10-27, harness only, no prompt hash change)
+- **The bug:** `ProgressClient`, the progress wrapper the agent CLI uses by default, did not forward `unload`. So D3's "unload, then retry once after a per-call timeout" was **skipped in smoke run 2** (run 1, turn 5: no `unload` event). The unload *between* runs was unaffected.
+- **The fix:** the wrapper forwards `unload` when the wrapped client has one.
+- **The test:** `test_unload_after_timeout_reaches_the_model_through_the_progress_wrapper` drives a timeout through the real wrapper. It fails without the fix.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

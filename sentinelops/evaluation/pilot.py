@@ -120,6 +120,8 @@ class ProgressClient:
 
     def __init__(self, inner: LLMClient, progress: Progress) -> None:
         self.inner, self.progress = inner, progress
+        if hasattr(inner, "unload"):  # forwarded, so unload-after-timeout (M4 decision D3) still reaches the model
+            self.unload = inner.unload
 
     def chat(self, messages: list[ChatMessage], tools: list[ToolSpec]) -> LLMResponse | LLMError:
         response = self.inner.chat(messages, tools)

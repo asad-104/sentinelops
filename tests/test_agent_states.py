@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -278,3 +279,34 @@ def test_every_tool_message_is_valid_json_or_capped(toolset: ToolSet) -> None:
         for m in messages:
             if m.role == "tool" and "[truncated_for_context" not in m.content:
                 json.loads(m.content)
+
+
+def test_unload_after_timeout_reaches_the_model_through_the_progress_wrapper(toolset: ToolSet, run_events) -> None:
+    """Regression (smoke run 2): ProgressClient did not forward unload, so D3's unload-then-retry was skipped."""
+    import io
+
+    from sentinelops.evaluation.pilot import Progress, ProgressClient
+    from sentinelops.llm.mock import ScriptedClient as Plain
+
+    class Unloading(Plain):
+        def __init__(self, script):
+            super().__init__(script)
+            self.unloads = 0
+
+        def unload(self):
+            self.unloads += 1
+            return None
+
+    inner = Unloading([LLMError("timeout", "slow"), LLMError("timeout", "slow")])
+    progress = Progress(1, 40, lambda p: {"free_disk_gb": 50.0, "swap_used_mb": 1.0, "pressure_level": 1},
+                        Path("."), io.StringIO())
+    wrapped = ProgressClient(inner, progress)
+    sid = toolset.call("get_window").items[0].scenario_id
+    tools = CountingToolSet(toolset)
+    progress.start_run(sid, tools)
+    with pytest.raises(InvestigationFailed) as failed:
+        StateMachineInvestigator(wrapped).investigate(tools, sid)
+    assert failed.value.stop_reason == "timeout"
+    assert inner.unloads == 2
+    assert sum(e["event"] == "unload" for e in run_events[-1].events) == 2
+    assert not hasattr(ProgressClient(Plain([]), progress), "unload")  # nothing to forward, nothing exposed

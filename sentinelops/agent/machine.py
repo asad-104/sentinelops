@@ -214,7 +214,8 @@ class _Run:
 
     def on_client_error(self, error: LLMError) -> None:
         self.trace.event("model", turn=self.turns, state=self.state.value, error=error.code,
-                         message=error.message[:TRACE_TEXT_CAP], latency_s=error.latency_s)
+                         message=error.message[:TRACE_TEXT_CAP], latency_s=error.latency_s, retries=error.retries,
+                         wait_s=error.wait_s)
         if error.code == "timeout":
             self.timeouts += 1
             unload = getattr(self.o.client, "unload", None)
@@ -234,7 +235,7 @@ class _Run:
                          prompt_tokens=r.usage.prompt_tokens, completion_tokens=r.usage.completion_tokens,
                          prompt_eval_s=r.prompt_eval_s, load_s=r.load_s, total_s=r.total_s, truncated=r.truncated,
                          thinking_chars=r.thinking_chars, guard_fired=guard, text=r.text[:TRACE_TEXT_CAP],
-                         tool_calls=[c.name for c in r.tool_calls])
+                         tool_calls=[c.name for c in r.tool_calls], retries=r.retries, wait_s=r.wait_s)
 
     def count_malformed(self, why: str) -> None:
         self.malformed += 1

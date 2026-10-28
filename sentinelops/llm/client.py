@@ -57,6 +57,8 @@ class LLMResponse:
     prompt_eval_s: float | None = None  # time spent evaluating the prompt (M4: cache reuse is only inferred from it)
     total_s: float | None = None  # the backend's own total time for the call
     truncated: bool = False  # generation stopped at the output-token cap (done_reason "length")
+    retries: int = 0  # hosted backends: attempts repeated after a 429 or 5xx before this result
+    wait_s: float = 0.0  # hosted backends: seconds slept for rate-limit pacing and backoff before this result
 
 
 @dataclass(frozen=True)
@@ -64,6 +66,8 @@ class LLMError:
     code: LLMErrorCode
     message: str
     latency_s: float = 0.0
+    retries: int = 0
+    wait_s: float = 0.0
 
 
 class LLMClient(Protocol):

@@ -1,5 +1,7 @@
-"""M4 agent runs, dev only: ``python -m sentinelops.evaluation.agent_run --backend mock|ollama``.
+"""M4 agent runs, dev only: ``python -m sentinelops.evaluation.agent_run --backend mock|ollama|groq``.
 
+- ``--backend groq`` (hosted free tier, decision 2026-10-28) behaves like ``ollama``: the key comes only from
+  ``GROQ_API_KEY``; provider rate-limit waits are recorded per turn and summed per run.
 - ``--backend ollama`` (stage B only) runs the fixed 10 core scenarios (pre-registered 2026-10-23); the
   harness also runs the injection twins. ``--smoke ID`` runs one scenario outside the core set instead.
 - ``--backend mock`` runs every scenario in the manifest it is given, which must be a set generated in a
@@ -40,6 +42,7 @@ from sentinelops.evaluation.pilot import (
 )
 from sentinelops.llm.client import LLMClient
 from sentinelops.llm.ollama import OllamaClient
+from sentinelops.llm.openai_compat import DisallowedEndpoint, MissingKey, OpenAICompatibleClient, RateLimits
 from sentinelops.llm.trace import TraceWriter, read_trace
 from sentinelops.scenario_files import dump_json, load_observable
 from sentinelops.simulator.datasets import DEFAULT_MANIFEST_DIR, TWINS_DIR
@@ -100,6 +103,9 @@ def run_rows(trace_dir: Path, data_root: Path, num_ctx: int) -> list[dict[str, A
             "model_calls": len(model_calls), "valid_calls": sum(e["valid"] for e in model_calls),
             "timeouts": sum(e.get("error") == "timeout" for e in model_turns),
             "elapsed_s": stop["elapsed_s"] if stop else None,
+            "wait_s": round(sum(e.get("wait_s") or 0.0 for e in model_turns), 3),
+            "retries": sum(e.get("retries") or 0 for e in model_turns),
+            "elapsed_ex_wait_s": (stop["elapsed_s"] - sum(e.get("wait_s") or 0.0 for e in model_turns)) if stop else None,
             "prompt_tokens": sum(e.get("prompt_tokens") or 0 for e in model_turns),
             "completion_tokens": sum(e.get("completion_tokens") or 0 for e in model_turns),
             "cited": len(cited), "cited_existing": sum(i in existing for i in cited),
@@ -204,6 +210,11 @@ def summary_markdown(summary: dict[str, Any]) -> str:
                      f"{r['tool_calls']} | {r['evidence_calls']} | {', '.join(r['data_kinds']) or '–'} | {wall} | "
                      f"{r['max_estimated_tokens']} / {r['max_reported_prompt_tokens']} | {r['max_compaction_level']} | "
                      f"{'–' if r['top'] is None else r['top1']} |")
+    waits = [r for r in summary["runs"] if r.get("wait_s")]
+    if waits:
+        lines += ["", "Provider rate-limit waits (counted in wall time): " + "; ".join(
+            f"run {r['run']} {r['wait_s']:.1f} s over {r['retries']} retries, wall excluding waits "
+            f"{r['elapsed_ex_wait_s']:.1f} s" for r in waits)]
     lines += ["", f"Rule: investigated {rule['investigated']}/{rule['n']}, valid reports {rule['valid_reports']}/{rule['n']}, "
               f"trace overflow runs {rule['trace_overflow_runs']}, median wall {rule['median_wall_s']}. "
               f"**Verdict: {rule['verdict']}**", ""]
@@ -213,14 +224,17 @@ def summary_markdown(summary: dict[str, Any]) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m sentinelops.evaluation.agent_run",
                                      description="M4 agent on the fixed dev set (ollama) or a generated set (mock).")
-    parser.add_argument("--backend", choices=("mock", "ollama"), required=True)
-    parser.add_argument("--model", default="qwen3:4b")
+    parser.add_argument("--backend", choices=("mock", "ollama", "groq"), required=True)
+    parser.add_argument("--model", help="default: qwen3:4b (ollama), qwen/qwen3.8-27b (groq)")
+    parser.add_argument("--reasoning-effort", default="none", help="groq only; sent as reasoning_effort")
+    parser.add_argument("--rpm", type=int, default=30, help="groq only: requests per minute to stay under")
+    parser.add_argument("--tpm", type=int, default=8000, help="groq only: tokens per minute to stay under")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
     parser.add_argument("--data-root", type=Path, default=Path("data/dev"))
     parser.add_argument("--out-root", type=Path, default=DEFAULT_OUT_ROOT)
     parser.add_argument("--manifest-dir", type=Path, default=DEFAULT_MANIFEST_DIR)
     parser.add_argument("--attempt", type=int, default=1)
-    parser.add_argument("--smoke", metavar="SCENARIO_ID", help="ollama only: one dev scenario outside the core set")
+    parser.add_argument("--smoke", metavar="SCENARIO_ID", help="ollama/groq: one dev scenario outside the core set")
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--min-free-gb", type=float, default=MIN_FREE_GB, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -240,9 +254,15 @@ def main(argv: list[str] | None = None) -> int:
             if args.smoke and args.smoke in (*CORE_SCENARIOS, *PILOT_SCENARIOS):
                 parser.error("--smoke must name a dev scenario outside the core and M3 pilot sets")
             ids = (args.smoke,) if args.smoke else CORE_SCENARIOS
-            client = OllamaClient(args.model, base_url=args.ollama_url, timeout_s=bounds.call_timeout_s,
-                                  num_ctx=bounds.num_ctx, think=False, num_predict=bounds.num_predict)
-            model = args.model
+            if args.backend == "groq":
+                model = args.model or "qwen/qwen3.8-27b"
+                client = OpenAICompatibleClient("groq", model, limits=RateLimits(args.rpm, args.tpm),
+                                                timeout_s=bounds.call_timeout_s, max_tokens=bounds.num_predict,
+                                                extra={"reasoning_effort": args.reasoning_effort})
+            else:
+                model = args.model or "qwen3:4b"
+                client = OllamaClient(model, base_url=args.ollama_url, timeout_s=bounds.call_timeout_s,
+                                      num_ctx=bounds.num_ctx, think=False, num_predict=bounds.num_predict)
         slug = re.sub(r"[^A-Za-z0-9._-]+", "-", model)
         name = f"{'smoke-' if args.smoke else ''}{args.backend}-{slug}{f'-attempt{args.attempt}' if args.attempt > 1 else ''}"
         out_dir = args.out_root / f"generator-v{GENERATOR_VERSION}" / name
@@ -251,7 +271,8 @@ def main(argv: list[str] | None = None) -> int:
         summary = run_agent(client, args.backend, model, args.data_root, out_dir, ids, args.manifest_dir, bounds,
                             min_free_gb=args.min_free_gb, progress=not args.quiet, attempt=args.attempt,
                             smoke=bool(args.smoke))
-    except (Refused, DataMismatch, HarnessAbort, OutputExists, FileNotFoundError) as exc:
+    except (Refused, DataMismatch, HarnessAbort, OutputExists, FileNotFoundError, MissingKey,
+            DisallowedEndpoint) as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 2
     print(summary_markdown(summary))

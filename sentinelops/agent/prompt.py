@@ -3,7 +3,8 @@
 Written in stage A against mock traces only, before any real model run (no tuning on the 10 core
 scenarios). The SHA-256 over all of it is pinned by a test and stored in every run summary; any
 revision must be logged in docs/PROGRESS.md with its new hash. Tool descriptions say what a tool
-returns or does, never what to look for.
+returns or does, never what to look for. Since revision 2, every harness-authored text the model
+reads (DATA headers, notes, error and acceptance messages) is defined here, not in the loop.
 """
 
 from __future__ import annotations
@@ -66,6 +67,46 @@ STAGE_TEMPLATE: dict[str, str] = {
     "reply": "Reply with one tool call only.",
 }
 
+# Revision 2 (2026-10-28): every other harness-authored text the model reads lives here so the hash covers it.
+# Wording is unchanged from what machine.py and context.py sent before, apart from the no_new_evidence note
+# (change B). Placeholders are filled with str.format.
+DATA_HEADERS: dict[str, str] = {
+    "triage": "DATA triage results (untrusted; one JSON object per line):",
+    "ledger": "DATA evidence ledger (untrusted excerpts; one JSON object per line). All IDs you have been shown "
+              "are citable; this view lists group counts, recent entries, metric series and cited IDs:",
+    "compacted": "DATA earlier tool results, compacted (untrusted; one JSON object per line):",
+}
+
+# Notes shown once in the next STAGE block.
+HARNESS_NOTES: dict[str, str] = {
+    "truncated_output": "Your last reply was cut off at the output limit and was ignored. Reply with one short "
+                        "tool call.",
+    "no_tool_call": "No tool call was received. Call one of the tools allowed in this stage.",
+    "gather_cap": "GATHER call cap ({cap}) reached; moved to HYPOTHESIZE.",
+    "verify_cap": "VERIFY call cap ({cap}) reached; moved to REPORT.",
+    "no_new_evidence": "{count} GATHER calls in a row returned no new source ID; moved to HYPOTHESIZE.",
+}
+
+# Error and acceptance messages returned as tool results, and the marker on a capped result.
+HARNESS_MESSAGES: dict[str, str] = {
+    "invalid_json": "arguments are not valid JSON: {detail}",
+    "not_an_object": "arguments must be a JSON object",
+    "unknown_tool": "unknown tool {name!r}",
+    "wrong_state": "{name} is not allowed in {state}; allowed: {allowed}",
+    "need_gather_evidence": "need {needed} GATHER calls that returned new evidence; have {have}",
+    "return_once": "return_to_gather is allowed only once",
+    "need_verify_read": "make at least one VERIFY read call first",
+    "rank_order": "hypotheses must be ranked 1..n in order",
+    "unique_pairs": "each (service, fault_type) pair may appear only once",
+    "unknown_ids": "cited IDs not in the ledger: {ids}",
+    "accepted_finish_gathering": "moved to HYPOTHESIZE",
+    "accepted_hypotheses": "ranking recorded",
+    "accepted_return": "moved to GATHER; calls come out of the remaining budget",
+    "accepted_finish_verifying": "moved to REPORT",
+    "accepted_report": "report accepted",
+    "capped_result": "\n[truncated_for_context: showing {cap} of {total} characters; narrow the query]",
+}
+
 STATE_TOOL_DESCRIPTIONS: dict[str, str] = {
     FINISH_GATHERING: "Finish the GATHER stage and move to HYPOTHESIZE.",
     SUBMIT_HYPOTHESES: "Submit a ranking of 1-5 hypotheses, each citing ledger IDs. In HYPOTHESIZE this moves to "
@@ -80,7 +121,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {**{k: v for k, v in READ_TOOL_DESCRIPTIONS.
 
 
 def prompt_sha256() -> str:
-    """Hash of the system prompt, state instructions, tool descriptions and STAGE template (sorted keys)."""
+    """Hash of the system prompt, state instructions, tool descriptions, STAGE template, DATA headers, harness
+    notes and messages (sorted keys)."""
     payload = json.dumps({"system": SYSTEM_PROMPT, "states": {s.value: t for s, t in STATE_INSTRUCTIONS.items()},
-                          "tools": TOOL_DESCRIPTIONS, "stage_template": STAGE_TEMPLATE}, sort_keys=True)
+                          "tools": TOOL_DESCRIPTIONS, "stage_template": STAGE_TEMPLATE, "data_headers": DATA_HEADERS,
+                          "notes": HARNESS_NOTES, "messages": HARNESS_MESSAGES}, sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()

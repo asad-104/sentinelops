@@ -118,8 +118,7 @@ class Ledger:
         return new
 
     def render(self, view: LedgerView, cited: set[str]) -> str:
-        lines = ["DATA evidence ledger (untrusted excerpts; one JSON object per line). All IDs you have been shown "
-                 "are citable; this view lists group counts, recent entries, metric series and cited IDs:"]
+        lines = [prompt.DATA_HEADERS["ledger"]]
         groups: dict[tuple[str, str | None], list[LedgerEntry]] = {}
         series: dict[str, list[LedgerEntry]] = {}
         for e in self.entries.values():
@@ -287,7 +286,7 @@ class ContextBuilder:
         if older:
             hidden = older if spec.compact_last is None else older[:-spec.compact_last]
             visible = older if spec.compact_last is None else older[-spec.compact_last:]
-            lines = ["DATA earlier tool results, compacted (untrusted; one JSON object per line):"]
+            lines = [prompt.DATA_HEADERS["compacted"]]
             if hidden and spec.compact_last is not None:
                 lines.append(json.dumps({"earlier_calls_not_shown": len(hidden)}))
             lines += [x.compact(spec.compact_excerpt) for x in visible]

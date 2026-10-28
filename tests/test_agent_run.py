@@ -29,7 +29,7 @@ PREREGISTERED_CORE = ("sc-30385ffc64", "sc-3836c69ef7", "sc-3e3ceb314e", "sc-400
                       "sc-4251e8920a", "sc-497fd61898", "sc-5b55b772de", "sc-5c5b9b9197", "sc-91404ea5fc")
 # Frozen 2026-10-23 in stage A; a change needs a logged prompt revision in docs/PROGRESS.md first.
 # Revision 1 (2026-10-27, smoke run 1): reply-only rule, /no_think, STAGE template hashed with progress lines.
-FROZEN_AGENT_PROMPT_SHA256 = "39a474ebdeca7eae8c3442256c6ea3c648dbda875dc1ec25c143f9ec16fbc281"
+FROZEN_AGENT_PROMPT_SHA256 = "feaa4477adb4c3551fcf2b6eb910b787b7711507b51865cb50cf4be8d2a85b4c"  # revision 2
 
 
 def _calm(path: Path) -> dict:
@@ -134,6 +134,45 @@ def test_changing_the_stage_template_changes_the_prompt_hash(monkeypatch: pytest
     before = prompt.prompt_sha256()
     monkeypatch.setitem(prompt.STAGE_TEMPLATE, "reply", "Reply with two tool calls.")
     assert prompt.prompt_sha256() != before
+
+
+@pytest.mark.parametrize("table", ["DATA_HEADERS", "HARNESS_NOTES", "HARNESS_MESSAGES"])
+def test_changing_any_harness_text_changes_the_prompt_hash(monkeypatch: pytest.MonkeyPatch, table: str) -> None:
+    from sentinelops.agent import prompt
+
+    before = prompt.prompt_sha256()
+    for key, value in getattr(prompt, table).items():
+        with monkeypatch.context() as m:
+            m.setitem(getattr(prompt, table), key, value + " ")
+            assert prompt.prompt_sha256() != before, f"{table}[{key!r}] is not covered by the hash"
+
+
+def test_the_loop_sends_no_inline_text_to_the_model() -> None:
+    """Notes, rejections, acceptances and DATA headers must come from agent/prompt.py (revision 2)."""
+    import ast
+
+    import sentinelops.agent.context as context
+    import sentinelops.agent.machine as machine
+
+    def literal(node: ast.AST) -> bool:
+        return isinstance(node, ast.JoinedStr) or (isinstance(node, ast.Constant) and isinstance(node.value, str))
+
+    offenders = []
+    for module in (machine, context):
+        tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                name, args = node.func.attr, node.args
+                message = (args[0] if name == "append" and ast.unparse(node.func.value) == "self.notes" else
+                           args[2] if name == "reject" and len(args) > 2 else
+                           args[1] if name == "accept" and len(args) > 1 else None)
+                if message is not None and literal(message):
+                    offenders.append(f"{module.__name__}:{node.lineno}")
+            if isinstance(node, ast.List) and node.elts and literal(node.elts[0]):
+                text = node.elts[0].value if isinstance(node.elts[0], ast.Constant) else ""
+                if text.startswith("DATA"):
+                    offenders.append(f"{module.__name__}:{node.lineno}")
+    assert offenders == []
 
 
 def test_stage_block_shows_precondition_progress_and_the_reply_rule() -> None:

@@ -24,7 +24,14 @@ from sentinelops.agent.context import (
     Ledger,
     id_kind,
 )
-from sentinelops.agent.prompt import STATE_INSTRUCTIONS, SYSTEM_PROMPT, prompt_sha256
+from sentinelops.agent.prompt import (
+    DATA_HEADERS,
+    HARNESS_MESSAGES,
+    HARNESS_NOTES,
+    STATE_INSTRUCTIONS,
+    SYSTEM_PROMPT,
+    prompt_sha256,
+)
 from sentinelops.agent.schemas import STATE_TOOL_MODELS, HypothesesDraft, agent_tool_specs
 from sentinelops.agent.states import (
     ALLOWED,
@@ -146,7 +153,7 @@ class _Run:
 
     def triage(self) -> None:
         """Loop-issued (decision D8): the alert, the window and the dependency graph, as data."""
-        parts = ["DATA triage results (untrusted; one JSON object per line):"]
+        parts = [DATA_HEADERS["triage"]]
         for name in TRIAGE_CALLS:
             result = self.tools.call(name, {})
             self.tool_calls += 1
@@ -193,12 +200,11 @@ class _Run:
         self.trace_model(response, guard)
         if response.truncated:
             self.count_malformed("truncated_output")
-            self.notes.append("Your last reply was cut off at the output limit and was ignored. Reply with one "
-                              "short tool call.")
+            self.notes.append(HARNESS_NOTES["truncated_output"])
             return None
         if not response.tool_calls:
             self.count_malformed("no_tool_call")
-            self.notes.append("No tool call was received. Call one of the tools allowed in this stage.")
+            self.notes.append(HARNESS_NOTES["no_tool_call"])
             return None
         for call in response.tool_calls:
             report = self.handle(call)
@@ -241,18 +247,19 @@ class _Run:
         try:
             arguments = json.loads(call.raw_arguments or "{}")
         except json.JSONDecodeError as exc:
-            return f"arguments are not valid JSON: {exc.msg}"
-        return arguments if isinstance(arguments, dict) else "arguments must be a JSON object"
+            return HARNESS_MESSAGES["invalid_json"].format(detail=exc.msg)
+        return arguments if isinstance(arguments, dict) else HARNESS_MESSAGES["not_an_object"]
 
     def handle(self, call: ToolCallRequest) -> InvestigationReport | None:
         arguments = self.parse(call)
         if isinstance(arguments, str):
             return self.reject(call, "invalid_json", arguments)
         if call.name not in READ_TOOLS and call.name not in STATE_TOOL_MODELS:
-            return self.reject(call, "unknown_tool", f"unknown tool {call.name!r}")
+            return self.reject(call, "unknown_tool", HARNESS_MESSAGES["unknown_tool"].format(name=call.name))
         if call.name not in ALLOWED[self.state]:
             allowed = ", ".join(sorted(ALLOWED[self.state]))
-            return self.reject(call, "wrong_state", f"{call.name} is not allowed in {self.state.value}; allowed: {allowed}")
+            return self.reject(call, "wrong_state", HARNESS_MESSAGES["wrong_state"].format(name=call.name, state=self.state.value,
+                                                                                         allowed=allowed))
         if call.name in READ_TOOLS:
             self.read(call, arguments)
             return None
@@ -304,17 +311,16 @@ class _Run:
                 # Change B (2026-10-28): once finish_gathering would be accepted, advance like the cap does
                 if not self.may_finish_gathering():
                     raise self.stop("no_new_evidence", f"{self.no_new} GATHER calls in a row returned no new source ID")
-                self.notes.append(f"{self.no_new} GATHER calls in a row returned no new source ID; moved to "
-                                  f"HYPOTHESIZE.")
+                self.notes.append(HARNESS_NOTES["no_new_evidence"].format(count=self.no_new))
                 self.no_new = 0
                 self.move(State.HYPOTHESIZE, "no new evidence")
             elif self.returns == 0 and self.gather_calls_first_pass >= self.b.gather_first_pass_cap:
-                self.notes.append(f"GATHER call cap ({self.b.gather_first_pass_cap}) reached; moved to HYPOTHESIZE.")
+                self.notes.append(HARNESS_NOTES["gather_cap"].format(cap=self.b.gather_first_pass_cap))
                 self.move(State.HYPOTHESIZE, "gather cap")
         elif self.state is State.VERIFY:
             self.verify_calls += 1
             if self.verify_calls >= self.b.verify_cap:
-                self.notes.append(f"VERIFY call cap ({self.b.verify_cap}) reached; moved to REPORT.")
+                self.notes.append(HARNESS_NOTES["verify_cap"].format(cap=self.b.verify_cap))
                 self.move(State.REPORT, "verify cap")
 
     def state_tool(self, call: ToolCallRequest, arguments: dict[str, Any]) -> InvestigationReport | None:
@@ -327,9 +333,9 @@ class _Run:
             return self.reject(call, "invalid_arguments", _describe(exc))
         if call.name == FINISH_GATHERING:
             if not self.may_finish_gathering():
-                return self.reject(call, "precondition", f"need {self.b.min_gather_evidence} GATHER calls that returned "
-                                   f"new evidence; have {self.gather_evidence_first_pass}")
-            self.accept(call, "moved to HYPOTHESIZE")
+                return self.reject(call, "precondition", HARNESS_MESSAGES["need_gather_evidence"].format(
+                    needed=self.b.min_gather_evidence, have=self.gather_evidence_first_pass))
+            self.accept(call, HARNESS_MESSAGES["accepted_finish_gathering"])
             self.move(State.HYPOTHESIZE, FINISH_GATHERING)
         elif call.name == SUBMIT_HYPOTHESES:
             assert isinstance(draft, HypothesesDraft)
@@ -338,18 +344,18 @@ class _Run:
                 return self.reject(call, "invalid_hypotheses", problem)
             self.ranking = [h.model_dump(mode="json") for h in draft.hypotheses]
             self.trace.event("hypotheses", turn=self.turns, state=self.state.value, ranking=self.ranking)
-            self.accept(call, "ranking recorded")
+            self.accept(call, HARNESS_MESSAGES["accepted_hypotheses"])
             if self.state is State.HYPOTHESIZE:
                 self.move(State.VERIFY, SUBMIT_HYPOTHESES)
         elif call.name == RETURN_TO_GATHER:
             if self.returns >= self.b.max_returns_to_gather:
-                return self.reject(call, "precondition", "return_to_gather is allowed only once")
-            self.accept(call, "moved to GATHER; calls come out of the remaining budget")
+                return self.reject(call, "precondition", HARNESS_MESSAGES["return_once"])
+            self.accept(call, HARNESS_MESSAGES["accepted_return"])
             self.move(State.GATHER, RETURN_TO_GATHER)
         elif call.name == FINISH_VERIFYING:
             if self.verify_calls < self.b.min_verify_reads:
-                return self.reject(call, "precondition", "make at least one VERIFY read call first")
-            self.accept(call, "moved to REPORT")
+                return self.reject(call, "precondition", HARNESS_MESSAGES["need_verify_read"])
+            self.accept(call, HARNESS_MESSAGES["accepted_finish_verifying"])
             self.move(State.REPORT, FINISH_VERIFYING)
         return None
 
@@ -360,13 +366,13 @@ class _Run:
     def check_ranking(self, draft: HypothesesDraft) -> str | None:
         ranks = [h.rank for h in draft.hypotheses]
         if ranks != list(range(1, len(ranks) + 1)):
-            return "hypotheses must be ranked 1..n in order"
+            return HARNESS_MESSAGES["rank_order"]
         pairs = [(h.service, h.fault_type) for h in draft.hypotheses]
         if len(set(pairs)) != len(pairs):
-            return "each (service, fault_type) pair may appear only once"
+            return HARNESS_MESSAGES["unique_pairs"]
         unknown = sorted({i for h in draft.hypotheses for i in (*h.supporting_evidence, *h.contradicting_evidence)
                           if i not in self.ledger})
-        return f"cited IDs not in the ledger: {', '.join(unknown)}" if unknown else None
+        return HARNESS_MESSAGES["unknown_ids"].format(ids=", ".join(unknown)) if unknown else None
 
     def accept(self, call: ToolCallRequest, message: str) -> None:
         self.malformed = 0
@@ -379,7 +385,7 @@ class _Run:
             cited = [i for h in draft.hypotheses for i in (*h.supporting_evidence, *h.contradicting_evidence)]
             unknown = sorted({i for i in cited if i not in self.ledger})
             if unknown:
-                raise ValueError(f"cited IDs not in the ledger: {', '.join(unknown)}")
+                raise ValueError(HARNESS_MESSAGES["unknown_ids"].format(ids=", ".join(unknown)))
             report = InvestigationReport(scenario_id=self.scenario_id, investigator=self.o.name,
                                          tool_calls=self.tool_calls, duration_s=self.elapsed(),
                                          stop_reason="sufficient_evidence", **draft.model_dump())
@@ -391,7 +397,7 @@ class _Run:
                 raise self.stop("error", f"report still invalid after {self.repairs} repair turn(s): {errors}"[:2000])
             self.repairs += 1
             return None
-        self.accept(call, "report accepted")
+        self.accept(call, HARNESS_MESSAGES["accepted_report"])
         self.trace.event("claim_check", turn=self.turns, repaired=self.repairs > 0,
                          claims=[{"id": i, "in_seen_set": i in self.ledger,
                                   "rendered_in_request": i in self.rendered_ids} for i in cited])
@@ -400,7 +406,7 @@ class _Run:
     def cap(self, full: str) -> str:
         cap = self.b.result_char_cap
         return full if len(full) <= cap else (
-            full[:cap] + f"\n[truncated_for_context: showing {cap} of {len(full)} characters; narrow the query]")
+            full[:cap] + HARNESS_MESSAGES["capped_result"].format(cap=cap, total=len(full)))
 
     def cited_in_ranking(self) -> set[str]:
         return {i for h in self.ranking for i in (*h.get("supporting_evidence", ()), *h.get("contradicting_evidence", ()))}

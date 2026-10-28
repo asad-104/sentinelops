@@ -881,6 +881,84 @@ The 12 core runs with `qwen3:4b` are therefore **not run**.
 - **If it passes all six checks:** ask the user before any core run.
 - **If it fails:** **local work stops**, and a hosted proposal is written. It's a proposal only: prices re-verified on the official page that day, a $5 cap, an environment-variable key, httpx only, and the runs it would cover.
 
+## M4 stage B: alternative-model smoke result (run 2026-10-28; outputs in 7499e5c)
+`qwen3:4b-instruct-2507-q4_K_M` (ID `0edcdef34593`), prompt `39a474eb`, code `31c8f83`, on `sc-45fa1390ea`, original and twin.
+
+**Deviations from the procedure, both recorded by the user:**
+1. **Run despite the capability check.** The run steps said to stop before running if `ollama show` listed `thinking`. It listed `tools, thinking, completion`, and the run went ahead anyway.
+   - **Fact:** the traces show **0 thinking output**, with `thinking_chars` 0 on all 21 turns.
+   - **Fact:** `think: false` produced no error.
+2. **Criterion (b) misread.** The user first read (b) as failed. The summary shows `nyynny`: (b) passed in both runs, with 5 GATHER evidence calls each. TRIAGE calls are excluded, because they are loop-issued with `evidence: false`.
+
+**Outcome: 2 of the 6 start checks failed.**
+
+| Check | Result |
+|---|---|
+| Valid report reached | failed |
+| `submit_hypotheses` and `finish_verifying` used | failed |
+| No output cut off at the cap | passed: 0 of 21 |
+| Median completion under ~400 tokens | passed: 40 |
+| Wall time under 15 min | passed: 118.8 s and 102.2 s |
+| Server log: 0 shifts, 0 truncations | passed: 21 requests, all `truncated = 0`, 0 context-shift events |
+
+- **Stop reason:** both runs ended with `no_new_evidence` in GATHER, after 3 valid GATHER calls in a row returned no new source ID.
+- **Machine:** swap 0 MB, pressure level 1.
+
+**What the model did well, as facts:**
+- no visible reasoning
+- 20 of 20 read calls valid
+- no invented argument names
+- short replies, between 4 and 85 completion tokens
+- about 2 minutes per run
+
+**What it did not do, as facts:**
+- **It never called `finish_gathering` as a tool**, although the STAGE block showed the 4-call precondition met for 5 turns (run 1) and 4 turns (run 2).
+- Its one attempt (run 2, turn 6) was the plain text `finish_gathering` with no tool call.
+- **It repeated earlier calls 5 times** (run 1, turns 6 and 8; run 2, turns 7–9). Each time, the earlier identical call was visible in the request, and 3 of the 5 came right after a result flagged `duplicate_call`.
+- It never reached HYPOTHESIZE, so `submit_hypotheses` is **untested** with this model.
+
+**Rebuilt requests, as facts.** The traces store only message counts, so the requests were rebuilt offline by replaying the recorded replies through `ScriptedClient`, with no model involved.
+- Compaction did not hide any repeated call.
+- At level 3 (run 1, turns 10–12) the ledger and compacted results carried **no message text**.
+- Estimates ran 15–34% above the server's counts on every turn. The fixed parts of each request (system prompt, tool specs, triage, STAGE) take about 66% of the 6,144 budget.
+
+**Stop-rule inconsistency, as a diagnosis.** `no_new_evidence` ended both runs **after** the first-pass precondition was met, so 5 evidence calls produced no report. In the same state, the GATHER call cap (16) moves the run to HYPOTHESIZE with a note. One bound advances the run and the other kills it.
+
+**Hash gap, as a fact.** The model-facing harness notes and error texts in `agent/machine.py`, and the DATA block headers, are not covered by `prompt_sha256`. Examples: "No tool call was received…" and the `wrong_state` and precondition messages. "The prompt is frozen" was therefore slightly overstated.
+
+## M4 stage B: one bounded exception to "one smoke run" (user-approved 2026-10-28, recorded before any code)
+**What it allows.** It takes only the steps below, in this order, and nothing else.
+
+1. **Change B (harness): one rule for the GATHER no-new-evidence trigger.**
+   - **The trigger:** 3 valid GATHER calls in a row that return no new source ID.
+   - **When the precondition is met** (at least 4 GATHER evidence calls on the first pass), the trigger now **moves the run to HYPOTHESIZE with a harness note**, as the GATHER cap does, instead of ending it.
+   - **Before the precondition is met,** it still ends the run with `no_new_evidence`.
+   - **After `return_to_gather`,** the same rule applies. There is no precondition on the second pass (`finish_gathering` is accepted there without one), so the trigger always moves the run to HYPOTHESIZE.
+   - **Unchanged:** the "3 identical calls in a row" trigger still ends the run with `no_new_evidence`.
+   - **Tests:** each case, including through the full loop.
+   - **Motivation, stated plainly.** Change B is **motivated by this scenario's smoke runs** (`sc-45fa1390ea`). It fixes a rule inconsistency in the design (see above) and **applies to any backend**, local or hosted.
+2. **Prompt revision 2, the last one: closing the hash gap.**
+   - **What moves:** every model-facing harness note and message moves into `agent/prompt.py` and is covered by `prompt_sha256`. That includes the new transition note, the `wrong_state` and precondition messages, and the DATA block headers.
+   - **Wording:** unchanged, except the new note from change B.
+   - **Test:** changing any note changes the hash.
+   - **Commit:** on its own, with the new hash recorded here.
+3. **Nothing else changes:**
+   - no lenient parsing of text replies
+   - no context parameters, estimator, `num_predict` or tool specs
+   - no STAGE wording
+   - the bounds and the decision rule stay as they are
+   - the 10 core scenarios stay untouched
+4. **One more smoke run.**
+   - **Configuration:** the same scenario, `sc-45fa1390ea` (original and twin), the same model `qwen3:4b-instruct-2507-q4_K_M`, and prompt revision 2.
+   - **Output:** a **new** attempt directory, `smoke-ollama-qwen3-4b-instruct-2507-q4_K_M-attempt2/`.
+   - **Checks:** the same six start checks.
+   - **Also reported:** whether the model produced a valid `submit_hypotheses` call, and how far it got (VERIFY, REPORT).
+
+**Outcome rule:**
+- **If it passes all six checks:** ask the user before any core run.
+- **If it fails any check:** **local work stops**. The hosted proposal is written: prices re-verified on the official page that day, a $5 cap, an environment-variable key, httpx only, and the runs it would cover.
+- **No further local smoke runs, and no further prompt revisions.**
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

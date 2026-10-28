@@ -1010,6 +1010,21 @@ The 12 core runs with `qwen3:4b` are therefore **not run**.
 
 **Nothing else changes.** The new revision 2 hash is recorded below once the code is committed.
 
+**Done (commit f9852cf).** The revision 2 hash is now **`d269d28d9581a9d931c936c333259de648526a3970de99b952e0011fe2b2e9eb`**, replacing `feaa4477…`, which no run used.
+- **The new note:** "3 identical GATHER calls in a row; the last one was not run. Moved to HYPOTHESIZE."
+- **Tests:** 6 for the identical-calls trigger:
+  - before the precondition, the run still ends
+  - after the precondition, it advances through the full loop to a report
+  - after `return_to_gather`, it advances through the full loop to a report
+  - on the same call as the empty-calls trigger, it moves once
+  - on the same call as the GATHER cap, it moves once
+  - in VERIFY, the run still ends
+
+  The 4 tests of the new behaviour fail against the previous `machine.py`. The 2 tests of unchanged behaviour pass on both.
+- **Byte identity:** the offline replay of both instruct smoke runs is still byte-identical for all 21 recorded requests.
+- **Suite:** 368 passing. The real-data viewer check prints `OK`.
+- **The pending smoke run** (`--attempt 2`) uses this hash.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

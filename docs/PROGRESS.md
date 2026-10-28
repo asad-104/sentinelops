@@ -1122,6 +1122,17 @@ The user cannot spend money. The Haiku 5.5 proposal is **withdrawn**: no Anthrop
 
 **Open before any core run: the 30-minute total bound includes provider waits.** This is a decision for the user, not changed now.
 
+**Done (2026-10-28):**
+- **Context revision 2 (R1), commit ebc4dcd:**
+  - 5 tests; 4 of them fail against the previous `context.py`. The worst-case acceptance test still passes.
+  - In an offline replay of attempt 2 run 2, the REPORT request now contains the ranking (+2.2k characters). This shows what the model would see, not what it would answer.
+- **Client, commit 7f6fa08:**
+  - `sentinelops/llm/openai_compat.py`, wired in as `agent_run --backend groq`
+  - 12 offline tests with `httpx.MockTransport`, including a full agent run with a 429. The trace records `retries` and `wait_s` per turn, and the key appears nowhere
+  - prompt hash unchanged (`d269d28d`)
+  - 386 tests passing; the real-data viewer check prints `OK`
+- **Not yet run:** the 2 hosted smoke runs are next, after the user signs up.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

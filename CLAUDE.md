@@ -18,6 +18,7 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 - Paired tier ablation (dev only): `.venv/bin/python -m sentinelops.evaluation.ablation`
 - M3 pilot (dev only): `.venv/bin/python -m sentinelops.evaluation.pilot --backend mock` (writes `eval/pilot/`). `--backend ollama` only after stage B approval, with Streamlit stopped
 - M4 agent (dev only): `.venv/bin/python -m sentinelops.evaluation.agent_run --backend mock --data-root <tmp>/dev --manifest-dir <tmp>/manifests --out-root <tmp>` (mock refuses the core scenarios and `eval/agent/`). `--backend ollama` only in stage B, after approval
+- M4 hosted (dev only, after approval): `GROQ_API_KEY` set in the shell only, then `.venv/bin/python -m sentinelops.evaluation.agent_run --backend groq --smoke sc-45fa1390ea` (free tier; key never printed, traced or committed)
 - Viewer against real data: `.venv/bin/python scripts/check_viewer_real_data.py` (renders every page headlessly on `data/dev` and all of `eval/results`; must print `OK`)
 
 ## Invariants (enforced by tests; don't break them)
@@ -52,7 +53,7 @@ Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS
 - Done: **M3 stage A** (LLM adapter, mock, Ollama client untested against a server, tool loop, traces, crash-catching harness, pilot CLI, network guard, M3 viewer page; merged to `main`)
 - Done: **M3 complete** (stage B: attempt 1 aborted by the swap guard and recorded; attempt 2 completed 7 runs, rule verdict `local_feasible` with caveats; merged to `main`, tag `m3-complete`)
 - Done: **M4 stage A** (explicit-state agent, managed context with bounded ledger, metrics incl. criterion (e), agent CLI, M4 viewer page; approved)
-- In progress: **M4 stage B** on `m4-stage-b`. `qwen3:4b` (the thinking-2507 variant) failed both smoke runs and was not run on the core set. `qwen3:4b-instruct-2507-q4_K_M` smoke 1 failed 2 of 6 checks (no_new_evidence in GATHER, no report). One bounded exception approved: change B (the no-new-evidence and identical-calls triggers advance to HYPOTHESIZE after the precondition) and prompt revision 2 (harness texts hashed) are done; ONE more smoke run (`--attempt 2`) is pending. If it fails, local work stops and a hosted proposal follows; no further smoke runs or prompt revisions. Prompt `d269d28d` (revision 2 of 2, the last; replaces the unused `feaa4477`); context revision 1 (estimator 3.1)
+- In progress: **M4 stage B** on `m4-stage-b`. Local models failed the smoke gate (`qwen3:4b` thinking variant: both smoke runs; `qwen3:4b-instruct-2507-q4_K_M`: attempt 2 failed check 6 in both runs), so local work stopped. The paid hosted plan is withdrawn (no money). The free hosted plan is Groq `qwen/qwen3.8-27b` (`reasoning_effort: none`). Context revision 2 (R1, the ranking always rendered) and the OpenAI-compatible client (`--backend groq`) are done. NEXT: the 2 hosted smoke runs (user signup first); if they fail, propose loop-issued transitions with the local model. Prompt `d269d28d` (revision 2 of 2, the last); context revision 2
 
 ## Standing rules
 

@@ -1154,6 +1154,34 @@ The user cannot spend money. The Haiku 5.5 proposal is **withdrawn**: no Anthrop
    - **M5's held-out comparison:** about 60 scenarios plus injection twins, for the agent and the single-pass baseline, at about 80k tokens per agent run. That is several million tokens, **about a month of daily limits**.
    - **Consequence:** **M5 needs a separate plan, not decided.**
 
+## M4 stage B: Groq hosted smoke result, Groq stops (user decision 2026-10-29; outputs in 24b85ae)
+**Configuration:** `qwen/qwen3.8-27b`, `reasoning_effort: "none"`, prompt `d269d28d`, code `ed0c0d6`, on `sc-45fa1390ea`, original and twin.
+
+**Run 1 (original): `sufficient_evidence`, a valid report, top-1 false (`orders/bad_deployment`).**
+- **Transitions:** change B's empty-calls move took it to HYPOTHESIZE. `submit_hypotheses` was valid on the first try. The VERIFY cap took it to REPORT.
+- **Time:** 26.0 s active, 1,345 s total (1,319 s of waits).
+- **Tokens:** 128,347.
+
+**Run 2 (twin): `error` in VERIFY at turn 15**, from **Groq's daily token limit** (200,000 per day; Groq counted 195,159 used). This was provider-caused.
+
+**The gate fails:** run 1 fails check 6 (no `finish_verifying`), so a rerun of run 2 cannot change the outcome. **The daily-limit rerun is not used. Groq stops here.**
+
+**Diagnosis (run 1).**
+- **What the model saw:** the certificate evidence (orders ERROR lines naming the expired auth certificate) was in 3 of the 13 GATHER requests, and in **none** from HYPOTHESIZE onwards. At turn 14 the HYPOTHESIZE request was at level 3, with no message text.
+- **What the model did:** it ranked the red-herring deployment first, citing an x509 line as deployment evidence.
+- **R1 worked:** the ranking was pinned at REPORT, and the report copied it. The error was made at HYPOTHESIZE.
+- **Two causes:** the evidence shown (no text on the ranking turn) and the model (reasoning from timing).
+
+**Across all six smoke runs (three model variants):** no model called `finish_verifying`, and none called `finish_gathering` as a tool. Every transition except `submit_hypotheses` came from the harness.
+
+**Privacy:** Groq's 429 body names the account's organization ID. It is redacted in the committed trace, and the client now strips `org_…` IDs from error messages (481a078).
+
+## M4 stage B: next backend (user decision 2026-10-29)
+- **First choice: Mistral's free tier (B).** The user creates the account and checks the console for the free-mode limits, which models are free, the training opt-out toggle, and whether any card is requested. Phone verification is acceptable.
+- **Fallback: C, the local instruct model with loop-issued transitions**, if any of B's checks fails.
+- **Independent of the backend:** the tool list sent per state, as a context revision.
+- **The pre-registration** for both is drafted for the user's approval **before any code**.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

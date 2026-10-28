@@ -29,7 +29,7 @@ PREREGISTERED_CORE = ("sc-30385ffc64", "sc-3836c69ef7", "sc-3e3ceb314e", "sc-400
                       "sc-4251e8920a", "sc-497fd61898", "sc-5b55b772de", "sc-5c5b9b9197", "sc-91404ea5fc")
 # Frozen 2026-10-23 in stage A; a change needs a logged prompt revision in docs/PROGRESS.md first.
 # Revision 1 (2026-10-27, smoke run 1): reply-only rule, /no_think, STAGE template hashed with progress lines.
-FROZEN_AGENT_PROMPT_SHA256 = "feaa4477adb4c3551fcf2b6eb910b787b7711507b51865cb50cf4be8d2a85b4c"  # revision 2
+FROZEN_AGENT_PROMPT_SHA256 = "d269d28d9581a9d931c936c333259de648526a3970de99b952e0011fe2b2e9eb"  # revision 2
 
 
 def _calm(path: Path) -> dict:

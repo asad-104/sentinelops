@@ -68,8 +68,8 @@ STAGE_TEMPLATE: dict[str, str] = {
 }
 
 # Revision 2 (2026-10-28): every other harness-authored text the model reads lives here so the hash covers it.
-# Wording is unchanged from what machine.py and context.py sent before, apart from the no_new_evidence note
-# (change B). Placeholders are filled with str.format.
+# Wording is unchanged from what machine.py and context.py sent before, apart from the no_new_evidence and
+# identical_calls notes (change B and its amendment). Placeholders are filled with str.format.
 DATA_HEADERS: dict[str, str] = {
     "triage": "DATA triage results (untrusted; one JSON object per line):",
     "ledger": "DATA evidence ledger (untrusted excerpts; one JSON object per line). All IDs you have been shown "
@@ -85,6 +85,7 @@ HARNESS_NOTES: dict[str, str] = {
     "gather_cap": "GATHER call cap ({cap}) reached; moved to HYPOTHESIZE.",
     "verify_cap": "VERIFY call cap ({cap}) reached; moved to REPORT.",
     "no_new_evidence": "{count} GATHER calls in a row returned no new source ID; moved to HYPOTHESIZE.",
+    "identical_calls": "{count} identical GATHER calls in a row; the last one was not run. Moved to HYPOTHESIZE.",
 }
 
 # Error and acceptance messages returned as tool results, and the marker on a capped result.

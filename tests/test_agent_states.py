@@ -269,9 +269,79 @@ def test_no_new_evidence_after_return_to_gather_moves_to_hypothesize(toolset: To
                           ("VERIFY", "submit_hypotheses"), ("REPORT", "finish_verifying")]
 
 
-def test_identical_calls_still_end_the_run_after_the_precondition(toolset: ToolSet) -> None:
-    same = call("search_logs", {"service": "auth", "limit": 1}, "same")
-    agent, client, tools, sid = _investigate(toolset, [*_searches(4), same, same, same])
+IDENTICAL_NOTE = "3 identical GATHER calls in a row; the last one was not run. Moved to HYPOTHESIZE."
+
+
+def _rest(ids: list[str]) -> list[LLMResponse]:
+    return [call("submit_hypotheses", _ranking(ids), "h"), call("search_logs", {"service": "auth", "limit": 2}, "v1"),
+            call("finish_verifying", {}, "fv"), call("submit_report", {"summary": "s", **_ranking(ids)}, "r")]
+
+
+def test_identical_calls_before_the_precondition_still_end_the_run(toolset: ToolSet) -> None:
+    same = call("search_logs", {"service": "auth", "limit": 20}, "same")
+    agent, client, tools, sid = _investigate(toolset, [*_searches(2), same, same, same])
+    with pytest.raises(InvestigationFailed) as failed:
+        agent.investigate(tools, sid)
+    assert failed.value.stop_reason == "no_new_evidence" and "identical" in str(failed.value)
+
+
+def test_identical_calls_after_the_precondition_move_to_hypothesize(toolset: ToolSet, run_events) -> None:
+    ids = _alert_ids(toolset)
+    same = call("search_logs", {"service": "auth", "limit": 20}, "same")  # new IDs once, then nothing new
+    agent, client, tools, sid = _investigate(toolset, [*_searches(4), same, same, same, *_rest(ids)])
+    assert agent.investigate(tools, sid).stop_reason == "sufficient_evidence"
+    events = run_events[-1].events
+    assert [len(e["new_ids"]) > 0 for e in events if e["event"] == "tool" and e["call_id"] == "same"] == [True, False]
+    assert tools.calls.count("search_logs") == 4 + 2 + 1  # the third identical call was not run
+    enters = [(e["state"], e["reason"]) for e in events if e["event"] == "state_enter"]
+    assert enters == [("TRIAGE", "start"), ("GATHER", "triage done"), ("HYPOTHESIZE", "identical calls"),
+                      ("VERIFY", "submit_hypotheses"), ("REPORT", "finish_verifying")]
+    stage = client.requests[7][0][-1].content  # the request after the third identical call
+    assert "STAGE (from the harness): HYPOTHESIZE" in stage and IDENTICAL_NOTE in stage
+    assert IDENTICAL_NOTE not in client.requests[8][0][-1].content
+
+
+def test_identical_calls_after_return_to_gather_move_to_hypothesize(toolset: ToolSet, run_events) -> None:
+    ids = _alert_ids(toolset)
+    same = call("search_logs", {"service": "orders", "limit": 30}, "same")
+    script = [*_searches(4), call("finish_gathering", {}, "fg"), call("submit_hypotheses", _ranking(ids), "h"),
+              call("search_logs", {"service": "auth", "limit": 2}, "v1"), call("return_to_gather", {}, "rg"),
+              same, same, same, call("submit_hypotheses", _ranking(ids), "h2"), call("finish_verifying", {}, "fv"),
+              call("submit_report", {"summary": "s", **_ranking(ids)}, "r")]
+    agent, client, tools, sid = _investigate(toolset, script)
+    assert agent.investigate(tools, sid).stop_reason == "sufficient_evidence"
+    enters = [(e["state"], e["reason"]) for e in run_events[-1].events if e["event"] == "state_enter"]
+    assert enters[4:] == [("GATHER", "return_to_gather"), ("HYPOTHESIZE", "identical calls"),
+                          ("VERIFY", "submit_hypotheses"), ("REPORT", "finish_verifying")]
+
+
+def test_identical_and_empty_triggers_on_the_same_call_move_once(toolset: ToolSet, run_events) -> None:
+    ids = _alert_ids(toolset)
+    same = call("search_logs", {"service": "auth", "limit": 1}, "same")  # empty: run, the no-new streak would be 3
+    agent, client, tools, sid = _investigate(toolset, [*_searches(4), same, same, same, *_rest(ids)])
+    assert agent.investigate(tools, sid).stop_reason == "sufficient_evidence"
+    enters = [(e["state"], e["reason"]) for e in run_events[-1].events if e["event"] == "state_enter"]
+    assert enters[2] == ("HYPOTHESIZE", "identical calls") and len(enters) == 5
+    stage = client.requests[7][0][-1].content
+    assert IDENTICAL_NOTE in stage and NO_NEW_NOTE not in stage
+
+
+def test_identical_calls_on_the_cap_call_move_once(toolset: ToolSet, run_events) -> None:
+    ids = _alert_ids(toolset)
+    bounds = replace(AgentBounds(), gather_first_pass_cap=7)  # the third identical call would be the cap call
+    same = call("search_logs", {"service": "auth", "limit": 20}, "same")
+    agent, client, tools, sid = _investigate(toolset, [*_searches(4), same, same, same, *_rest(ids)], bounds)
+    assert agent.investigate(tools, sid).stop_reason == "sufficient_evidence"
+    enters = [(e["state"], e["reason"]) for e in run_events[-1].events if e["event"] == "state_enter"]
+    assert enters[2] == ("HYPOTHESIZE", "identical calls") and len(enters) == 5
+
+
+def test_identical_calls_in_verify_still_end_the_run(toolset: ToolSet) -> None:
+    ids = _alert_ids(toolset)
+    same = call("search_logs", {"service": "auth", "limit": 2}, "same")
+    script = [*_searches(4), call("finish_gathering", {}, "fg"), call("submit_hypotheses", _ranking(ids), "h"),
+              same, same, same]
+    agent, client, tools, sid = _investigate(toolset, script)
     with pytest.raises(InvestigationFailed) as failed:
         agent.investigate(tools, sid)
     assert failed.value.stop_reason == "no_new_evidence" and "identical" in str(failed.value)

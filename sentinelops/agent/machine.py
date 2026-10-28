@@ -278,7 +278,15 @@ class _Run:
         self.identical = self.identical + 1 if signature == self.last_signature else 1
         self.last_signature = signature
         if self.identical >= self.b.max_identical_calls:
-            raise self.stop("no_new_evidence", f"{self.identical} identical calls to {call.name} in a row")
+            # Change B amendment (2026-10-28): in GATHER, once finish_gathering would be accepted, advance instead;
+            # the identical call is not run either way
+            if self.state is not State.GATHER or not self.may_finish_gathering():
+                raise self.stop("no_new_evidence", f"{self.identical} identical calls to {call.name} in a row")
+            self.notes.append(HARNESS_NOTES["identical_calls"].format(count=self.identical))
+            self.identical = self.no_new = 0
+            self.last_signature = None
+            self.move(State.HYPOTHESIZE, "identical calls")
+            return
         if self.tool_calls >= self.b.max_tool_calls:
             raise self.stop("budget_exhausted", f"tool-call budget of {self.b.max_tool_calls} reached")
         duplicate = signature in self.seen

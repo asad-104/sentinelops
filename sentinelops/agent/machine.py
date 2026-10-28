@@ -295,16 +295,22 @@ class _Run:
         if self.state is State.GATHER:
             if valid:  # invalid calls are counted by the malformed streak instead
                 self.no_new = 0 if new else self.no_new + 1
-            if self.no_new >= self.b.max_no_new_evidence:
-                raise self.stop("no_new_evidence", f"{self.no_new} GATHER calls in a row returned no new source ID")
             if self.returns > 0:
                 self.gather_evidence_second_pass += int(evidence)
-            if self.returns == 0:
+            else:
                 self.gather_calls_first_pass += 1
                 self.gather_evidence_first_pass += int(evidence)
-                if self.gather_calls_first_pass >= self.b.gather_first_pass_cap:
-                    self.notes.append(f"GATHER call cap ({self.b.gather_first_pass_cap}) reached; moved to HYPOTHESIZE.")
-                    self.move(State.HYPOTHESIZE, "gather cap")
+            if self.no_new >= self.b.max_no_new_evidence:
+                # Change B (2026-10-28): once finish_gathering would be accepted, advance like the cap does
+                if not self.may_finish_gathering():
+                    raise self.stop("no_new_evidence", f"{self.no_new} GATHER calls in a row returned no new source ID")
+                self.notes.append(f"{self.no_new} GATHER calls in a row returned no new source ID; moved to "
+                                  f"HYPOTHESIZE.")
+                self.no_new = 0
+                self.move(State.HYPOTHESIZE, "no new evidence")
+            elif self.returns == 0 and self.gather_calls_first_pass >= self.b.gather_first_pass_cap:
+                self.notes.append(f"GATHER call cap ({self.b.gather_first_pass_cap}) reached; moved to HYPOTHESIZE.")
+                self.move(State.HYPOTHESIZE, "gather cap")
         elif self.state is State.VERIFY:
             self.verify_calls += 1
             if self.verify_calls >= self.b.verify_cap:
@@ -320,7 +326,7 @@ class _Run:
         except ValidationError as exc:
             return self.reject(call, "invalid_arguments", _describe(exc))
         if call.name == FINISH_GATHERING:
-            if self.returns == 0 and self.gather_evidence_first_pass < self.b.min_gather_evidence:
+            if not self.may_finish_gathering():
                 return self.reject(call, "precondition", f"need {self.b.min_gather_evidence} GATHER calls that returned "
                                    f"new evidence; have {self.gather_evidence_first_pass}")
             self.accept(call, "moved to HYPOTHESIZE")
@@ -346,6 +352,10 @@ class _Run:
             self.accept(call, "moved to REPORT")
             self.move(State.REPORT, FINISH_VERIFYING)
         return None
+
+    def may_finish_gathering(self) -> bool:
+        """The finish_gathering precondition: 4 evidence calls on the first pass; none after a return."""
+        return self.returns > 0 or self.gather_evidence_first_pass >= self.b.min_gather_evidence
 
     def check_ranking(self, draft: HypothesesDraft) -> str | None:
         ranks = [h.rank for h in draft.hypotheses]

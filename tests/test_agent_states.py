@@ -228,7 +228,64 @@ def test_no_new_evidence_and_identical_calls(toolset: ToolSet) -> None:
     agent, client, tools, sid = _investigate(toolset, stale)
     with pytest.raises(InvestigationFailed) as failed:
         agent.investigate(tools, sid)
-    assert failed.value.stop_reason == "no_new_evidence"
+    assert failed.value.stop_reason == "no_new_evidence"  # precondition not met: the run still ends
+
+
+def _empties() -> list[LLMResponse]:
+    """Valid, non-identical reads whose results are subsets of what ``_searches(4)`` already showed."""
+    return [call("search_logs", {"service": s, "limit": 1}, f"e-{s}") for s in ("auth", "orders", "payments")]
+
+
+NO_NEW_NOTE = "3 GATHER calls in a row returned no new source ID; moved to HYPOTHESIZE."
+
+
+def test_no_new_evidence_after_the_precondition_moves_to_hypothesize(toolset: ToolSet, run_events) -> None:
+    ids = _alert_ids(toolset)
+    script = [*_searches(4), *_empties(), call("submit_hypotheses", _ranking(ids), "h"),
+              call("search_logs", {"service": "auth", "limit": 2}, "v1"), call("finish_verifying", {}, "fv"),
+              call("submit_report", {"summary": "s", **_ranking(ids)}, "r")]
+    agent, client, tools, sid = _investigate(toolset, script)
+    assert agent.investigate(tools, sid).stop_reason == "sufficient_evidence"
+    events = run_events[-1].events
+    assert [e["new_ids"] for e in events if e["event"] == "tool" and e["call_id"].startswith("e-")] == [[], [], []]
+    enters = [(e["state"], e["reason"]) for e in events if e["event"] == "state_enter"]
+    assert enters == [("TRIAGE", "start"), ("GATHER", "triage done"), ("HYPOTHESIZE", "no new evidence"),
+                      ("VERIFY", "submit_hypotheses"), ("REPORT", "finish_verifying")]
+    stage = client.requests[7][0][-1].content  # the request after the third empty call
+    assert "STAGE (from the harness): HYPOTHESIZE" in stage and NO_NEW_NOTE in stage
+    assert NO_NEW_NOTE not in client.requests[8][0][-1].content  # notes are shown once
+
+
+def test_no_new_evidence_after_return_to_gather_moves_to_hypothesize(toolset: ToolSet, run_events) -> None:
+    ids = _alert_ids(toolset)
+    script = [*_searches(4), call("finish_gathering", {}, "fg"), call("submit_hypotheses", _ranking(ids), "h"),
+              call("search_logs", {"service": "auth", "limit": 2}, "v1"), call("return_to_gather", {}, "rg"),
+              *_empties(), call("submit_hypotheses", _ranking(ids), "h2"), call("finish_verifying", {}, "fv"),
+              call("submit_report", {"summary": "s", **_ranking(ids)}, "r")]
+    agent, client, tools, sid = _investigate(toolset, script)
+    assert agent.investigate(tools, sid).stop_reason == "sufficient_evidence"
+    enters = [(e["state"], e["reason"]) for e in run_events[-1].events if e["event"] == "state_enter"]
+    assert enters[4:] == [("GATHER", "return_to_gather"), ("HYPOTHESIZE", "no new evidence"),
+                          ("VERIFY", "submit_hypotheses"), ("REPORT", "finish_verifying")]
+
+
+def test_identical_calls_still_end_the_run_after_the_precondition(toolset: ToolSet) -> None:
+    same = call("search_logs", {"service": "auth", "limit": 1}, "same")
+    agent, client, tools, sid = _investigate(toolset, [*_searches(4), same, same, same])
+    with pytest.raises(InvestigationFailed) as failed:
+        agent.investigate(tools, sid)
+    assert failed.value.stop_reason == "no_new_evidence" and "identical" in str(failed.value)
+
+
+def test_no_new_evidence_on_the_cap_call_moves_once(toolset: ToolSet, run_events) -> None:
+    bounds = replace(AgentBounds(), gather_first_pass_cap=7)  # the third empty call is also the cap call
+    agent, client, tools, sid = _investigate(toolset, [*_searches(4), *_empties(), LLMError("connection", "x"),
+                                                       LLMError("connection", "x")], bounds)
+    with pytest.raises(InvestigationFailed) as failed:
+        agent.investigate(tools, sid)
+    assert failed.value.stop_reason == "error"  # the two client errors, in HYPOTHESIZE
+    enters = [(e["state"], e["reason"]) for e in run_events[-1].events if e["event"] == "state_enter"]
+    assert enters[-1] == ("HYPOTHESIZE", "no new evidence") and len(enters) == 3
 
 
 def test_timeout_unloads_then_retries_once_and_two_stop(toolset: ToolSet, run_events) -> None:

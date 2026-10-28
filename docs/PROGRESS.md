@@ -993,6 +993,23 @@ The 12 core runs with `qwen3:4b` are therefore **not run**.
   - the fixed set and the decision rule
 - **Tests:** 363 passing. The real-data viewer check prints `OK`.
 
+## Amendment to change B, within prompt revision 2 (user-approved 2026-10-28, recorded before the code, before any run)
+**The decision.** The "3 identical calls in a row" trigger now follows the same rule as the empty-calls trigger.
+- **After the precondition** (at least 4 first-pass GATHER evidence calls): three identical GATHER calls in a row **move the run to HYPOTHESIZE with a note**.
+  - The third identical call is **not run**, as before: the trigger fires before the call is executed.
+  - The note says so.
+- **Before the precondition:** the trigger still ends the run with `no_new_evidence`.
+- **After `return_to_gather`:** it always moves the run on.
+- **When triggers coincide:** if it falls on the same call as the empty-calls trigger or the GATHER cap, the run moves once.
+- **In VERIFY:** identical calls still end the run, unchanged. The rule above covers GATHER only.
+- **Tests:** each case, including through the full loop.
+
+**Why this is still revision 2 and not a third revision.** The revision 2 hash `feaa4477adb4c3551fcf2b6eb910b787b7711507b51865cb50cf4be8d2a85b4c` (d8bfb71) **has not been used by any run**: no smoke or core run has been made since it was committed. The new note text changes the hash again. The new value **replaces `feaa4477…` as the revision 2 hash**, and `feaa4477…` is never reported as a run configuration.
+
+**The motivation is the same as change B's.** It comes from this scenario's smoke runs (`sc-45fa1390ea`). It removes the remaining case where a run that has met the precondition is ended rather than moved on, and it applies to any backend.
+
+**Nothing else changes.** The new revision 2 hash is recorded below once the code is committed.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

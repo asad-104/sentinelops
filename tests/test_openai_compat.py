@@ -157,6 +157,15 @@ def test_key_is_required_and_never_described_or_echoed() -> None:
     assert client.describe()["host"] == "api.groq.com" and client.unload() is None
 
 
+def test_organization_ids_are_stripped_from_provider_errors() -> None:
+    body = ('{"error":{"message":"Rate limit reached for model `qwen/qwen3.8-27b` in organization '
+            '`org_0fakeorg0id0for0tests` service tier `on_demand` on tokens per day (TPD)"}}')
+    client, _ = _client(lambda r: httpx.Response(429, headers={"retry-after": "445"}, text=body))
+    error = client.chat([ChatMessage("user", "x")], [SPEC])
+    assert isinstance(error, LLMError) and "org_0fakeorg0id0for0tests" not in error.message
+    assert "organization `org_[redacted]`" in error.message and "tokens per day" in error.message
+
+
 def _scripted_handler(toolset: ToolSet):
     alert = toolset.call("get_alert").items[0].source_id
     deps = [d.source_id for d in toolset.call("get_dependencies").items]

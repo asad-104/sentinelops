@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from collections import deque
 from collections.abc import Callable, Mapping
@@ -26,6 +27,8 @@ from urllib.parse import urlparse
 import httpx
 
 from sentinelops.llm.client import ChatMessage, LLMError, LLMResponse, ToolCallRequest, ToolSpec, Usage
+
+ORG_ID = re.compile(r"\borg_[A-Za-z0-9]{6,}")
 
 
 @dataclass(frozen=True)
@@ -173,8 +176,8 @@ class OpenAICompatibleClient:
         return waited
 
     def _clean(self, response: httpx.Response) -> str:
-        """A short error body with the key removed, in case a server ever echoes it."""
-        return response.text[:300].replace(self._key, "[redacted]")
+        """A short error body with the key and organization IDs removed (Groq's 429 names the organization)."""
+        return ORG_ID.sub("org_[redacted]", response.text.replace(self._key, "[redacted]"))[:300]
 
 
 def _retry_after(response: httpx.Response) -> float | None:

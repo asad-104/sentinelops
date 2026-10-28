@@ -959,6 +959,40 @@ The 12 core runs with `qwen3:4b` are therefore **not run**.
 - **If it fails any check:** **local work stops**. The hosted proposal is written: prices re-verified on the official page that day, a $5 cap, an environment-variable key, httpx only, and the runs it would cover.
 - **No further local smoke runs, and no further prompt revisions.**
 
+## M4 change B (2026-10-28, harness, commit 705af12)
+- **What it does:** as pre-registered above.
+- **The note** says: "3 GATHER calls in a row returned no new source ID; moved to HYPOTHESIZE."
+- **If the trigger and the GATHER cap fall on the same call,** the run moves once, with reason `no new evidence`.
+- **Tests:** 4 new ones:
+  - before the precondition, the run still ends
+  - after the precondition, it advances through the full loop to a report
+  - after `return_to_gather`, it advances through the full loop to a report
+  - 3 identical calls still end the run, and the cap call coinciding with the trigger moves once
+
+  3 of the 4 fail against the previous `machine.py`. The fourth tests the unchanged identical-calls trigger, so it passes before and after.
+- **Motivation, restated:** change B is motivated by `sc-45fa1390ea`'s smoke runs. It fixes a rule inconsistency and applies to any backend.
+
+## M4 prompt revision 2, the last (2026-10-28, commit d8bfb71)
+- **Hash:** `39a474ebdeca7eae8c3442256c6ea3c648dbda875dc1ec25c143f9ec16fbc281` → **`feaa4477adb4c3551fcf2b6eb910b787b7711507b51865cb50cf4be8d2a85b4c`** (`test_agent_prompt_is_frozen`).
+- **The change:** every model-facing harness text now lives in `agent/prompt.py` and is covered by `prompt_sha256`, in three tables:
+  - `DATA_HEADERS`: the triage, ledger and compacted headers
+  - `HARNESS_NOTES`: cut-off output, no tool call, the GATHER and VERIFY caps, and the new no-new-evidence note
+  - `HARNESS_MESSAGES`: invalid JSON, not an object, unknown tool, `wrong_state`, the three precondition messages, the ranking checks, unknown IDs, the five acceptance messages, and the capped-result marker
+- **Wording unchanged except the new note.** An offline replay of both instruct smoke runs gives **byte-identical requests for all 21 recorded turns**.
+- **Tests:**
+  - changing any entry of the three tables changes the hash
+  - an AST check fails if `machine.py` or `context.py` sends an inline note, rejection, acceptance or DATA header. Mutation-checked: it catches a reintroduced inline note
+- **Still not covered by the hash:**
+  - the tool parameter schemas and field descriptions (generated from the Pydantic input models; frozen by rule, not by hash)
+  - JSON key names in tool results and compacted entries (for example `duplicate_call`, `earlier_calls_not_shown`)
+  - Pydantic's own validation error text
+- **Results after this revision are reported separately from revisions 0 and 1.**
+- **Unchanged:**
+  - context parameters, the estimator, `num_predict`, tool specs, STAGE wording and bounds
+  - fix C
+  - the fixed set and the decision rule
+- **Tests:** 363 passing. The real-data viewer check prints `OK`.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

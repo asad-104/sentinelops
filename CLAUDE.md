@@ -52,7 +52,7 @@ Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS
 - Done: **M3 stage A** (LLM adapter, mock, Ollama client untested against a server, tool loop, traces, crash-catching harness, pilot CLI, network guard, M3 viewer page; merged to `main`)
 - Done: **M3 complete** (stage B: attempt 1 aborted by the swap guard and recorded; attempt 2 completed 7 runs, rule verdict `local_feasible` with caveats; merged to `main`, tag `m3-complete`)
 - Done: **M4 stage A** (explicit-state agent, managed context with bounded ledger, metrics incl. criterion (e), agent CLI, M4 viewer page; approved)
-- In progress: **M4 stage B** on `m4-stage-b`. `qwen3:4b` (the thinking-2507 variant) failed both smoke runs and was not run on the core set. One alternative-model smoke run is pre-registered (`qwen3:4b-instruct-2507-q4_K_M`). If it fails, local work stops and a hosted proposal follows. Prompt `39a474eb` (revision 1 of 2); context revision 1 (estimator 3.1)
+- In progress: **M4 stage B** on `m4-stage-b`. `qwen3:4b` (the thinking-2507 variant) failed both smoke runs and was not run on the core set. `qwen3:4b-instruct-2507-q4_K_M` smoke 1 failed 2 of 6 checks (no_new_evidence in GATHER, no report). One bounded exception approved: change B (no-new-evidence advances to HYPOTHESIZE after the precondition) and prompt revision 2 (harness texts hashed) are done; ONE more smoke run (`--attempt 2`) is pending. If it fails, local work stops and a hosted proposal follows; no further smoke runs or prompt revisions. Prompt `feaa4477` (revision 2 of 2, the last); context revision 1 (estimator 3.1)
 
 ## Standing rules
 

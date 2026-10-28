@@ -64,8 +64,8 @@ def test_acceptance_forty_maximum_size_calls_stay_within_budget(traces) -> None:
     assert all(c["estimated_tokens"] <= c["budget"] == 6144 for c in contexts)
     assert contexts[-1]["ledger_size"] > 800  # hundreds of distinct IDs seen, bounded view rendered
     assert not any(e["event"] == "stop" and e["stop_reason"] == "context_exhausted" for e in events)
-    for messages in client.requests:  # independent check of the estimate the loop used
-        estimate = math.ceil(request_chars(messages, agent.specs) / CHARS_PER_TOKEN * ESTIMATE_MARGIN)
+    for messages, sent in zip(client.requests, client.tools):  # independent check, with the tools actually sent
+        estimate = math.ceil(request_chars(messages, sent) / CHARS_PER_TOKEN * ESTIMATE_MARGIN)
         assert estimate <= 6144
 
 
@@ -78,16 +78,16 @@ def test_tiny_budget_still_stops_with_context_exhausted(traces) -> None:
 
 
 class ReportingServer(WorstCaseClient):
-    """The worst-case client, plus a 'server' that reports the true prompt size (3.6 characters per token)."""
+    """The worst-case client, plus a 'server' that reports the true size of what it received (3.6 characters per
+    token), counting only the tools actually sent."""
 
     def __init__(self) -> None:
         super().__init__()
         self.true_tokens: list[int] = []
-        self.specs = agent_tool_specs()
 
     def chat(self, messages, tools):
         response = super().chat(messages, tools)
-        true = math.ceil(request_chars(messages, self.specs) / TRUE_CHARS_PER_TOKEN)
+        true = math.ceil(request_chars(messages, tools) / TRUE_CHARS_PER_TOKEN)
         self.true_tokens.append(true)
         return replace(response, usage=Usage(true, 5))
 
@@ -315,3 +315,22 @@ def test_levels_without_a_compacted_cap_are_unchanged_by_the_pin() -> None:
         lines = _compacted(level, exchanges)
         assert not any("earlier_calls_not_shown" in line for line in lines)
         assert [json.loads(line)["tool"] for line in lines][:2] == ["search_logs", "submit_hypotheses"]  # in order
+
+
+def test_ranking_and_report_requests_are_less_compacted_than_with_every_tool(traces, monkeypatch) -> None:
+    """Context revision 3, paired on the worst case: the same run with every tool sent in every state is the
+    control. Dropping the other tools must put each HYPOTHESIZE and REPORT request at a strictly lower level
+    (more ledger text) than in the control, and never above the turn before it."""
+    def narrow_levels() -> list[tuple[int, int, int]]:
+        agent, client, tools = _worst_case()
+        agent.investigate(tools, SCENARIO_ID)
+        contexts = [e for e in traces[-1].events if e["event"] == "context"]
+        return [(c["turn"], contexts[i - 1]["level"], c["level"]) for i, c in enumerate(contexts)
+                if c["state"] in ("HYPOTHESIZE", "REPORT")]
+
+    revised = narrow_levels()
+    monkeypatch.setattr(machine, "state_tool_specs", lambda state, specs: specs)
+    control = narrow_levels()
+    assert len(revised) == len(control) >= 3  # two rankings (one after the return to GATHER) and the report
+    for (turn, before, level), (turn_c, _, level_c) in zip(revised, control):
+        assert turn == turn_c and level < level_c and level <= before

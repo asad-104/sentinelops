@@ -74,6 +74,7 @@ class WorstCaseClient:
         self.verify_reads = 0
         self.returned = False
         self.requests: list[list[ChatMessage]] = []
+        self.tools: list[list[ToolSpec]] = []  # the tools each request actually carried (context revision 3)
 
     def describe(self) -> dict[str, Any]:
         return {"backend": "worst-case"}
@@ -96,6 +97,7 @@ class WorstCaseClient:
 
     def chat(self, messages: list[ChatMessage], tools: list[ToolSpec]) -> LLMResponse:
         self.requests.append(list(messages))
+        self.tools.append(list(tools))
         self.n += 1
         state = messages[-1].content.split("\n", 1)[0].removeprefix("STAGE (from the harness): ")
         read = ("get_metrics", {"service": "orders", "metric": "error_rate", "limit": 120 + self.n % 3}) \

@@ -437,3 +437,43 @@ def test_unload_after_timeout_reaches_the_model_through_the_progress_wrapper(too
     assert inner.unloads == 2
     assert sum(e["event"] == "unload" for e in run_events[-1].events) == 2
     assert not hasattr(ProgressClient(Plain([]), progress), "unload")  # nothing to forward, nothing exposed
+
+
+def test_each_state_sends_its_tool_list_through_the_full_loop(toolset: ToolSet, run_events) -> None:
+    """Context revision 3: HYPOTHESIZE and REPORT carry only their own tool; GATHER and VERIFY carry all."""
+    from sentinelops.agent.context import specs_chars
+    from sentinelops.agent.schemas import agent_tool_specs
+
+    every = [s.name for s in agent_tool_specs()]
+    agent, client, tools, sid = _investigate(toolset, _full_script(_alert_ids(toolset)))
+    assert agent.investigate(tools, sid).stop_reason == "sufficient_evidence"
+    contexts = [e for e in run_events[-1].events if e["event"] == "context"]
+    sent = [[t.name for t in specs] for _, specs in client.requests]
+    assert [c["state"] for c in contexts] == ["GATHER"] * 5 + ["HYPOTHESIZE", "VERIFY", "VERIFY", "REPORT"]
+    for context, names, (_, specs) in zip(contexts, sent, client.requests):
+        expected = {"HYPOTHESIZE": ["submit_hypotheses"], "REPORT": ["submit_report"]}.get(context["state"], every)
+        assert names == expected
+        assert context["components"]["tool_specs"] == specs_chars(specs)  # the estimate counted what was sent
+
+
+def test_the_tool_list_per_state_is_frozen() -> None:
+    from sentinelops.agent.schemas import NARROW_STATES, agent_tool_specs, state_tool_specs
+
+    specs = agent_tool_specs()
+    assert NARROW_STATES == {State.HYPOTHESIZE, State.REPORT}
+    assert {s: [t.name for t in state_tool_specs(s, specs)] for s in NARROW_STATES} == {
+        State.HYPOTHESIZE: ["submit_hypotheses"], State.REPORT: ["submit_report"]}
+    for state in (State.GATHER, State.VERIFY):
+        assert state_tool_specs(state, specs) == specs  # unchanged, in the fixed order
+
+
+def test_a_tool_not_sent_is_still_rejected_as_wrong_state(toolset: ToolSet, run_events) -> None:
+    script = [*_searches(4), call("finish_gathering", {}, "fg"), call("search_logs", {"limit": 1}, "x"),
+              LLMError("connection", "x"), LLMError("connection", "x")]
+    agent, client, tools, sid = _investigate(toolset, script)
+    with pytest.raises(InvestigationFailed):
+        agent.investigate(tools, sid)
+    hypothesize_tools = [t.name for t in client.requests[5][1]]
+    assert hypothesize_tools == ["submit_hypotheses"]  # search_logs was not offered...
+    rejected = [e for e in run_events[-1].events if e["event"] == "tool" and e["call_id"] == "x"]
+    assert rejected[0]["error_code"] == "wrong_state"  # ...and calling it anyway is rejected, as before

@@ -32,7 +32,7 @@ from sentinelops.agent.prompt import (
     SYSTEM_PROMPT,
     prompt_sha256,
 )
-from sentinelops.agent.schemas import STATE_TOOL_MODELS, HypothesesDraft, agent_tool_specs
+from sentinelops.agent.schemas import STATE_TOOL_MODELS, HypothesesDraft, agent_tool_specs, state_tool_specs
 from sentinelops.agent.states import (
     ALLOWED,
     FINISH_GATHERING,
@@ -180,7 +180,7 @@ class _Run:
                                          progress)
         try:
             request = self.builder.build(SYSTEM_PROMPT, self.triage_text, self.ledger, self.exchanges, stage,
-                                         self.cited_in_ranking())
+                                         self.cited_in_ranking(), state_tool_specs(self.state, self.o.specs))
         except ContextExhausted as exc:
             raise self.stop("context_exhausted", str(exc)) from None
         self.notes = []
@@ -191,7 +191,7 @@ class _Run:
                          min_level=self.builder.min_level, ledger_size=len(self.ledger),
                          rendered_ids=len(request.rendered_ids), exchanges=len(self.exchanges),
                          messages=len(request.messages), components=request.components)
-        response = self.o.client.chat(request.messages, self.o.specs)
+        response = self.o.client.chat(request.messages, request.specs)
         if isinstance(response, LLMError):
             self.on_client_error(response)
             return None

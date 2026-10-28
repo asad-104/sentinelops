@@ -10,11 +10,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from sentinelops.agent.prompt import TOOL_DESCRIPTIONS
 from sentinelops.agent.states import (
+    ALLOWED,
     FINISH_GATHERING,
     FINISH_VERIFYING,
     RETURN_TO_GATHER,
     SUBMIT_HYPOTHESES,
     SUBMIT_REPORT,
+    State,
 )
 from sentinelops.llm.client import ToolSpec
 from sentinelops.llm.schemas import ReportDraft, inline_schema
@@ -45,3 +47,13 @@ def agent_tool_specs() -> list[ToolSpec]:
     models = {**TOOL_INPUT_MODELS, **STATE_TOOL_MODELS}
     return [ToolSpec(name, TOOL_DESCRIPTIONS[name], inline_schema(model.model_json_schema()))
             for name, model in models.items()]
+
+
+# Context revision 3 (2026-10-29): in these states the request carries only the state's own tools, so the
+# freed budget keeps ledger excerpts on the turns where the ranking and the report are written. GATHER and
+# VERIFY keep every tool, in the fixed order, for the backend's prefix cache.
+NARROW_STATES = frozenset({State.HYPOTHESIZE, State.REPORT})
+
+
+def state_tool_specs(state: State, specs: list[ToolSpec]) -> list[ToolSpec]:
+    return [s for s in specs if s.name in ALLOWED[state]] if state in NARROW_STATES else specs

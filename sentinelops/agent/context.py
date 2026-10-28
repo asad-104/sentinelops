@@ -241,6 +241,7 @@ class BuiltRequest:
     level: int
     rendered_ids: frozenset[str]
     components: dict[str, int]  # characters per component (for the token table)
+    specs: list[ToolSpec]  # the tools this request carries (context revision 3: fewer in HYPOTHESIZE and REPORT)
 
 
 def specs_chars(specs: list[ToolSpec]) -> int:
@@ -281,10 +282,12 @@ class ContextBuilder:
         return "\n".join(lines)
 
     def render(self, level: int, system: str, triage: str, ledger: Ledger, exchanges: list[Exchange],
-               stage: str, cited: set[str] = frozenset()) -> tuple[list[ChatMessage], dict[str, int]]:
+               stage: str, cited: set[str] = frozenset(),
+               specs: list[ToolSpec] | None = None) -> tuple[list[ChatMessage], dict[str, int]]:
         spec = LEVELS[level]
         parts: dict[str, int] = {"system": len(system), "triage": len(triage), "stage": len(stage),
-                                 "tool_specs": specs_chars(self.specs), "ledger": 0, "compacted": 0, "recent": 0}
+                                 "tool_specs": specs_chars(self.specs if specs is None else specs), "ledger": 0,
+                                 "compacted": 0, "recent": 0}
         messages = [ChatMessage("system", system), ChatMessage("user", triage)]
         if len(ledger):
             text = ledger.render(spec.ledger, set(cited))
@@ -315,15 +318,16 @@ class ContextBuilder:
         return messages, parts
 
     def build(self, system: str, triage: str, ledger: Ledger, exchanges: list[Exchange], stage: str,
-              cited: set[str] = frozenset()) -> BuiltRequest:
+              cited: set[str] = frozenset(), specs: list[ToolSpec] | None = None) -> BuiltRequest:
+        sent = self.specs if specs is None else specs  # the estimate counts only the tools actually sent
         for level in range(self.min_level, MAX_LEVEL + 1):
-            messages, parts = self.render(level, system, triage, ledger, exchanges, stage, cited)
-            chars = request_chars(messages, self.specs)
+            messages, parts = self.render(level, system, triage, ledger, exchanges, stage, cited, sent)
+            chars = request_chars(messages, sent)
             estimate = self.estimator.estimate(chars)
             if estimate <= self.bounds.prompt_budget:
                 self.last_level = level
                 rendered = frozenset(i for m in messages for i in SOURCE_ID.findall(m.content))
-                return BuiltRequest(messages, chars, estimate, level, rendered, parts)
+                return BuiltRequest(messages, chars, estimate, level, rendered, parts, sent)
         raise ContextExhausted(f"even compaction level {MAX_LEVEL} needs {estimate} estimated tokens "
                                f"(budget {self.bounds.prompt_budget})")
 

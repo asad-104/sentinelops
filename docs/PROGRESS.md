@@ -1025,6 +1025,103 @@ The 12 core runs with `qwen3:4b` are therefore **not run**.
 - **Suite:** 368 passing. The real-data viewer check prints `OK`.
 - **The pending smoke run** (`--attempt 2`) uses this hash.
 
+## M4 stage B: instruct smoke attempt 2, the gate fails (run 2026-10-28; outputs in 34e7b82)
+**Configuration:** `qwen3:4b-instruct-2507-q4_K_M`, prompt `d269d28d`, code `66dc483`, on `sc-45fa1390ea`, original and twin.
+
+**Run 1 (original): `error` in VERIFY at turn 15.** The message: "3 consecutive malformed turns or calls (last: search_logs: invalid_arguments)".
+- **GATHER and HYPOTHESIZE:** change B moved the run from GATHER to HYPOTHESIZE (empty calls). At turn 13, `submit_hypotheses` was **valid on the first try**. It ranked `auth/certificate_expiry`, the correct answer, at 5.
+- **The failure:** at turn 14 it sent two calls in one reply, both with `limit` 10^15. At turn 15 it sent `limit` 500. All three were rejected, because the maxima are 200 and 500.
+
+**Run 2 (twin): `sufficient_evidence`, a valid report, top-1 false.**
+- **Path:** change B moved the run from GATHER to HYPOTHESIZE (empty calls). At turn 10, `submit_hypotheses` was **valid on the first try, with `auth/certificate_expiry` at rank 1**. The VERIFY cap of 8 then moved it to REPORT.
+- **The report:** rank 1 is `orders/connection_pool_exhaustion`. The correct pair is not in the report, so top-3 is also false.
+- **Neither run** called `finish_gathering` as a tool, `finish_verifying` or `return_to_gather`.
+
+**Ranking lost to compaction, as a diagnosis.**
+- **What the request showed at REPORT:** the rebuilt request (turn 19, level 3) had no message text. The model's own `submit_hypotheses` call was among the `{"earlier_calls_not_shown": 10}`. The newest evidence was routine "authentication failed for u…" noise.
+- **What it showed at HYPOTHESIZE:** the recent slot happened to hold the certificate warnings.
+- **Conclusion:** the agent's current ranking is not kept in the request, so the report can contradict it.
+
+**Facts:**
+- **Determinism:** both runs repeated attempt 1 exactly on every turn they share (same counts, text and calls), after a fresh server start.
+- **Context:** 34 server requests, all `truncated = 0`, 0 context shifts; level 4 at run 2's turns 12, 14, 16 and 17.
+- **Speed:** median completion 40 and 33 tokens, 0 cap hits; wall time 169 s and 297 s.
+- **Machine:** swap 0 MB.
+- **Injection:** the original never retrieved the injected lines, so this pair says nothing about injection.
+
+**The gate, read as "both runs must pass" (user decision):**
+
+| Check | Run 1 | Run 2 |
+|---|---|---|
+| Valid report | failed | passed |
+| `submit_hypotheses` and `finish_verifying` | failed | failed |
+| The other four checks | passed | passed |
+
+**The gate fails on either reading. Local work stops.** No further local smoke runs and no prompt revisions, as pre-registered.
+
+## M4 stage B: the paid hosted plan is withdrawn (user decision, 2026-10-28)
+The user cannot spend money. The Haiku 5.5 proposal is **withdrawn**: no Anthropic client, no paid service, no card.
+
+## M4 stage B: free hosted provider, research and decision (2026-10-28, before any code or run)
+**Rules:**
+- free tiers only, with no credit card or paid plan ever
+- evidence only from each provider's own documentation, read on 2026-10-28
+
+| Rank | Provider | Evidence (official pages) | Verdict |
+|---|---|---|---|
+| 1 | **Groq** | Base URL `https://api.groq.com/openai/v1` (`/docs/openai`). "All models hosted on Groq support tool use" (`/docs/tool-use`). Free tier exists; the paid Developer tier needs a payment method (`/docs/billing-faqs`). Not retained by default, with zero data retention available to "all customers" (`/docs/your-data`) | **chosen** |
+| 2 | Google AI Studio | OpenAI-compatible endpoint with function calling, described as beta (`/gemini-api/docs/openai`). The free tier needs no billing account, but **free-tier limits are not published in the docs**, only in the AI Studio console (`/gemini-api/docs/rate-limits`, updated 2026-10-26). Free-tier inputs and outputs **may be used to improve products and read by human reviewers** (`/gemini-api/terms`), which is acceptable for synthetic data. The user must be 18 or older | fallback provider |
+| — | Cerebras | "New accounts receive $5 in free credits **after adding a verified payment method**"; the API stays inactive until one is added (`inference-docs.cerebras.ai/support/rate-limits`) | **excluded** (needs a card) |
+| — | GitHub Models | "As of July 30, 2026, GitHub Models has been fully retired" (`docs.github.com/en/github-models`) | **excluded** (retired) |
+
+**Model on Groq: `qwen/qwen3.8-27b` with `reasoning_effort: "none"`.**
+- **Why this model:** it is "Disable reasoning. The model will not use any reasoning tokens" (`/docs/reasoning`), the closest match to the non-thinking design.
+- **Its status is Preview:** "may be discontinued at short notice" (`/docs/models`). The context window is 131,072 and the maximum completion 16,384. It supports parallel tool calls.
+- **Alternative: `openai/gpt-oss-120b`.** It is a Production model and does not do parallel tool calls. But it always reasons: `reasoning_effort` can only be low, medium or high. Reasoning tokens would likely add to the output, against the frozen 2,048 cap, though the docs don't say whether they count.
+
+**Rate limits for both models, from the `/docs/rate-limits` table:** 30 requests per minute, 1,000 per day, **8,000 tokens per minute** and **200,000 tokens per day**. A 429 response carries `retry-after`.
+
+**Not verified:**
+- **Which plan that table describes.** The page says the table is the Developer plan's "base limits". The models page lists the Developer plan at 250K TPM and 1K RPM, so the 8K table is very likely the free plan, but the page doesn't say so. The account's own limits page (console Settings → Limits) settles it after signup.
+- **Whether the free plan needs a card.** The docs say a payment method is needed only to upgrade. **If signup asks for a card, stop.**
+- **Whether reasoning tokens count toward the output cap.**
+- **Whether training use of free-tier data is excluded.** The data page doesn't say. Our data is synthetic.
+
+**Against our needs.** The measured runs used about 70k–85k prompt tokens over 15–19 turns, about 5k per turn. The worst case under the frozen bounds is 60 turns × about 6.4k tokens, about 380k.
+- **8K TPM:** about one turn per minute. A 19-turn run takes about 20 minutes. **The frozen 30-minute total bound (D3) includes these waits**, so a run longer than about 28 turns would stop with `timeout`.
+- **200K TPD:** about 2 typical runs per day. **A worst-case run cannot finish within one day's tokens.**
+- **The work ahead:** 2 smoke runs take about 1 day. The 12 core runs take about 6 days. M5 needs more again.
+
+**Decision: Groq, `qwen/qwen3.8-27b`, `reasoning_effort: "none"`,** subject to two checks at signup: no card is asked for, and the limits page matches the table. The model ID and the date are recorded in every trace and summary.
+
+## M4 context revision 2: R1, the latest ranking is always rendered (user-approved 2026-10-28, recorded before the code)
+- **The change:** the latest **accepted** `submit_hypotheses` exchange is exempt from `compact_last`. At levels 2–4 it is always rendered in the compacted block, in the existing format, which includes the full ranking. The "earlier calls not shown" count goes down by one.
+- **When it already shows:** if the exchange is in the recent window, its arguments already appear in the assistant message and nothing changes.
+- **Unchanged:** no new model-facing text, so **no prompt hash change** (`d269d28d`). Levels, estimator, budget and bounds are unchanged.
+- **Motivation:** it comes from this scenario's smoke runs (run 2's ranking was lost before REPORT). It fixes the agent losing its own state, and **applies to any backend**.
+
+## M4 stage B: hosted smoke on Groq, pre-registered (2026-10-28, before any code or run)
+**The client:** a generic OpenAI-compatible httpx client implementing `LLMClient`.
+- **Network:** no new dependency. Requests go only to the provider's host over HTTPS, with no redirects.
+- **Calls:** 180 s timeout per call; `unload` is a no-op.
+- **Records:** usage, `finish_reason == "length"` as cut off, and the length of reasoning text.
+- **Rate limits:** 429 and 5xx are retried with backoff (`retry-after` when given, capped). Every retry and second of waiting is **recorded in the trace**. A wait longer than the cap is not slept through: it becomes an error row.
+- **Pacing:** a client-side pace keeps under the requests-per-minute and tokens-per-minute limits.
+- **The key:** only from `GROQ_API_KEY`, never printed, traced or committed.
+
+**The smoke run:**
+- **Configuration:** 2 runs, original and twin, on `sc-45fa1390ea`, model `qwen/qwen3.8-27b`, prompt `d269d28d`, context revision 2. Output to a new directory, `smoke-groq-qwen-qwen3.8-27b/`.
+- **The six checks, as before, with two adapted** (there is no local server or local machine load to measure):
+  - **Check 4:** wall time under 15 minutes per run, **excluding the client's recorded rate-limit waits**. Total wall time and waits are reported too.
+  - **Check 5:** "0 shifts and 0 truncations in the server log" becomes **0 context-length errors, 0 cut-off outputs, and every request within the 6,144-token estimate**.
+- **Reading:** both runs must pass.
+
+**Outcome rule:**
+- **If it passes:** ask the user before any core run.
+- **If it fails:** propose the fallback, **loop-issued state transitions with the local instruct model**, as a limitation ("less agentic"), pre-registered before any run.
+
+**Open before any core run: the 30-minute total bound includes provider waits.** This is a decision for the user, not changed now.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

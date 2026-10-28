@@ -1182,6 +1182,110 @@ The user cannot spend money. The Haiku 5.5 proposal is **withdrawn**: no Anthrop
 - **Independent of the backend:** the tool list sent per state, as a context revision.
 - **The pre-registration** for both is drafted for the user's approval **before any code**.
 
+## M4 stage B: Mistral free tier and the tool list per state, pre-registered (user-approved 2026-10-29, before any code)
+**Order of work.** Each step is committed on its own, with tests:
+1. this entry
+2. context revision 3 (the tool list per state)
+3. the active-time bound and the batch abort
+4. the Mistral client adaptations
+
+Then the signup and run steps. The user sends the console numbers (limits, free models with dated IDs, opt-out status). They go into the run steps, not the code.
+
+**a) Context revision 3: the tool list per state.**
+- **The change:** at HYPOTHESIZE the request carries only `submit_hypotheses`, and at REPORT only `submit_report`. GATHER and VERIFY carry all tools, as before.
+- **Estimator:** it counts the tools actually sent.
+- **Motivation:** the Groq diagnosis (HYPOTHESIZE at level 3, with no message text). It applies to every backend.
+- **Size, measured:** all tools are 8,019 characters, about 2,975 estimated tokens. The HYPOTHESIZE set is 1,283 characters (about 476) and the REPORT set 1,796 (about 666). That frees about 2,500 and 2,300 tokens.
+- **Unchanged:** the tool descriptions, the prompt hash (`d269d28d`), `wrong_state` for any tool not sent, the levels, the estimator ratio, the budget and the bounds. A test pins the per-state tool names.
+- **Cache cost, estimated:** local servers put the tool block first, so a changed list re-evaluates the whole prompt. That is about 3 misses per run (HYPOTHESIZE, the first VERIFY turn, REPORT), plus 2 per `return_to_gather` pass. At the measured 15 s cold against 2.5–11 s warm, that is about +5–12 s per miss and **+15–35 s per local run**. No measurable cost is expected on hosted backends.
+- **Tests:**
+  - through the full loop: the exact tools sent per state, and `components.tool_specs` matches what was sent
+  - `wrong_state` for a tool not sent
+  - the **worst-case acceptance test unchanged**, plus an assertion that the HYPOTHESIZE and REPORT requests are at a level ≤ the previous turn's
+  - an offline replay of Groq run 1, reporting the HYPOTHESIZE level and whether certificate text is present. This checks that the mechanism works; it is not tuning, and no threshold is set from it.
+
+**b) Mistral client adaptations** (the same generic client, with a second registered provider).
+- **Provider:** `mistral` → `https://api.mistral.ai/v1`, with the key only from `MISTRAL_API_KEY`, never printed, traced or committed.
+- **Network:** requests only to `api.mistral.ai`, over HTTPS, with no redirects. No new dependency.
+- **Per-provider options:**
+  - the cap is sent as `max_tokens` (Groq stays on `max_completion_tokens`)
+  - `name` goes on tool messages (never for Groq, which rejects it)
+  - `random_seed: 0`
+  - `parallel_tool_calls: false`, because two calls in one reply ended attempt 2's run 1
+  - `reasoning_effort` only if the chosen model needs it
+- **IDs:** the model's tool-call IDs are passed back unchanged. A missing ID gets a deterministic 9-character alphanumeric one; the docs set no format rule, and their example is 9 alphanumeric characters.
+- **Redaction:** error messages are stripped of the key, `org_…` IDs and UUIDs.
+- **Recorded per turn:** the response's `model` field, as `served_model`.
+- **Tests (offline: `httpx.MockTransport` plus the network guard):**
+  - the Mistral request shape, and the Groq shape as a regression
+  - a generated ID when one is missing
+  - redaction
+  - a missing key refused by name
+  - usage parsing, including absent usage
+  - the CLI's directory name
+  - a full agent run with model ID, date and `served_model` recorded and no key
+
+**c) Model choice.**
+- **The rule:** take the first model in this order that the console shows as free with function calling:
+  1. Mistral Large 4
+  2. Mistral Medium 3.5
+  3. Mistral Small 4, with `reasoning_effort: "none"`
+  4. Ministral 3 14B
+
+  No reasoning-branded models.
+- **Moving down the list (user addition):** if a model's free limits in the console are too low for **about 20 turns of about 6,000 tokens each** (about 120k tokens per run, at least 6,000 tokens per minute and one request every few seconds), move down. That check uses the numbers the user sends. **The choice and the reason are recorded here before any run.**
+- **A much stronger model could hide design flaws (user addition).** A capable model may compensate for weak context management or state design. Good results would then reflect the model, not the agent design. The write-up states which model was chosen and why, and reports this caveat with any result.
+- **Pinning:** the **dated API ID** is pinned, never a `-latest` alias. If no dated ID exists, the alias is used and recorded as a limitation. The model ID and the UTC date go into every trace and summary.
+- **If the model changes behind us:** each turn compares `served_model` with the pin.
+  - **Turn 1 of the smoke**, and `served_model` is a documented alias of the pin: a client issue. The fix is logged and the smoke repeated once.
+  - **Any other mismatch**, or a retired ID: the batch **stops**, provider-caused, and is reported.
+  - The model is never switched within a batch. A new model needs a new logged decision.
+
+**d) Data rules, enforced in code.**
+- **What may go to Mistral:** only the synthetic **dev** data (the smoke scenario and the 10 core scenarios with their twins). `--backend mistral` refuses:
+  - any data root other than the verified dev split
+  - any scenario outside the dev manifest
+  - any path under `data/heldout`
+
+  Each refusal is tested.
+- **Training opt-out:** the user switches it on **before the first request**. Dev scenarios may still end up in training data. They are synthetic, and that is accepted.
+- **Held-out data stays off Mistral.** That holds unless the user confirms the opt-out works on the free tier, and even then the user decides at M5.
+
+**e) Active time and rate limits.**
+- **The bound:** the 30-minute bound applies to **active time** (wall time minus the client's recorded waits). That is in place before the smoke run, so the smoke uses the core-run harness. Ollama is unaffected, because its waits are 0.
+- **Reporting:** both times are reported per run. The decision rule's wall-time thresholds apply to active time on this backend.
+- **The median threshold is not evidence (user addition).** **On hosted backends the decision rule's median active-time threshold always passes, so it is not evidence of quality.**
+- **429 and 5xx:**
+  - `retry-after` when the server sends it, otherwise 2, 4, 8 and 16 s, up to 4 retries
+  - a wait longer than 120 s is not slept through; it becomes a provider-caused stop
+  - in a core batch, a provider-caused stop **aborts the batch as incomplete** (`HarnessAbort`). It gets one rerun of the whole batch in a new attempt directory, after the reset
+- **Limits:** the console's limits go into `--rpm` and `--tpm` with a margin (for example `--rpm 50` for 1 request/s), recorded in every trace.
+
+**f) The smoke pair and the rule after it.**
+- **The pair:** one smoke pair on `sc-45fa1390ea` (original and twin), in a new directory, with prompt `d269d28d`, context revisions 1–3, the active-time bound and the client as in b).
+- **The six start checks:**
+  1. both runs end with a valid report (`sufficient_evidence`)
+  2. 0 outputs cut off at the cap
+  3. median completion under about 400 tokens
+  4. active time under 15 minutes per run, with total time reported too
+  5. no overflow: 0 context-length errors, every request ≤ 6,144 estimated, and (f) true
+  6. **no malformed-streak stop** (no model-caused `error`)
+- **Recorded, not gating:** whether the model calls `finish_gathering`, `finish_verifying` or `return_to_gather` itself; top-1; criterion (e).
+- **Check 6 has changed.** It replaces "uses `submit_hypotheses` and `finish_verifying`". That is the user's decision, made after six smoke runs in which no model called `finish_verifying`. It is **post-hoc**, and recorded as such.
+- **Exceptions:**
+  - a provider-caused smoke stop: one rerun after the reset, with run 2 only scored
+  - HTTP 400 on a request field: not counted, the fix logged, repeated once
+- **If all six pass:** the 12 core runs follow (the user runs them). The decision rule applies as written, on active time, **whatever the accuracy**.
+- **If any check fails:** stop and report. Then C (the local instruct model with loop-issued transitions) is pre-registered separately before any run.
+
+**g) Not verified; the console or the smoke settles it.**
+- **The free-mode limits.** The figures 1 request/s, 500K tokens/min and 1B tokens/month were not on any official page read.
+- **Which models are free,** and their dated IDs.
+- **The training opt-out** on the free tier.
+- **No card, and phone verification.**
+- **Request details:** whether tool messages need `name`, the usage field names, `retry-after`, the error-body format, the `served_model` format, and whether `reasoning_effort: "none"` works.
+- **Never settled by either:** whether the opt-out actually prevents training.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

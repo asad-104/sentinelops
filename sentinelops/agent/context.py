@@ -179,6 +179,15 @@ class Exchange:
         return json.dumps(s, sort_keys=True)
 
 
+def latest_ranking(exchanges: list[Exchange]) -> int | None:
+    """Index of the latest accepted ``submit_hypotheses`` exchange, if any."""
+    for i in range(len(exchanges) - 1, -1, -1):
+        s = exchanges[i].summary
+        if s.get("tool") == "submit_hypotheses" and s.get("ok"):
+            return i
+    return None
+
+
 @dataclass(frozen=True)
 class Level:
     recent: int  # how many latest exchanges are shown in full
@@ -286,6 +295,10 @@ class ContextBuilder:
         if older:
             hidden = older if spec.compact_last is None else older[:-spec.compact_last]
             visible = older if spec.compact_last is None else older[-spec.compact_last:]
+            ranking = latest_ranking(older)  # context revision 2 (R1): the current ranking is never hidden
+            if spec.compact_last is not None and ranking is not None and ranking < len(hidden):
+                visible = [hidden[ranking], *visible]
+                hidden = hidden[:ranking] + hidden[ranking + 1:]
             lines = [prompt.DATA_HEADERS["compacted"]]
             if hidden and spec.compact_last is not None:
                 lines.append(json.dumps({"earlier_calls_not_shown": len(hidden)}))

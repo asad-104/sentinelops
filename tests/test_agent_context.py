@@ -268,3 +268,50 @@ def test_estimator_never_undercounts_any_turn_of_the_m4_smoke_runs() -> None:
                     assert TokenEstimator().estimate(chars[e["turn"]]) >= e["prompt_tokens"], (path.name, e["turn"])
                     checked += 1
     assert checked >= 30
+
+
+def _exchange(i: int, tool: str = "search_logs", ok: bool = True, ranking: str = "") -> "Exchange":
+    from sentinelops.agent.context import Exchange
+    from sentinelops.llm.client import ToolCallRequest
+
+    arguments = {"hypotheses": [{"rank": 1, "service": ranking}]} if tool == "submit_hypotheses" else {"limit": i}
+    return Exchange(ToolCallRequest(f"c{i}", tool, json.dumps(arguments)), '{"ok": true}',
+                    {"tool": tool, "state": "VERIFY", "arguments": arguments, "ok": ok, "error": None if ok else "x",
+                     "total_matches": 0, "truncated": False, "new_ids": 0, "sample_ids": [], "excerpts": []})
+
+
+def _compacted(level: int, exchanges) -> list[str]:
+    builder = ContextBuilder(AgentBounds(), agent_tool_specs())
+    messages, _ = builder.render(level, SYSTEM_PROMPT, "DATA triage", Ledger(), exchanges, "STAGE")
+    block = next(m.content for m in messages if m.content.startswith("DATA earlier tool results"))
+    return block.splitlines()[1:]
+
+
+@pytest.mark.parametrize("level", [2, 3, 4])
+def test_the_latest_accepted_ranking_is_always_rendered(level: int) -> None:
+    exchanges = [_exchange(0), _exchange(1, "submit_hypotheses", ranking="auth"), *(_exchange(i) for i in range(2, 20))]
+    lines = _compacted(level, exchanges)
+    rankings = [line for line in lines if '"submit_hypotheses"' in line]
+    assert len(rankings) == 1 and '"auth"' in rankings[0]
+    shown_reads = sum('"search_logs"' in line for line in lines)
+    hidden = json.loads(lines[0])["earlier_calls_not_shown"]
+    recent = 1 if level < 4 else 0
+    assert hidden + shown_reads + 1 + recent == len(exchanges)  # every exchange is counted exactly once
+    assert lines.index(rankings[0]) == 1  # right after the count line, before the newer compacted calls
+
+
+def test_only_the_newest_accepted_ranking_is_pinned() -> None:
+    exchanges = [_exchange(1, "submit_hypotheses", ranking="old"), *(_exchange(i) for i in range(2, 10)),
+                 _exchange(10, "submit_hypotheses", ranking="new"),
+                 _exchange(11, "submit_hypotheses", ok=False, ranking="rejected"), *(_exchange(i) for i in range(12, 30))]
+    lines = _compacted(3, exchanges)
+    rankings = [line for line in lines if '"submit_hypotheses"' in line]
+    assert len(rankings) == 1 and '"new"' in rankings[0]
+
+
+def test_levels_without_a_compacted_cap_are_unchanged_by_the_pin() -> None:
+    exchanges = [_exchange(0), _exchange(1, "submit_hypotheses", ranking="auth"), *(_exchange(i) for i in range(2, 8))]
+    for level in (0, 1):
+        lines = _compacted(level, exchanges)
+        assert not any("earlier_calls_not_shown" in line for line in lines)
+        assert [json.loads(line)["tool"] for line in lines][:2] == ["search_logs", "submit_hypotheses"]  # in order

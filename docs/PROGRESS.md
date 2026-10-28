@@ -1133,6 +1133,27 @@ The user cannot spend money. The Haiku 5.5 proposal is **withdrawn**: no Anthrop
   - 386 tests passing; the real-data viewer check prints `OK`
 - **Not yet run:** the 2 hosted smoke runs are next, after the user signs up.
 
+## M4 stage B: hosted-run decisions (user-approved 2026-10-28, before any hosted run)
+**Approved:** Groq, `qwen/qwen3.8-27b`, `reasoning_effort: "none"`.
+
+1. **The provider's daily limit.**
+   - **When it applies:** run 2 (twin) ends because of Groq's daily limit, shown as the client's error "above the 120 s cap (likely a daily limit)" after a 429. That is a provider abort, not a model result.
+   - **The rerun:** one rerun **the next day** in a new attempt directory (`--attempt 2`), once only, like the hardware-abort rule.
+   - **Scoring:** the CLI reruns the pair. The gate then uses **run 1 from the first attempt and run 2 from the rerun**. The rerun's run 1 is reported but not scored, so run 1 does not get a second chance.
+   - **Start:** on a day with no earlier Groq use.
+2. **A rejected request field.**
+   - **When it applies:** a run's first turn fails with HTTP 400, and the provider's message attributes it to a request field (for example `reasoning_effort`).
+   - **What happens:** the smoke is **not counted**. The harness-only fix (leaving out or correcting that field) is logged here, and the smoke is repeated once in a new attempt directory.
+3. **The 30-minute bound on hosted runs.**
+   - **The rule:** on this backend, the 30-minute total bound (D3) applies to **active time**: wall time minus the rate-limit waits the client records (`wait_s` per turn). **Both active and total time are reported per run.**
+   - **The decision rule follows it:** the median wall-time thresholds (≤ 15 min for "works", > 25 min for "propose another backend") **apply to active time on this backend**. Adapted check 4 already uses active time.
+   - **Status:** the summary already reports both times (`elapsed_s`, `elapsed_ex_wait_s`). **The agent's bound itself still counts total wall time.** The harness change to count active time must be made, tested and committed **before any core run**.
+   - **Until then:** a smoke run whose total time passes 30 minutes would stop with `timeout` even if its active time is shorter. The expected smoke time is about 15–20 minutes per run. Such a stop would be reported as an effect of the bound, not a model result.
+4. **M5 cannot run on this free tier.**
+   - **The limits:** 8,000 tokens per minute and 200,000 per day.
+   - **M5's held-out comparison:** about 60 scenarios plus injection twins, for the agent and the single-pass baseline, at about 80k tokens per agent run. That is several million tokens, **about a month of daily limits**.
+   - **Consequence:** **M5 needs a separate plan, not decided.**
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

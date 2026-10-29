@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections.abc import Hashable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -214,23 +215,44 @@ MAX_LEVEL = len(LEVELS) - 1
 
 
 class TokenEstimator:
-    """Safeguard (a): chars / 3.1 x 1.15, and never below what the server's reported counts imply."""
+    """Safeguard (a): chars / 3.1 x 1.15, and never below what the server's reported counts imply for a request of
+    the same make-up.
+
+    Context revision 4 (2026-10-29, logged exception; motivated by the Ministral smoke): revision 3 sends different
+    tool lists per state, and one sticky ratio learned on a dense, tool-poor HYPOTHESIZE request overestimated the
+    full-spec VERIFY request until nothing fitted. So the lowest observed chars/token ratio is kept per tool list
+    sent (``key``). A tool list not seen yet is estimated with two ratios, both with the margin: the tool specs at
+    the base ratio and the rest at the lowest content ratio observed so far (content tokens = reported minus specs
+    at the base ratio). Never below the plain margin estimate. With one key throughout it is the old estimator."""
 
     def __init__(self, chars_per_token: float = CHARS_PER_TOKEN, margin: float = ESTIMATE_MARGIN) -> None:
         self.chars_per_token, self.margin = chars_per_token, margin
-        self.observed_chars_per_token: float | None = None
+        self.observed: dict[Hashable, float] = {}  # lowest chars/token reported, per tool list sent
+        self.content_chars_per_token: float | None = None  # lowest implied ratio of the non-spec part
 
-    def estimate(self, chars: int) -> int:
+    @property
+    def observed_chars_per_token(self) -> float | None:
+        """The lowest ratio over every tool list (what the old estimator applied to all requests)."""
+        return min(self.observed.values()) if self.observed else None
+
+    def estimate(self, chars: int, specs_chars: int = 0, key: Hashable = None) -> int:
         estimate = math.ceil(chars / self.chars_per_token * self.margin)
-        if self.observed_chars_per_token:
-            estimate = max(estimate, math.ceil(chars / self.observed_chars_per_token))
+        if key in self.observed:
+            return max(estimate, math.ceil(chars / self.observed[key]))
+        if self.content_chars_per_token and chars > specs_chars:
+            prior = specs_chars / self.chars_per_token + (chars - specs_chars) / self.content_chars_per_token
+            return max(estimate, math.ceil(prior * self.margin))
         return estimate
 
-    def observe(self, chars: int, reported_tokens: int | None) -> None:
+    def observe(self, chars: int, reported_tokens: int | None, specs_chars: int = 0, key: Hashable = None) -> None:
         if not reported_tokens or chars <= 0:
             return
         ratio = chars / reported_tokens
-        self.observed_chars_per_token = min(ratio, self.observed_chars_per_token or ratio)
+        self.observed[key] = min(ratio, self.observed.get(key, ratio))
+        content_tokens = reported_tokens - specs_chars / self.chars_per_token
+        if chars > specs_chars and content_tokens > 0:
+            content_ratio = (chars - specs_chars) / content_tokens
+            self.content_chars_per_token = min(content_ratio, self.content_chars_per_token or content_ratio)
 
 
 @dataclass(frozen=True)
@@ -263,6 +285,7 @@ class ContextBuilder:
         self.min_level = 0  # raised (sticky) by the server-count guard
         self.guard_triggers = 0
         self.last_level = 0
+        self.last_make_up: tuple[int, Hashable] = (0, None)  # (tool-spec chars, tool list) of the last request built
 
     def stage_block(self, state: State, instruction: str, used: int, notes: list[str],
                     progress: dict[str, int] | None = None) -> str:
@@ -320,12 +343,14 @@ class ContextBuilder:
     def build(self, system: str, triage: str, ledger: Ledger, exchanges: list[Exchange], stage: str,
               cited: set[str] = frozenset(), specs: list[ToolSpec] | None = None) -> BuiltRequest:
         sent = self.specs if specs is None else specs  # the estimate counts only the tools actually sent
+        key, sent_chars = tuple(s.name for s in sent), specs_chars(sent)  # context revision 4: calibrate per tool list
         for level in range(self.min_level, MAX_LEVEL + 1):
             messages, parts = self.render(level, system, triage, ledger, exchanges, stage, cited, sent)
             chars = request_chars(messages, sent)
-            estimate = self.estimator.estimate(chars)
+            estimate = self.estimator.estimate(chars, sent_chars, key)
             if estimate <= self.bounds.prompt_budget:
                 self.last_level = level
+                self.last_make_up = (sent_chars, key)
                 rendered = frozenset(i for m in messages for i in SOURCE_ID.findall(m.content))
                 return BuiltRequest(messages, chars, estimate, level, rendered, parts, sent)
         raise ContextExhausted(f"even compaction level {MAX_LEVEL} needs {estimate} estimated tokens "
@@ -333,7 +358,7 @@ class ContextBuilder:
 
     def on_reported(self, chars: int, reported_tokens: int | None) -> bool:
         """Safeguard (b). Returns True if the guard fired (the next turn compacts harder)."""
-        self.estimator.observe(chars, reported_tokens)
+        self.estimator.observe(chars, reported_tokens, *self.last_make_up)
         if reported_tokens is not None and reported_tokens > self.bounds.server_guard_fraction * self.bounds.num_ctx:
             self.min_level = min(MAX_LEVEL, max(self.min_level, self.last_level + 1))
             self.guard_triggers += 1

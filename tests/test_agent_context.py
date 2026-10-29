@@ -20,6 +20,7 @@ from sentinelops.agent.context import (
     Ledger,
     TokenEstimator,
     request_chars,
+    specs_chars,
 )
 from sentinelops.agent.machine import StateMachineInvestigator
 from sentinelops.agent.prompt import STATE_INSTRUCTIONS, SYSTEM_PROMPT
@@ -334,3 +335,114 @@ def test_ranking_and_report_requests_are_less_compacted_than_with_every_tool(tra
     assert len(revised) == len(control) >= 3  # two rankings (one after the return to GATHER) and the report
     for (turn, before, level), (turn_c, _, level_c) in zip(revised, control):
         assert turn == turn_c and level < level_c and level <= before
+
+
+# Context revision 4 (2026-10-29): the estimator keeps the lowest ratio per tool list sent, and estimates an unseen
+# tool list with two ratios (specs at the base ratio, content at the lowest observed content ratio), both with margin.
+
+class _OneRatio(TokenEstimator):
+    """The pre-revision-4 estimator: one sticky ratio for every request, whatever its make-up."""
+
+    def estimate(self, chars, specs_chars=0, key=None):
+        return super().estimate(chars, 0, None)
+
+    def observe(self, chars, reported_tokens, specs_chars=0, key=None):
+        return super().observe(chars, reported_tokens, 0, None)
+
+
+class _TwoRatioServer(WorstCaseClient):
+    """A server that counts tool specs at 3.55 and everything else at 2.31 characters per token (the two-point fit
+    from the Ministral smoke), for what it actually received."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.true_tokens: list[int] = []
+
+    def chat(self, messages, tools):
+        response = super().chat(messages, tools)
+        spec = specs_chars(tools)
+        true = math.ceil(spec / 3.55 + (request_chars(messages, tools) - spec) / 2.31)
+        self.true_tokens.append(true)
+        return replace(response, usage=Usage(true, 5))
+
+
+def test_a_two_ratio_server_breaks_the_old_estimator_and_not_revision_4(traces, monkeypatch) -> None:
+    def run(estimator_class):
+        monkeypatch.setattr(machine, "ContextBuilder",
+                            lambda bounds, specs: ContextBuilder(bounds, specs, estimator_class()))
+        server = _TwoRatioServer()
+        agent = StateMachineInvestigator(server)
+        try:
+            outcome = agent.investigate(CountingToolSet(WorstCaseTools(), budget=200), SCENARIO_ID).stop_reason
+        except InvestigationFailed as failed:
+            outcome = failed.stop_reason
+        contexts = [e for e in traces[-1].events if e["event"] == "context"]
+        return outcome, server.true_tokens, [c["estimated_tokens"] for c in contexts]
+
+    outcome, true, _ = run(_OneRatio)
+    assert outcome == "context_exhausted"  # the regression: the old failure, reproduced
+    assert max(true) > 6144  # and on the way it let a request over budget through (it undercounted)
+    outcome, true, estimates = run(TokenEstimator)
+    assert outcome == "sufficient_evidence" and max(true) <= 6144  # every request sent stays within the budget
+    # Known residual, recorded in PROGRESS: a tool list seen before but now carrying denser content (here the second
+    # HYPOTHESIZE, after the return to GATHER) can be underestimated slightly. Exactly one such request, under 2%.
+    under = [(i, (t - e) / t) for i, (t, e) in enumerate(zip(true, estimates), 1) if t > e]
+    assert len(under) == 1 and under[0][1] < 0.02
+
+
+def _replayed_runs():
+    """Every committed M4 smoke trace as (path, [(chars, tool-spec chars, reported tokens)]) in turn order."""
+    for path in sorted((REPO_ROOT / "eval/agent/generator-v5").glob("*/traces/*.jsonl")):
+        events = read_trace(path)
+        contexts = {e["turn"]: e for e in events if e["event"] == "context"}
+        turns = [(contexts[e["turn"]]["chars"], contexts[e["turn"]]["components"]["tool_specs"], e["prompt_tokens"])
+                 for e in events if e["event"] == "model" and e.get("prompt_tokens")]
+        if turns:
+            yield path, turns
+
+
+def test_revision_4_never_undercounts_any_turn_of_any_m4_smoke_run() -> None:
+    """Stateful replay of every committed M4 smoke trace (local Qwen thinking and instruct, Groq, Mistral): each
+    turn is estimated with what the estimator had learned so far, then the server's count is observed. The tool
+    list is keyed by its spec size (traces record the size, not the names; each list has a distinct size)."""
+    checked, backends = 0, set()
+    for path, turns in _replayed_runs():
+        estimator = TokenEstimator()
+        for chars, spec, reported in turns:
+            assert estimator.estimate(chars, spec, spec) >= reported, (path.parent.parent.name, chars, reported)
+            estimator.observe(chars, reported, spec, spec)
+            checked += 1
+        backends.add(path.parent.parent.name.split("-")[1])
+    assert checked >= 150 and backends == {"ollama", "groq", "mistral"}
+
+
+def test_the_one_ratio_estimator_undercounted_the_narrow_ministral_turns() -> None:
+    """What revision 4 also removes: the old estimator undercounted the first narrow (HYPOTHESIZE) request of both
+    Ministral runs by about 10-11% (estimate 4,652 against 5,232 reported in run 1)."""
+    under = []
+    for path, turns in _replayed_runs():
+        if "ministral" not in str(path):
+            continue
+        estimator = _OneRatio()
+        for chars, spec, reported in turns:
+            if estimator.estimate(chars) < reported:
+                under.append((chars, reported))
+            estimator.observe(chars, reported)
+    assert under == [(12538, 5232), (12599, 5170)]
+
+
+@pytest.mark.parametrize("run, level4_chars, level3_chars", [("01", 14854, 15983), ("02", 15538, 16718)])
+def test_the_ministral_verify_request_fits_with_revision_4(run: str, level4_chars: int, level3_chars: int) -> None:
+    """The failing VERIFY build of each Ministral run, sized by an offline rebuild at every level (full tool specs,
+    8,019 characters). After the run's recorded turns, the old estimator puts level 4 over the 6,144 budget;
+    revision 4 fits it (and run 1's level 3)."""
+    path = REPO_ROOT / f"eval/agent/generator-v5/smoke-mistral-ministral-14b-2512/traces/{run}-sc-45fa1390ea.jsonl"
+    turns = next(t for p, t in _replayed_runs() if p == path)
+    old, new = _OneRatio(), TokenEstimator()
+    for chars, spec, reported in turns:
+        old.observe(chars, reported)
+        new.observe(chars, reported, spec, spec)
+    assert old.estimate(level4_chars) > 6144
+    assert new.estimate(level4_chars, 8019, 8019) <= 6144
+    if run == "01":
+        assert new.estimate(level3_chars, 8019, 8019) <= 6144

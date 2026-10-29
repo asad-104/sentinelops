@@ -421,7 +421,7 @@ def test_the_one_ratio_estimator_undercounted_the_narrow_ministral_turns() -> No
     Ministral runs by about 10-11% (estimate 4,652 against 5,232 reported in run 1)."""
     under = []
     for path, turns in _replayed_runs():
-        if "ministral" not in str(path):
+        if path.parent.parent.name != "smoke-mistral-ministral-14b-2512":  # attempt 1 only (the failing pair)
             continue
         estimator = _OneRatio()
         for chars, spec, reported in turns:

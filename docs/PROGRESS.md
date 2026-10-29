@@ -1490,6 +1490,52 @@ Each refusal is recorded.
 
 **The rerun (the one pair of this exception):** `ministral-14b-2512`, `--rpm 25 --tpm 750000 --attempt 2`, writing to `smoke-mistral-ministral-14b-2512-attempt2/`.
 
+## M4 stage B: Ministral smoke attempt 2, the gate passes (run 2026-10-29; outputs committed with this entry)
+**Configuration:** `ministral-14b-2512`, code `b969b0a`, `--rpm 25 --tpm 750000`, on `sc-45fa1390ea`, original and twin.
+
+| | Run 1 (original) | Run 2 (twin) |
+|---|---|---|
+| Stop | `sufficient_evidence` | `sufficient_evidence` |
+| Valid report | yes, no repair | yes, no repair |
+| Investigated | `yyyyyy` | `yyyyyy` |
+| Top-1 | `auth/certificate_expiry`, **correct** | `auth/certificate_expiry`, **correct** |
+| Tool calls / evidence calls | 24 / 10 | 22 / 9 |
+| Time | 244.4 s total, 154.4 s active, 90.0 s waits over 6 retries | 213.4 s total, 138.4 s active, 75.0 s waits over 4 retries |
+| Max level | 4 | 4 |
+| Max estimate / reported | 6,141 / 5,937 | 6,141 / 5,970 |
+
+**Transitions:**
+- **Harness:** GATHER → HYPOTHESIZE (change B's empty-calls move) and VERIFY → REPORT (the VERIFY cap of 8), in both runs.
+- **Model:** HYPOTHESIZE → VERIFY (`submit_hypotheses`, valid on the first try) and `submit_report`.
+- **Never called:** `finish_gathering`, `finish_verifying`, `return_to_gather`.
+- **Run 2's ranking changed at REPORT.** Its HYPOTHESIZE rank 1 was `orders/certificate_expiry`. The report put `auth/certificate_expiry` first, without a VERIFY re-rank.
+
+**Citations:** all real, and all rendered in the request (`claim_check`).
+
+**The six checks:** valid report, 0 cut-offs, median completion 82, active time under 15 min, no overflow (0 context-length errors, every request ≤ 6,144, (f) true), and no malformed-streak stop. **All six pass in both runs. Gate: pass.**
+
+**Retries:** all 10 were HTTP 429 **with no `retry-after` and no `x-ratelimit-*` headers**. Each succeeded after the 15 s backoff, one after 15 + 30 s. The real free-tier limit is still not visible.
+
+**Estimator:**
+- **Undercounts:** none in either run.
+- **Minimum headroom:** +1.2% (run 1, turn 9) and +2.1% (run 2, turn 8).
+- **The 90% guard:** never fired. The maximum reported count was 5,970, against 7,373.
+
+**Still unverified for this backend:**
+- chunked `content`: not exercised; `thinking_chars` was 0 on every turn
+- `reasoning_effort`: not sent
+- `retry-after` and the rate-limit headers: never sent
+
+**Tokens:** prompt 122,376 + 111,088; completion 3,040 + 2,762.
+
+**Outputs:** no key and no account identifier, scanned.
+
+**Next, as pre-registered:**
+- The 12 core runs follow (the user runs them), with the decision rule as written, on active time, whatever the accuracy.
+- **The user's approval is required first.**
+- The training opt-out status for the Large 3 attempt is still owed.
+
+
 
 
 

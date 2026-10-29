@@ -19,6 +19,7 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 - M3 pilot (dev only): `.venv/bin/python -m sentinelops.evaluation.pilot --backend mock` (writes `eval/pilot/`). `--backend ollama` only after stage B approval, with Streamlit stopped
 - M4 agent (dev only): `.venv/bin/python -m sentinelops.evaluation.agent_run --backend mock --data-root <tmp>/dev --manifest-dir <tmp>/manifests --out-root <tmp>` (mock refuses the core scenarios and `eval/agent/`). `--backend ollama` only in stage B, after approval
 - M4 hosted (dev only, after approval): `GROQ_API_KEY` set in the shell only, then `.venv/bin/python -m sentinelops.evaluation.agent_run --backend groq --smoke sc-45fa1390ea` (free tier; key never printed, traced or committed)
+- M4 Mistral (dev only, after approval): `MISTRAL_API_KEY` set in the shell only, then `.venv/bin/python -m sentinelops.evaluation.agent_run --backend mistral --model <pinned dated ID> --rpm <n> --tpm <n> --smoke sc-45fa1390ea` (held-out data is refused in code)
 - Viewer against real data: `.venv/bin/python scripts/check_viewer_real_data.py` (renders every page headlessly on `data/dev` and all of `eval/results`; must print `OK`)
 
 ## Invariants (enforced by tests; don't break them)
@@ -53,7 +54,7 @@ Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS
 - Done: **M3 stage A** (LLM adapter, mock, Ollama client untested against a server, tool loop, traces, crash-catching harness, pilot CLI, network guard, M3 viewer page; merged to `main`)
 - Done: **M3 complete** (stage B: attempt 1 aborted by the swap guard and recorded; attempt 2 completed 7 runs, rule verdict `local_feasible` with caveats; merged to `main`, tag `m3-complete`)
 - Done: **M4 stage A** (explicit-state agent, managed context with bounded ledger, metrics incl. criterion (e), agent CLI, M4 viewer page; approved)
-- In progress: **M4 stage B** on `m4-stage-b`. Local models failed the smoke gate (`qwen3:4b` thinking variant: both smoke runs; `qwen3:4b-instruct-2507-q4_K_M`: attempt 2 failed check 6 in both runs), so local work stopped. The paid hosted plan is withdrawn (no money). The free hosted plan is Groq `qwen/qwen3.8-27b` (`reasoning_effort: none`). Context revision 2 (R1, the ranking always rendered) and the OpenAI-compatible client (`--backend groq`) are done. NEXT: the 2 hosted smoke runs (user signup first); if they fail, propose loop-issued transitions with the local model. Prompt `d269d28d` (revision 2 of 2, the last); context revision 2
+- In progress: **M4 stage B** on `m4-stage-b`. The local gate failed (both local models) and the Groq gate failed (daily limit; no `finish_verifying`). Paid hosted is withdrawn. NEXT: Mistral free tier (pre-registered 2ea8fe3), with C (local model, loop-issued transitions) as the fallback. Done for it: context revision 3 (tool list per state), the 30-min bound on active time with the batch abort, and the Mistral client with the hosted dev-only data guard. Waiting on the user's console numbers (limits, free models with dated IDs, opt-out); then the model choice goes in PROGRESS, then one smoke pair. Prompt `d269d28d` (revision 2 of 2, the last); context revision 3
 
 ## Standing rules
 

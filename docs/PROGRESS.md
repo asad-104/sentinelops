@@ -1286,6 +1286,18 @@ Then the signup and run steps. The user sends the console numbers (limits, free 
 - **Request details:** whether tool messages need `name`, the usage field names, `retry-after`, the error-body format, the `served_model` format, and whether `reasoning_effort: "none"` works.
 - **Never settled by either:** whether the opt-out actually prevents training.
 
+**Done (2026-10-29), each with tests, each mechanism failing its test when disabled:**
+
+| Commit | What | Notes |
+|---|---|---|
+| 50d7a65 | **Context revision 3** | The worst-case fixtures now size requests from the tools actually sent. That is a one-line change to the acceptance test's independent check, and the fake server now counts only the tools sent; this was required, because the old fixtures assumed every tool was always sent. A paired worst-case test puts the narrow turns at level 2, against level 3 in the all-tools control. An offline replay of Groq run 1 puts its HYPOTHESIZE request at level 0 with certificate text, where it was level 3 with none; that shows what the model would see, not what it would answer |
+| 181d49d | **Active-time bound and batch abort** | `provider_caused` on the client error, `InvestigationFailed` and the stop event. The guard raises `HarnessAbort`, and the stopped run's trace is kept |
+| e656475 | **Mistral client** | Provider options; served-model pin; generated IDs; key, org and UUID redaction; pacing without usage; the hosted data guard in `agent_run` (both hosted backends); the `--backend mistral` CLI, which requires the pinned model and the console's limits |
+
+- **Prompt hash:** unchanged throughout (`d269d28d`).
+- **Tests:** 406 passing; the real-data viewer check prints `OK`.
+- **Next:** the user signs up and sends the console numbers. The model is then chosen and recorded here, by the rule in c), before the smoke pair.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

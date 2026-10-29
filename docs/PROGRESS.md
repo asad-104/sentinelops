@@ -1398,6 +1398,66 @@ Each refusal is recorded.
 
 **Found while checking (not yet proposed):** `git_commit()` in the run summary is read at the **end** of a run. A commit made during a run would be recorded as the run's code. It did not happen here.
 
+## M4 stage B: Mistral smoke on `ministral-14b-2512`, `context_exhausted` at the first VERIFY request (run 2026-10-29; outputs committed with this entry)
+**The run:**
+- **Configuration:** code `8ad0147` (the client before the three approved changes); `--rpm 25 --tpm 750000`; on `sc-45fa1390ea`, original and twin.
+- **Both runs** reached HYPOTHESIZE through change B's empty-calls move (the harness). `submit_hypotheses` was **valid on the first try**:
+  - **Run 1:** rank 1 was `orders/certificate_expiry`, the right fault on the wrong service.
+  - **Run 2:** rank 1 was **`auth/certificate_expiry`, the correct pair**.
+- **Then** both stopped with `context_exhausted` while building the **first VERIFY request**, before any VERIFY model call: "even compaction level 4 needs 6199 estimated tokens" (run 1) and "6377" (run 2), against a budget of 6,144.
+- **Result:** no report, so investigated is `nyynny`. Times were 52.8 s and 60.8 s (52.3 s and 58.8 s active).
+- **Model calls:** no `finish_gathering` or other state tool called by the model.
+- **Outputs:** no key and no account identifier, scanned.
+- **The pair does not count as a smoke result.** Check 1 (valid report) failed in both runs. The other five checks passed.
+
+**Diagnosis (from rebuilding the failing request offline at every level).** **The sticky estimator ratio was applied across requests of different make-up.**
+- **How the estimator works:** it keeps the lowest characters-per-token ratio the server has ever implied, and never estimates below `chars / that ratio`. That path applies no margin, and it never resets.
+- **Where the low ratio came from:** the HYPOTHESIZE request carried one tool (context revision 3) and mostly dense, ID-heavy JSON. Mistral counted it at 2.40 characters per token (12,538 characters, 5,232 tokens). The full-spec GATHER turns ran 2.86–3.12.
+- **How it was applied:** that 2.40 was then applied to the full-spec VERIFY request.
+- **With the normal margin,** level 4 would have fit: 5,511 and 5,765 tokens.
+- **R1 is not involved.** The ranking was the latest call, and the numbers are identical with R1 switched off.
+- **The rankings were not unusually long:** 1,381 and 1,804 characters, against about 1,740 (Groq) and about 2,050 (local instruct).
+- **A two-point fit** puts Mistral at about 3.55 characters per token for the tool specs and about 2.31 for the rest. That puts the real level-4 VERIFY request at about 5,200 tokens. This is an estimate: the request was never sent.
+
+**Request shape confirmed for `ministral-14b-2512`:**
+- 31 successful responses with no 400s: `max_tokens`, `name` on tool messages, `random_seed`, `parallel_tool_calls: false`
+- `served_model` equal to the pin on every turn
+- usage present
+- 9-character alphanumeric call IDs
+
+**Still unverified:** chunked `content`, `reasoning_effort` and `retry-after`.
+
+## M4 stage B: logged exception, ONE Ministral rerun pair with an estimator fix (user-approved 2026-10-29, recorded before any code)
+**The exception:** **one** rerun pair on `ministral-14b-2512` (`sc-45fa1390ea`, original and twin), in a new attempt directory (`--attempt 2`), after the changes below.
+
+**Motivation:** the estimator fix is **motivated by this smoke scenario's runs**. It corrects an interaction between context revision 3 and the estimator, and applies to every backend.
+
+**Order of work:** each step is committed on its own, with tests.
+1. This entry, with the outputs.
+2. The approved client changes:
+   - (a) on any 429, record `retry-after` and `x-ratelimit-*` headers (names and values, redacted) and each attempt's status and time
+   - (b) without `retry-after`, back off 15, 30 and 60 s
+   - (c) the pacer reserves the output cap, counting each request as estimate + `max_tokens`
+3. The estimator fix, choosing between two options, with tests:
+   - **per make-up:** the lowest observed ratio is kept separately for each tool list sent
+   - **two ratios:** tool specs and content are calibrated separately, with the content ratio kept conservative, from the fit of about 3.55 and 2.31
+
+   **The safety on the 8 GB local backend is kept:** an undercount there can overflow the 8,192 context.
+
+**Tests for the estimator fix:**
+- the old failing case is still reproduced with the old estimator, as a regression check
+- the worst-case acceptance test
+- the "never undercounts" tests on all earlier smoke traces (Qwen local, Groq, and the Mistral runs)
+- a fake server with different ratios for specs and content
+- an offline replay of both Ministral runs to their VERIFY build, which must fit the budget. This is a check that the mechanism works, not tuning.
+
+**Limits:**
+- **One pair only.**
+- **If it fails again for a harness reason, stop and pre-register C** (the local instruct model with loop-issued transitions).
+- **Provider-caused stops follow the existing rules:** one rerun after the reset, a 429 on the first request means "not usable on this tier", and a 403 means the model is not on the tier.
+- **The gate stays as pre-registered:** the six checks, both runs. If the pair passes, the 12 core runs follow with the decision rule as written, whatever the accuracy.
+
+
 
 
 ## Baseline tuning log

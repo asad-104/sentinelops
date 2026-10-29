@@ -34,7 +34,10 @@ from sentinelops.llm.client import ChatMessage, LLMError, LLMResponse, ToolCallR
 
 ORG_ID = re.compile(r"\borg_[A-Za-z0-9]{6,}")
 UUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
-CHARS_PER_TOKEN_FOR_PACING = 3.1  # only when a response reports no usage (the agent estimator's ratio)
+# Change (c), 2026-10-29: the pacer reserves each attempt as its size estimate (the agent estimator's base ratio and
+# margin) plus the output cap, at send time, whether or not it succeeds; reported usage no longer drives pacing.
+CHARS_PER_TOKEN_FOR_PACING = 3.1
+PACING_MARGIN = 1.15
 # Change (b), 2026-10-29: without retry-after, wait 15, 30, then 60 s (and 60 s for any later retry), so quick
 # retries cannot keep a provider's window full (the Small 4 run's 2-16 s retries may have).
 BACKOFF_S = (15.0, 30.0, 60.0)
@@ -97,9 +100,8 @@ class OpenAICompatibleClient:
         self.max_retries, self.max_wait_s = max_retries, max_wait_s
         self.clock, self.sleep = clock, sleep
         self.date_utc = today or datetime.now(timezone.utc).date().isoformat()
-        self._window: deque[tuple[float, int]] = deque()  # (finish time, tokens) of successful requests
+        self._window: deque[tuple[float, int]] = deque()  # (send time, reserved tokens) of every attempt sent
         self._last_start: float | None = None
-        self._last_tokens = 0
         self._generated_ids = 0
         self._http = httpx.Client(base_url=self.provider.base_url, timeout=httpx.Timeout(timeout_s),
                                   transport=transport, follow_redirects=False,
@@ -116,7 +118,8 @@ class OpenAICompatibleClient:
                 "tool_message_name": self.provider.tool_message_name, "extra": self.extra,
                 "rate_limits": {"requests_per_minute": self.limits.requests_per_minute,
                                 "tokens_per_minute": self.limits.tokens_per_minute},
-                "max_retries": self.max_retries, "max_wait_s": self.max_wait_s, "key_env": self.provider.key_env}
+                "max_retries": self.max_retries, "max_wait_s": self.max_wait_s, "key_env": self.provider.key_env,
+                "pacing": "each attempt reserved as size estimate + max_tokens"}
 
     def request_body(self, messages: list[ChatMessage], tools: list[ToolSpec]) -> dict[str, Any]:
         return {
@@ -136,7 +139,8 @@ class OpenAICompatibleClient:
 
     def chat(self, messages: list[ChatMessage], tools: list[ToolSpec]) -> LLMResponse | LLMError:
         body = self.request_body(messages, tools)
-        waited = self._pace()
+        cost = self.reservation(body)
+        waited = self._pace(cost)
         retries, latency = 0, 0.0
         call_start = self.clock()
         log: list[dict[str, Any]] = []  # every attempt; kept on the result only if one met a 429 or 5xx
@@ -147,6 +151,7 @@ class OpenAICompatibleClient:
         while True:
             started = self.clock()
             self._last_start = started
+            self._window.append((started, cost))  # rejected attempts may count at the provider too
             try:
                 response = self._http.post("/chat/completions", json=body)
             except httpx.TimeoutException as exc:
@@ -186,16 +191,14 @@ class OpenAICompatibleClient:
                                 f"{self.model!r}", latency, retries, waited, provider_caused=True, attempts=attempts())
             if attempts():
                 result = replace(result, attempts=attempts())
-            if result.usage.prompt_tokens is None:  # no usage reported: pace on a size estimate instead
-                used = math.ceil(len(json.dumps(body)) / CHARS_PER_TOKEN_FOR_PACING)
-            else:
-                used = result.usage.prompt_tokens + (result.usage.completion_tokens or 0)
-            self._window.append((self.clock(), used))
-            self._last_tokens = used
             return result
 
-    def _pace(self) -> float:
-        """Sleep so the next request stays under the per-minute limits; returns the seconds slept."""
+    def reservation(self, body: dict[str, Any]) -> int:
+        """Tokens one attempt may cost against a per-minute limit: the request's size estimate plus the output cap."""
+        return math.ceil(len(json.dumps(body)) / CHARS_PER_TOKEN_FOR_PACING * PACING_MARGIN) + self.max_tokens
+
+    def _pace(self, cost: int) -> float:
+        """Sleep so the next attempt (``cost`` tokens) stays under the per-minute limits; returns the seconds slept."""
         waited = 0.0
         if self._last_start is not None:
             gap = 60.0 / self.limits.requests_per_minute - (self.clock() - self._last_start)
@@ -207,7 +210,7 @@ class OpenAICompatibleClient:
             while self._window and now - self._window[0][0] >= 60.0:
                 self._window.popleft()
             used = sum(tokens for _, tokens in self._window)
-            if not self._window or used + self._last_tokens <= self.limits.tokens_per_minute:
+            if not self._window or used + cost <= self.limits.tokens_per_minute:
                 break
             delay = self._window[0][0] + 60.0 - now
             self.sleep(delay)

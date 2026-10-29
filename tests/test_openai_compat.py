@@ -4,6 +4,7 @@ all offline with httpx.MockTransport (the network guard in conftest blocks real 
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import httpx
@@ -137,15 +138,27 @@ def test_timeouts_connection_errors_and_bad_bodies_are_values() -> None:
         [ChatMessage("user", "x")], [SPEC]).code == "http_status"  # redirects are not followed
 
 
-def test_pacing_keeps_under_the_token_and_request_limits() -> None:
-    client, t = _client(lambda r: _ok(prompt=5000, completion=100), limits=RateLimits(30, 8000))
+def test_pacing_reserves_the_output_cap_and_keeps_under_both_limits() -> None:
+    """Change (c): each attempt is reserved as size estimate + max_tokens (2,048) before it is sent."""
+    probe, _ = _client(lambda r: _ok())
+    cost = probe.reservation(probe.request_body([ChatMessage("user", "x")], [SPEC]))
+    assert cost == math.ceil(len(json.dumps(probe.request_body([ChatMessage("user", "x")], [SPEC]))) / 3.1 * 1.15) + 2048
+    # A limit that two prompts alone would fit but two reservations would not: the second attempt must wait.
+    client, t = _client(lambda r: _ok(prompt=10, completion=1), limits=RateLimits(30, 2 * cost - 1))
     assert client.chat([ChatMessage("user", "x")], [SPEC]).wait_s == 0.0
     second = client.chat([ChatMessage("user", "x")], [SPEC])
-    assert second.wait_s == pytest.approx(60.0)  # 5,100 + 5,100 > 8,000: wait for the window to clear
+    assert second.wait_s == pytest.approx(60.0)  # reported usage (11 tokens) is ignored; the reservation counts
+    roomy, t = _client(lambda r: _ok(), limits=RateLimits(30, 10 * cost))
+    roomy.chat([ChatMessage("user", "x")], [SPEC])
     t.now += 1.0
-    client._window.clear()  # token window empty: only the 2 s request interval applies
-    third = client.chat([ChatMessage("user", "x")], [SPEC])
-    assert third.wait_s == pytest.approx(1.0)
+    assert roomy.chat([ChatMessage("user", "x")], [SPEC]).wait_s == pytest.approx(1.0)  # only the 2 s interval
+
+
+def test_rejected_attempts_are_reserved_too() -> None:
+    replies = [httpx.Response(429, headers={"retry-after": "1"}, text="x"), _ok()]
+    client, _ = _client(lambda r: replies.pop(0))
+    client.chat([ChatMessage("user", "x")], [SPEC])
+    assert len(client._window) == 2 and client._window[0][1] == client._window[1][1]
 
 
 def test_key_is_required_and_never_described_or_echoed() -> None:
@@ -321,11 +334,12 @@ def test_mistral_key_is_required_by_name() -> None:
     assert str(missing.value) == "MISTRAL_API_KEY is not set"
 
 
-def test_absent_usage_is_none_and_pacing_falls_back_to_a_size_estimate() -> None:
+def test_absent_usage_is_none_and_pacing_does_not_depend_on_it() -> None:
     client, _ = _mistral(lambda r: _ok(model=MISTRAL_MODEL, usage=False))
+    body = client.request_body([ChatMessage("user", "x" * 3100)], [SPEC])
     result = client.chat([ChatMessage("user", "x" * 3100)], [SPEC])
     assert result.usage.prompt_tokens is None and result.usage.completion_tokens is None
-    assert client._window[-1][1] >= 1000  # about 3,100 characters / 3.1, not zero
+    assert client._window[-1][1] == client.reservation(body) > 2048 + 1000
 
 
 def test_a_different_served_model_stops_the_run_as_provider_caused() -> None:

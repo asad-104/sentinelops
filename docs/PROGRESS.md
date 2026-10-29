@@ -1369,6 +1369,11 @@ Each refusal is recorded.
 1. 401 and 403 become provider-caused, so the batch aborts at once.
 2. `content` returned as a list of chunks is handled.
 
+**Done (2026-10-29):**
+- **ee04309:** 401 and 403 are provider-caused. A test replays attempt 1's exact 403 body through `run_agent` and gets `HarnessAbort` after 1 request.
+- **f6a1631:** chunked `content` is handled. Text chunks are joined, thinking chunks are counted in `thinking_chars`, and a plain string is unchanged. **This is verified only against mock responses written from Mistral's reasoning docs, not against the real API.**
+- **Tests:** 410 passing; the real-data viewer check prints `OK`. Prompt hash unchanged (`d269d28d`).
+
 
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.

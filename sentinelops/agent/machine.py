@@ -60,9 +60,9 @@ TRACE_TEXT_CAP = 4000
 
 
 class _Stop(Exception):
-    def __init__(self, reason: StopReason, message: str) -> None:
+    def __init__(self, reason: StopReason, message: str, provider_caused: bool = False) -> None:
         super().__init__(message)
-        self.reason, self.message = reason, message
+        self.reason, self.message, self.provider_caused = reason, message, provider_caused
 
 
 def _describe(exc: ValidationError) -> str:
@@ -98,6 +98,7 @@ class _Run:
         self.o, self.tools, self.scenario_id, self.trace, self.b = owner, tools, scenario_id, trace, owner.bounds
         self.builder = ContextBuilder(self.b, owner.specs)
         self.started = owner.clock()
+        self.waited = 0.0  # seconds the client slept for provider rate limits (excluded from the time bound)
         self.state = State.TRIAGE
         self.ledger = Ledger()
         self.exchanges: list[Exchange] = []
@@ -118,6 +119,10 @@ class _Run:
 
     def elapsed(self) -> float:
         return self.o.clock() - self.started
+
+    def active(self) -> float:
+        """Wall time minus provider rate-limit waits (user decision 2026-10-28; 0 waits on local backends)."""
+        return self.elapsed() - self.waited
 
     def move(self, target: State, reason: str) -> None:
         if (self.state, target) not in TRANSITIONS:
@@ -142,14 +147,17 @@ class _Run:
             while True:
                 report = self.step()
                 if report is not None:
+                    elapsed = self.elapsed()
                     self.trace.event("stop", stop_reason="sufficient_evidence", message="", tool_calls=self.tool_calls,
-                                     turns=self.turns, elapsed_s=self.elapsed(), state=self.state.value,
-                                     report=report.model_dump(mode="json"))
+                                     turns=self.turns, elapsed_s=elapsed, active_s=elapsed - self.waited,
+                                     wait_s=self.waited, state=self.state.value, report=report.model_dump(mode="json"))
                     return report
         except _Stop as stop:
+            elapsed = self.elapsed()
             self.trace.event("stop", stop_reason=stop.reason, message=stop.message, tool_calls=self.tool_calls,
-                             turns=self.turns, elapsed_s=self.elapsed(), state=self.state.value, report=None)
-            raise InvestigationFailed(stop.reason, stop.message) from None
+                             turns=self.turns, elapsed_s=elapsed, active_s=elapsed - self.waited, wait_s=self.waited,
+                             state=self.state.value, report=None, provider_caused=stop.provider_caused)
+            raise InvestigationFailed(stop.reason, stop.message, provider_caused=stop.provider_caused) from None
 
     def triage(self) -> None:
         """Loop-issued (decision D8): the alert, the window and the dependency graph, as data."""
@@ -170,8 +178,8 @@ class _Run:
         self.move(State.GATHER, "triage done")
 
     def step(self) -> InvestigationReport | None:
-        if self.elapsed() >= self.b.total_timeout_s:
-            raise self.stop("timeout", f"total wall time of {self.b.total_timeout_s:.0f} s reached")
+        if self.active() >= self.b.total_timeout_s:
+            raise self.stop("timeout", f"total active time of {self.b.total_timeout_s:.0f} s reached")
         if self.turns >= self.b.max_turns:
             raise self.stop("budget_exhausted", f"model turn cap of {self.b.max_turns} reached")
         progress = {"evidence": self.gather_evidence_first_pass if self.returns == 0 else self.gather_evidence_second_pass,
@@ -196,6 +204,7 @@ class _Run:
             self.on_client_error(response)
             return None
         self.timeouts = self.client_errors = 0
+        self.waited += response.wait_s
         guard = self.builder.on_reported(request.chars, response.usage.prompt_tokens)
         self.trace_model(response, guard)
         if response.truncated:
@@ -215,7 +224,10 @@ class _Run:
     def on_client_error(self, error: LLMError) -> None:
         self.trace.event("model", turn=self.turns, state=self.state.value, error=error.code,
                          message=error.message[:TRACE_TEXT_CAP], latency_s=error.latency_s, retries=error.retries,
-                         wait_s=error.wait_s)
+                         wait_s=error.wait_s, provider_caused=error.provider_caused)
+        self.waited += error.wait_s
+        if error.provider_caused:  # a provider limit, not the model: no retry here; the harness aborts the batch
+            raise _Stop("error", f"provider-caused: {error.code}: {error.message}"[:2000], provider_caused=True)
         if error.code == "timeout":
             self.timeouts += 1
             unload = getattr(self.o.client, "unload", None)

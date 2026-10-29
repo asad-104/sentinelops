@@ -477,3 +477,56 @@ def test_a_tool_not_sent_is_still_rejected_as_wrong_state(toolset: ToolSet, run_
     assert hypothesize_tools == ["submit_hypotheses"]  # search_logs was not offered...
     rejected = [e for e in run_events[-1].events if e["event"] == "tool" and e["call_id"] == "x"]
     assert rejected[0]["error_code"] == "wrong_state"  # ...and calling it anyway is rejected, as before
+
+
+class _WaitingClient:
+    """Scripted reads that advance a fake clock by ``step_s`` per call, of which ``wait_s`` is reported as a
+    provider rate-limit wait, as a paced hosted client would."""
+
+    def __init__(self, wait_s: float, step_s: float) -> None:
+        self.wait_s, self.step_s, self.now, self.n = wait_s, step_s, 0.0, 0
+
+    def clock(self) -> float:
+        return self.now
+
+    def describe(self) -> dict:
+        return {"backend": "waiting"}
+
+    def chat(self, messages, tools):
+        self.now += self.step_s
+        self.n += 1
+        services = ["api-gateway", "auth", "orders", "payments"]
+        return replace(call("search_logs", {"service": services[self.n % 4], "limit": 3 + self.n}, f"w{self.n}"),
+                       wait_s=self.wait_s)
+
+
+def test_the_time_bound_counts_active_time_not_provider_waits(toolset: ToolSet, run_events) -> None:
+    """User decision 2026-10-28: the 30-minute bound applies to wall time minus provider waits."""
+    sid = toolset.call("get_window").items[0].scenario_id
+    bounds = replace(AgentBounds(), max_turns=6)
+    waiting = _WaitingClient(wait_s=1000.0, step_s=1001.0)  # 6 turns: 6,006 s wall, 6 s active
+    with pytest.raises(InvestigationFailed) as failed:
+        StateMachineInvestigator(waiting, clock=waiting.clock, bounds=bounds).investigate(CountingToolSet(toolset), sid)
+    stop = next(e for e in run_events[-1].events if e["event"] == "stop")
+    assert failed.value.stop_reason == "budget_exhausted" and "turn cap" in failed.value.message
+    assert stop["elapsed_s"] > 1800 and stop["active_s"] == pytest.approx(6.0) and stop["wait_s"] == 6000.0
+    control = _WaitingClient(wait_s=0.0, step_s=1001.0)  # the same wall time with no waits is all active
+    with pytest.raises(InvestigationFailed) as failed:
+        StateMachineInvestigator(control, clock=control.clock, bounds=bounds).investigate(CountingToolSet(toolset), sid)
+    stop = next(e for e in run_events[-1].events if e["event"] == "stop")
+    assert failed.value.stop_reason == "timeout" and "active time" in failed.value.message
+    assert stop["active_s"] == stop["elapsed_s"] >= 1800 and stop["wait_s"] == 0.0
+
+
+def test_a_provider_caused_error_stops_the_run_at_once_and_is_flagged(toolset: ToolSet, run_events) -> None:
+    limit = LLMError("http_status", "HTTP 429: provider asks to wait 445 s", wait_s=60.0, provider_caused=True)
+    agent, client, tools, sid = _investigate(toolset, [*_searches(4), limit, *_searches(3, 10)])
+    with pytest.raises(InvestigationFailed) as failed:
+        agent.investigate(tools, sid)
+    assert failed.value.stop_reason == "error" and failed.value.provider_caused
+    assert failed.value.message.startswith("provider-caused: http_status")
+    assert len(client.requests) == 5  # no retry by the loop after a provider-caused error
+    events = run_events[-1].events
+    stop = next(e for e in events if e["event"] == "stop")
+    assert stop["provider_caused"] is True and stop["wait_s"] == 60.0
+    assert [e["provider_caused"] for e in events if e["event"] == "model" and e.get("error")] == [True]

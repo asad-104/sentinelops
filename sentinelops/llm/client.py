@@ -68,6 +68,7 @@ class LLMError:
     latency_s: float = 0.0
     retries: int = 0
     wait_s: float = 0.0
+    provider_caused: bool = False  # a provider rate limit or outage, not the model: the batch stops as incomplete
 
 
 class LLMClient(Protocol):

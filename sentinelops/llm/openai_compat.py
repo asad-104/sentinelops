@@ -135,10 +135,10 @@ class OpenAICompatibleClient:
                 if delay > self.max_wait_s:
                     return LLMError("http_status", f"HTTP {status}: provider asks to wait {delay:.0f} s, above the "
                                     f"{self.max_wait_s:.0f} s cap (likely a daily limit): {self._clean(response)}",
-                                    latency, retries, waited)
+                                    latency, retries, waited, provider_caused=True)
                 if retries >= self.max_retries:
                     return LLMError("http_status", f"HTTP {status} after {retries} retries: {self._clean(response)}",
-                                    latency, retries, waited)
+                                    latency, retries, waited, provider_caused=True)
                 self.sleep(delay)
                 waited += delay
                 retries += 1

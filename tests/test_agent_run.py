@@ -189,3 +189,32 @@ def test_stage_block_shows_precondition_progress_and_the_reply_rule() -> None:
     verify = builder.stage_block(State.VERIFY, STATE_INSTRUCTIONS[State.VERIFY], 9, [], {"evidence": 4, "verify": 2})
     assert "VERIFY read calls so far: 2 of 8; finish_verifying needs at least 1." in verify
     assert "Evidence calls" not in verify
+
+
+def test_a_provider_caused_stop_aborts_the_batch_as_incomplete(generated, tmp_path: Path) -> None:
+    """Pre-registered 2026-10-29: a provider limit or outage ends the batch (HarnessAbort), it does not turn
+    every remaining run into an error row. The stopped run's own trace and row are kept."""
+    from sentinelops.llm.client import LLMError
+
+    class LimitedClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def describe(self):
+            return {"backend": "limited"}
+
+        def chat(self, messages, tools):
+            self.calls += 1
+            return LLMError("http_status", "HTTP 429: provider asks to wait 445 s", provider_caused=True)
+
+    data_root, manifest_dir, scenarios = generated
+    ids = [o.scenario_id for o, _ in scenarios]
+    client = LimitedClient()
+    with pytest.raises(HarnessAbort) as aborted:
+        run_agent(client, "fake", "limited", data_root, tmp_path, ids, manifest_dir, stats=_calm)
+    assert "provider-caused stop" in str(aborted.value) and client.calls == 1  # the next run never started
+    summary = json.loads((tmp_path / "summary.json").read_text())
+    assert summary["metadata"]["aborted"] and summary["rule"]["complete"] is False
+    assert len(summary["runs"]) == 1 and summary["runs"][0]["stop_reason"] == "error"
+    log = [json.loads(line) for line in (tmp_path / "run_log.jsonl").read_text().splitlines()]
+    assert [e["event"] for e in log] == ["batch_start", "run_start", "abort", "run_end"]

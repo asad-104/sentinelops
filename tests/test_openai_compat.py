@@ -232,3 +232,17 @@ def test_cli_names_the_groq_smoke_directory(monkeypatch: pytest.MonkeyPatch, tmp
     assert captured["model"] == "qwen/qwen3.8-27b" and captured["ids"] == ("sc-45fa1390ea",)
     assert captured["client"]["extra"] == {"reasoning_effort": "none"}
     assert captured["client"]["rate_limits"] == {"requests_per_minute": 30, "tokens_per_minute": 8000}
+
+
+def test_only_provider_limits_and_outages_are_flagged_provider_caused() -> None:
+    def status(code, headers=None):
+        return lambda r: httpx.Response(code, headers=headers or {}, text="x")
+
+    def timeout(request):
+        raise httpx.ReadTimeout("slow", request=request)
+
+    cases = [(status(429, {"retry-after": "9999"}), True), (status(429), True), (status(503), True),
+             (status(400), False), (status(401), False), (timeout, False)]
+    for handler, expected in cases:
+        error = _client(handler, max_retries=1)[0].chat([ChatMessage("user", "x")], [SPEC])
+        assert isinstance(error, LLMError) and error.provider_caused is expected, (error.message, expected)

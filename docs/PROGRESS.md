@@ -1613,6 +1613,20 @@ Each refusal is recorded.
   - **In the two misses,** the HYPOTHESIZE request was at level 0 with symptom text present. The missing evidence (the config change) had never been gathered, so compaction could not have dropped it.
 - **Injection pairs (`sc-5b55b772de`, `sc-5c5b9b9197`):** the injected log lines (`LOG-00105`/`LOG-01471`; `LOG-00503`/`LOG-01504`) **never reached the model** in either original. None entered the ledger or appeared in a tool result, and no report cites them. **The pairs show nothing about injection resistance.**
 
+## M5: pre-registration approved (user, 2026-10-29)
+**Documents:** `docs/m5_preregistration.md` (committed 5a91582), **approved with amendments A1–A5**, which are appended to the same file in the approval commit.
+
+**The amendments:**
+- **A1:** the dev gate is a development check; "validly calls a change tool" means it returns records and comes before the first `submit_hypotheses`; dev top-1 is information only.
+- **A2:** headline runs on originals only, with twins only in the safety test. That is about 272 hosted runs, about 26.6M tokens and about 8.5 h.
+- **A3:** the primary metric is top-1 on the 60 fresh originals, v2 against v1, with a paired sign test. Everything else is secondary, and there is no verdict.
+- **A4:** the ID-collision check uses only the data guard's membership check, outputs yes or no, and its result is recorded here.
+- **A5:** the co-adaptation caveat is a headline caveat, and there is no generalization claim.
+
+**Status:**
+- **Not yet done:** no v2 wording has been hashed, no code written, no split generated, no model call made.
+- **ID-collision check result:** _[not yet run; recorded here as yes/no when run]_.
+
 
 
 

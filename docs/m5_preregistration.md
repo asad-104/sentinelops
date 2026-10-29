@@ -220,3 +220,37 @@ About 24 pairs is a small sample.
 | Date | Change |
 |---|---|
 | 2026-10-29 | Written and committed for review; not yet approved |
+| 2026-10-29 | **Approved by the user with amendments A1–A5** (section below). The text above is unchanged from 5a91582; where they differ, the amendments govern |
+
+## Approval and amendments (user, 2026-10-29; the pre-registration as committed in 5a91582)
+**The pre-registration is approved with the five amendments below.** They govern wherever they differ from the text above. That text is left as committed, for the record.
+
+**A1. The dev gate is a development check, not a result.**
+- **Scope:** it runs on the same 22 dev scenarios that v2 is checked on, and reports nothing about M5's outcome.
+- **"Validly calls a change tool"** (G1) means a call to `list_deployments`, `list_config_changes` or `get_timeline` that **returns at least one record**, and that happens **before the run's first `submit_hypotheses`**.
+- **Dev top-1** for v1 and v2 is reported **as information only**. It plays no part in the gate.
+
+**A2. The headline runs use originals only, for both arms.** Twins appear only in the paired safety test (section 6). The single-pass and local baselines also run on the 60 originals only. Updated runs:
+
+| Stage | Runs | Tokens (estimate) | Wall time (estimate) |
+|---|---|---|---|
+| Dev gate (v1 and v2 on the 22 dev originals) | 44 | about 5.4M | about 1.7 h |
+| Headline agent (v1 and v2 on the 60 fresh originals) | 120 | about 14.8M | about 4.6 h |
+| Headline single-pass baseline (60 originals) | 60 | about 0.5M | about 0.3 h |
+| Headline local baselines (60 originals) | 60 per baseline | 0 | minutes, local |
+| Safety test (about 24 injected pairs, both arms, the M5 agent prompt) | about 48 | about 5.9M | about 1.9 h |
+| **Total hosted** | **about 272** | **about 26.6M** | **about 8.5 h** |
+
+- **Basis:** as before, the M4 core medians (about 123k tokens and 138 s wall time per agent run).
+- **Batches:** 6 slices of 10 fresh originals, alternating v1 and v2. That is 12 batches of 10 runs, about 23 min each.
+- **Analysis:** the headline twin-pair metric in section 7 is dropped, and injection is measured only in the safety test. Natural exposure in the headline originals is still reported, as a secondary count.
+
+**A3. The primary metric.** **Top-1 on the 60 fresh-split originals, v2 against v1, with an exact two-sided paired sign test** on the discordant pairs. It is reported as k/n per arm with Wilson 95% intervals, plus the discordant counts and the test's n.
+- **Everything else in section 7 is secondary.**
+- **There is no pass/fail verdict for M5.**
+
+**A4. The ID-collision check** for the fresh split uses **only the existing data guard's membership check**: is any fresh-split ID in the dev or held-out manifest's ID set?
+- **Output:** yes or no only, printing no IDs and no content.
+- **Recording:** the result is recorded in PROGRESS.md.
+
+**A5. The co-adaptation caveat is a headline caveat**, stated wherever M5's headline result is stated. The simulator generates config and deployment faults from change records, and v2 tells the agent to check changes; all of it has the same author. **The write-up makes no claim that the agent generalizes** beyond this simulator.

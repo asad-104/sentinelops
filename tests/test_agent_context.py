@@ -412,7 +412,7 @@ def test_revision_4_never_undercounts_any_turn_of_any_m4_smoke_run() -> None:
             assert estimator.estimate(chars, spec, spec) >= reported, (path.parent.parent.name, chars, reported)
             estimator.observe(chars, reported, spec, spec)
             checked += 1
-        backends.add(path.parent.parent.name.split("-")[1])
+        backends.add(path.parent.parent.name.removeprefix("smoke-").split("-")[0])  # core runs have no smoke- prefix
     assert checked >= 150 and backends == {"ollama", "groq", "mistral"}
 
 

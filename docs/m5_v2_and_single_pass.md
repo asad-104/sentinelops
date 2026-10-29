@@ -8,11 +8,11 @@ On approval, both items are implemented as written. Each is hashed and frozen be
 
 **What changes:** only `STATE_INSTRUCTIONS[State.GATHER]` in `sentinelops/agent/prompt.py`. That field is inside `prompt_sha256`, so v2 gets a new hash, and v1 stays `d269d28d`.
 
-**v1 (current, 152 characters):**
+**v1 (current, 160 characters):**
 
 > Gather evidence with the read tools. When you have enough to rank causes (at least 4 calls that returned new evidence on the first pass), call finish_gathering.
 
-**v2 (exact, 637 characters):**
+**v2 (exact, 681 characters):**
 
 > Gather evidence with the read tools. Among your first calls in this stage, check what changed during the incident window: call get_timeline with the window's start and end, or call list_deployments and list_config_changes for the same window. Treat each change on an affected service, or on a service it depends on, as a candidate cause, and support or rule it out with logs and metrics. Errors, latency and pool pressure are symptoms; name a cause only after you have checked what changed. Call only the tools offered in this request, by their exact names. When you have enough to rank causes (at least 4 calls that returned new evidence on the first pass), call finish_gathering.
 
@@ -22,7 +22,7 @@ On approval, both items are implemented as written. Each is hashed and frozen be
   - **If you prefer the memo's phrase,** say so before hashing.
 - **The tool names used** (`get_timeline`, `list_deployments`, `list_config_changes`, `finish_gathering`) are exactly the names offered in GATHER. The text names no scenario, fault or service.
 - **The window's start and end** are already in the triage data (`get_window`).
-- **The cost:** +485 characters, about **+180 estimated tokens on every GATHER request**, through the STAGE block. That means slightly more compaction in GATHER than v1, by about 3% of the 6,144 budget. It is a known cost of v2, not corrected.
+- **The cost:** +521 characters, about **+194 estimated tokens on every GATHER request**, through the STAGE block. That means slightly more compaction in GATHER than v1, by about 3% of the 6,144 budget. It is a known cost of v2, not corrected.
 - **Unchanged:** the system prompt, the other state instructions, the tool descriptions, the STAGE template, the harness notes, the bounds and the context revisions.
 
 ## b. The single-pass baseline

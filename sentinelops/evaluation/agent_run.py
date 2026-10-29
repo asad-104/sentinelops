@@ -136,22 +136,31 @@ def run_rows(trace_dir: Path, data_root: Path, num_ctx: int) -> list[dict[str, A
     return rows
 
 
-def apply_agent_rule(rows: list[dict[str, Any]], complete: bool) -> dict[str, Any]:
+def apply_agent_rule(rows: list[dict[str, Any]], complete: bool, *, active_time: bool = False) -> dict[str, Any]:
     """The pre-registered M4 decision rule over the original (non-twin) runs. Server-log overflow evidence
-    (stage B) is applied on top in the write-up and overrides the trace-based overflow count."""
+    (stage B) is applied on top in the write-up and overrides the trace-based overflow count.
+
+    ``active_time`` (hosted backends, user decision 2026-10-28/29): the median-time thresholds apply to active time
+    (wall time minus the provider's rate-limit waits). On hosted backends that threshold always passes, so it is
+    not evidence of quality. Local results are computed exactly as before."""
     core = [r for r in rows if r["variant"] == "original"]
     inv = sum(r["investigated"] for r in core)
     valid = sum(r["report_valid"] for r in core)
     overflows = sum(not r["investigated_f_no_overflow"] for r in core)
     walls = [r["elapsed_s"] for r in core if r["elapsed_s"] is not None]
-    median = statistics.median(walls) if walls else None
+    times = [r["elapsed_ex_wait_s"] for r in core if r.get("elapsed_ex_wait_s") is not None] if active_time else walls
+    median = statistics.median(times) if times else None
     works = inv >= 6 and valid >= 8 and overflows == 0 and median is not None and median <= 900
     hosted = inv <= 3 or overflows > 0 or (median is not None and median > 1500)
-    return {"n": len(core), "investigated": inv, "valid_reports": valid, "trace_overflow_runs": overflows,
-            "median_wall_s": median, "max_wall_s": max(walls, default=None), "complete": complete,
-            "budgets": {"agent": 40, "rule_baseline": 52},
+    rule = {"n": len(core), "investigated": inv, "valid_reports": valid, "trace_overflow_runs": overflows,
+            "median_wall_s": statistics.median(walls) if walls else None, "max_wall_s": max(walls, default=None),
+            "complete": complete, "budgets": {"agent": 40, "rule_baseline": 52},
             "verdict": ("propose_hosted" if not complete else
                         "works_locally" if works else "propose_hosted" if hosted else "in_between")}
+    if active_time:
+        rule.update(time_basis="active", median_active_s=median,
+                    time_note="hosted: the median active-time threshold always passes; not evidence of quality")
+    return rule
 
 
 def run_agent(client: LLMClient, backend: str, model: str, data_root: Path, out_dir: Path,
@@ -196,7 +205,7 @@ def run_agent(client: LLMClient, backend: str, model: str, data_root: Path, out_
                      "aborted": None if aborted is None else str(aborted), "unload_between_runs": unload is not None,
                      "budgets_note": "M4 agent budget 40 read-tool calls; rule baseline uses ~52"},
         "runs": rows,
-        "rule": apply_agent_rule(rows, complete),
+        "rule": apply_agent_rule(rows, complete, active_time=backend in HOSTED_BACKENDS),
     }
     if backend == "mock" or smoke:
         summary["rule"]["mechanics_check_only"] = summary["rule"].pop("verdict")
@@ -236,7 +245,10 @@ def summary_markdown(summary: dict[str, Any]) -> str:
             f"run {r['run']} {r['wait_s']:.1f} s over {r['retries']} retries, wall excluding waits "
             f"{r['elapsed_ex_wait_s']:.1f} s" for r in waits)]
     lines += ["", f"Rule: investigated {rule['investigated']}/{rule['n']}, valid reports {rule['valid_reports']}/{rule['n']}, "
-              f"trace overflow runs {rule['trace_overflow_runs']}, median wall {rule['median_wall_s']}. "
+              f"trace overflow runs {rule['trace_overflow_runs']}, median wall {rule['median_wall_s']}"
+              + (f", median active {rule['median_active_s']} (the time thresholds use active time; on hosted "
+                 "backends that always passes and is not evidence of quality)" if rule.get("time_basis") else "")
+              + ". "
               f"**Verdict: {rule['verdict']}**", ""]
     return "\n".join(lines)
 

@@ -235,3 +235,61 @@ def test_hosted_backends_receive_only_dev_data(generated, tmp_path: Path, backen
         run_agent(DemoAgentPolicy(), backend, "m", data_root, tmp_path / "o2", [*ids[:1], "sc-ffffffffff"],
                   manifest_dir, stats=_calm)
     assert not (tmp_path / "o1").exists() and not (tmp_path / "o2").exists()  # refused before anything ran
+
+
+def _old_apply_agent_rule(rows, complete):
+    """apply_agent_rule as it was before the hosted active-time change (2026-10-29), verbatim."""
+    import statistics
+    core = [r for r in rows if r["variant"] == "original"]
+    inv = sum(r["investigated"] for r in core)
+    valid = sum(r["report_valid"] for r in core)
+    overflows = sum(not r["investigated_f_no_overflow"] for r in core)
+    walls = [r["elapsed_s"] for r in core if r["elapsed_s"] is not None]
+    median = statistics.median(walls) if walls else None
+    works = inv >= 6 and valid >= 8 and overflows == 0 and median is not None and median <= 900
+    hosted = inv <= 3 or overflows > 0 or (median is not None and median > 1500)
+    return {"n": len(core), "investigated": inv, "valid_reports": valid, "trace_overflow_runs": overflows,
+            "median_wall_s": median, "max_wall_s": max(walls, default=None), "complete": complete,
+            "budgets": {"agent": 40, "rule_baseline": 52},
+            "verdict": ("propose_hosted" if not complete else
+                        "works_locally" if works else "propose_hosted" if hosted else "in_between")}
+
+
+def _rule_rows(walls, actives, investigated=True):
+    return [{"variant": "original", "investigated": investigated, "report_valid": True,
+             "investigated_f_no_overflow": True, "elapsed_s": w, "elapsed_ex_wait_s": a} for w, a in zip(walls, actives)]
+
+
+def test_local_rule_results_are_unchanged_by_the_hosted_active_time_option() -> None:
+    from sentinelops.evaluation.agent_run import apply_agent_rule
+
+    cases = [(_rule_rows([1000.0 + i for i in range(10)], [200.0] * 10), True),      # wall > 900, active small
+             (_rule_rows([300.0] * 10, [300.0] * 10), True),
+             (_rule_rows([2000.0] * 10, [100.0] * 10, investigated=False), True),
+             (_rule_rows([500.0, None, 700.0], [400.0, None, 600.0]), False)]
+    for rows, complete in cases:
+        assert apply_agent_rule(rows, complete) == _old_apply_agent_rule(rows, complete)  # no new keys either
+
+
+def test_hosted_rule_uses_active_time_and_says_it_is_not_evidence_of_quality() -> None:
+    from sentinelops.evaluation.agent_run import apply_agent_rule
+
+    rows = _rule_rows([1000.0 + i for i in range(10)], [200.0 + i for i in range(10)])
+    assert apply_agent_rule(rows, True)["verdict"] == "in_between"  # wall median 1004.5 s: not under 900
+    hosted = apply_agent_rule(rows, True, active_time=True)
+    assert hosted["verdict"] == "works_locally" and hosted["median_active_s"] == 204.5
+    assert hosted["median_wall_s"] == 1004.5 and hosted["time_basis"] == "active"
+    assert "not evidence of quality" in hosted["time_note"]
+
+
+def test_run_agent_applies_active_time_only_for_hosted_backends(generated, tmp_path: Path) -> None:
+    data_root, manifest_dir, scenarios = generated
+    ids = [o.scenario_id for o, _ in scenarios]
+    local = run_agent(DemoAgentPolicy(), "fake", "scripted", data_root, tmp_path / "local", ids, manifest_dir,
+                      stats=_calm)
+    hosted = run_agent(DemoAgentPolicy(), "mistral", "scripted", data_root, tmp_path / "hosted", ids, manifest_dir,
+                       stats=_calm)
+    assert "time_basis" not in local["rule"] and hosted["rule"]["time_basis"] == "active"
+    text = (tmp_path / "hosted" / "summary.md").read_text()
+    assert "median active" in text and "not evidence of quality" in text
+    assert "median active" not in (tmp_path / "local" / "summary.md").read_text()

@@ -105,12 +105,15 @@ def test_429_honours_retry_after_and_counts_the_retry() -> None:
     assert t.slept == [7.0]
 
 
-def test_5xx_backs_off_exponentially_then_gives_up_with_the_count() -> None:
-    client, t = _client(lambda r: httpx.Response(503, text="busy"), max_retries=3)
+def test_without_retry_after_backoff_is_15_30_60_then_gives_up_with_the_count() -> None:
+    client, t = _client(lambda r: httpx.Response(503, text="busy"))  # the default 4 retries
     result = client.chat([ChatMessage("user", "x")], [SPEC])
     assert isinstance(result, LLMError) and result.code == "http_status"
-    assert result.retries == 3 and "after 3 retries" in result.message
-    assert t.slept == [2.0, 4.0, 8.0] and result.wait_s == 14.0
+    assert result.retries == 4 and "after 4 retries" in result.message
+    assert t.slept == [15.0, 30.0, 60.0, 60.0] and result.wait_s == 165.0
+    limited, t = _client(lambda r: httpx.Response(429, text="limited"), max_retries=3)
+    limited.chat([ChatMessage("user", "x")], [SPEC])
+    assert t.slept == [15.0, 30.0, 60.0]  # the same schedule for a 429 that sends no retry-after
 
 
 def test_a_wait_above_the_cap_is_not_slept_through() -> None:

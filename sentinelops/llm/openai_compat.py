@@ -35,6 +35,9 @@ from sentinelops.llm.client import ChatMessage, LLMError, LLMResponse, ToolCallR
 ORG_ID = re.compile(r"\borg_[A-Za-z0-9]{6,}")
 UUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
 CHARS_PER_TOKEN_FOR_PACING = 3.1  # only when a response reports no usage (the agent estimator's ratio)
+# Change (b), 2026-10-29: without retry-after, wait 15, 30, then 60 s (and 60 s for any later retry), so quick
+# retries cannot keep a provider's window full (the Small 4 run's 2-16 s retries may have).
+BACKOFF_S = (15.0, 30.0, 60.0)
 RATE_LIMIT_HEADER = re.compile(r"^(retry-after|x-ratelimit-.*|ratelimit.*)$", re.IGNORECASE)
 
 
@@ -158,7 +161,7 @@ class OpenAICompatibleClient:
             if status == 429 or 500 <= status < 600:
                 delay = _retry_after(response)
                 if delay is None:
-                    delay = min(2.0 * 2 ** retries, self.max_wait_s)
+                    delay = min(BACKOFF_S[min(retries, len(BACKOFF_S) - 1)], self.max_wait_s)
                 if delay > self.max_wait_s:
                     return LLMError("http_status", f"HTTP {status}: provider asks to wait {delay:.0f} s, above the "
                                     f"{self.max_wait_s:.0f} s cap (likely a daily limit): {self._clean(response)}",

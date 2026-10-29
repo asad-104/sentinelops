@@ -233,6 +233,25 @@ def _message(m: ChatMessage, tool_name: bool = False) -> dict[str, Any]:
     return out
 
 
+def _content(content: Any) -> tuple[str, int]:
+    """The reply text and the length of any thinking text. Mistral's reasoning mode returns ``content`` as a list
+    of chunks: ``{"type": "text", "text": ...}`` is the reply and ``{"type": "thinking", "thinking": [text chunks]}``
+    is reasoning (docs, 2026-10-29). Written from the docs and checked only against mock responses."""
+    if not isinstance(content, list):
+        return content or "", 0
+    text, thinking = [], 0
+    for chunk in content:
+        if not isinstance(chunk, dict):
+            continue
+        if chunk.get("type") == "text":
+            text.append(str(chunk.get("text") or ""))
+        elif chunk.get("type") == "thinking":
+            inner = chunk.get("thinking")
+            parts = inner if isinstance(inner, list) else [{"text": inner}]
+            thinking += sum(len(str(p.get("text") or "")) for p in parts if isinstance(p, dict))
+    return "".join(text), thinking
+
+
 def _parse(data: dict[str, Any], latency: float, retries: int, waited: float,
            new_id: Callable[[], str]) -> LLMResponse:
     choice = data["choices"][0]
@@ -244,8 +263,9 @@ def _parse(data: dict[str, Any], latency: float, retries: int, waited: float,
         raw = arguments if isinstance(arguments, str) else json.dumps(arguments)
         calls.append(ToolCallRequest(tc.get("id") or new_id(), str(fn["name"]), raw))
     usage = data.get("usage") or {}
-    return LLMResponse(text=message.get("content") or "", tool_calls=tuple(calls),
+    text, thinking = _content(message.get("content"))
+    return LLMResponse(text=text, tool_calls=tuple(calls),
                        usage=Usage(usage.get("prompt_tokens"), usage.get("completion_tokens")), latency_s=latency,
-                       thinking_chars=len(message.get("reasoning") or ""), total_s=latency,
+                       thinking_chars=len(message.get("reasoning") or "") + thinking, total_s=latency,
                        truncated=choice.get("finish_reason") == "length", retries=retries, wait_s=waited,
                        served_model=data.get("model"))

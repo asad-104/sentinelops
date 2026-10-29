@@ -398,3 +398,58 @@ def test_a_tier_refusal_aborts_the_batch_after_one_request(tmp_path: Path) -> No
     assert len(requests) == 1 and "tier_not_allowed" in str(aborted.value)
     summary = json.loads((out / "summary.json").read_text())
     assert summary["metadata"]["aborted"] and len(summary["runs"]) == 1
+
+
+# Shapes from Mistral's reasoning docs (2026-10-29): with reasoning on, content is a list of chunks; with
+# reasoning_effort "none" it is a plain string. These mocks are written from the docs, not captured from the API.
+DOCS_THINKING = {"type": "thinking", "thinking": [{"type": "text", "text": "Let the first sister's age be 4..."}]}
+DOCS_TEXT = {"type": "text", "text": "John is 10 years old."}
+
+
+def _chunked(content, calls=()) -> httpx.Response:
+    reply = _ok(calls, model=MISTRAL_MODEL)
+    data = reply.json()
+    data["choices"][0]["message"]["content"] = content
+    return httpx.Response(200, json=data)
+
+
+def test_chunked_content_joins_text_and_counts_thinking() -> None:
+    result = _mistral(lambda r: _chunked([DOCS_THINKING, DOCS_TEXT]))[0].chat([ChatMessage("user", "x")], [SPEC])
+    assert isinstance(result, LLMResponse)
+    assert result.text == "John is 10 years old."
+    assert result.thinking_chars == len("Let the first sister's age be 4...")
+
+
+def test_chunked_content_edge_cases() -> None:
+    def text_and_thinking(content):
+        result = _mistral(lambda r: _chunked(content))[0].chat([ChatMessage("user", "x")], [SPEC])
+        return result.text, result.thinking_chars
+
+    assert text_and_thinking("plain string reply") == ("plain string reply", 0)  # reasoning_effort "none"
+    assert text_and_thinking([DOCS_TEXT, {"type": "text", "text": " More."}]) == ("John is 10 years old. More.", 0)
+    assert text_and_thinking([{"type": "image_url", "image_url": "x"}, "stray", DOCS_TEXT]) == (
+        "John is 10 years old.", 0)  # unknown chunk types and non-objects are ignored
+    assert text_and_thinking([{"type": "thinking", "thinking": "as a string"}]) == ("", len("as a string"))
+    assert text_and_thinking(None) == ("", 0)
+
+
+def test_a_chunked_reply_with_a_tool_call_still_drives_the_agent(toolset: ToolSet, tmp_path: Path) -> None:
+    """Thinking chunks are not the reply: the tool call is executed and the thinking is counted in the trace."""
+    groq_script = _scripted_handler(toolset)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        reply = groq_script(request)
+        if reply.status_code != 200:
+            return reply
+        data = reply.json()
+        data["model"] = MISTRAL_MODEL
+        data["choices"][0]["message"]["content"] = [DOCS_THINKING]
+        return httpx.Response(200, json=data)
+
+    client, _ = _mistral(handler)
+    report = StateMachineInvestigator(client, traces=TraceWriter(tmp_path)).investigate(
+        CountingToolSet(toolset), toolset.call("get_window").items[0].scenario_id)
+    assert report.stop_reason == "sufficient_evidence"
+    models = [json.loads(line) for p in tmp_path.glob("*.jsonl") for line in p.read_text().splitlines()]
+    models = [e for e in models if e["event"] == "model" and not e.get("error")]
+    assert all(e["text"] == "" and e["thinking_chars"] == len("Let the first sister's age be 4...") for e in models)

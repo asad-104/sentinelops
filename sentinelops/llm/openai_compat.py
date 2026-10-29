@@ -23,7 +23,7 @@ import re
 import time
 from collections import deque
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
@@ -35,6 +35,7 @@ from sentinelops.llm.client import ChatMessage, LLMError, LLMResponse, ToolCallR
 ORG_ID = re.compile(r"\borg_[A-Za-z0-9]{6,}")
 UUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
 CHARS_PER_TOKEN_FOR_PACING = 3.1  # only when a response reports no usage (the agent estimator's ratio)
+RATE_LIMIT_HEADER = re.compile(r"^(retry-after|x-ratelimit-.*|ratelimit.*)$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -134,17 +135,26 @@ class OpenAICompatibleClient:
         body = self.request_body(messages, tools)
         waited = self._pace()
         retries, latency = 0, 0.0
+        call_start = self.clock()
+        log: list[dict[str, Any]] = []  # every attempt; kept on the result only if one met a 429 or 5xx
+
+        def attempts() -> tuple[dict[str, Any], ...]:
+            return tuple(log) if any(a["status"] == 429 or a["status"] >= 500 for a in log) else ()
+
         while True:
             started = self.clock()
             self._last_start = started
             try:
                 response = self._http.post("/chat/completions", json=body)
             except httpx.TimeoutException as exc:
-                return LLMError("timeout", type(exc).__name__, self.clock() - started, retries, waited)
+                return LLMError("timeout", type(exc).__name__, self.clock() - started, retries, waited,
+                                attempts=attempts())
             except httpx.TransportError as exc:
-                return LLMError("connection", type(exc).__name__, self.clock() - started, retries, waited)
+                return LLMError("connection", type(exc).__name__, self.clock() - started, retries, waited,
+                                attempts=attempts())
             latency = self.clock() - started
             status = response.status_code
+            log.append(self._attempt(response, started - call_start))
             if status == 429 or 500 <= status < 600:
                 delay = _retry_after(response)
                 if delay is None:
@@ -152,25 +162,27 @@ class OpenAICompatibleClient:
                 if delay > self.max_wait_s:
                     return LLMError("http_status", f"HTTP {status}: provider asks to wait {delay:.0f} s, above the "
                                     f"{self.max_wait_s:.0f} s cap (likely a daily limit): {self._clean(response)}",
-                                    latency, retries, waited, provider_caused=True)
+                                    latency, retries, waited, provider_caused=True, attempts=attempts())
                 if retries >= self.max_retries:
                     return LLMError("http_status", f"HTTP {status} after {retries} retries: {self._clean(response)}",
-                                    latency, retries, waited, provider_caused=True)
+                                    latency, retries, waited, provider_caused=True, attempts=attempts())
                 self.sleep(delay)
                 waited += delay
                 retries += 1
                 continue
             if status != 200:  # 401/403 (bad key, model not on this tier) cannot succeed on retry: the batch stops
                 return LLMError("http_status", f"HTTP {status}: {self._clean(response)}", latency, retries, waited,
-                                provider_caused=status in (401, 403))
+                                provider_caused=status in (401, 403), attempts=attempts())
             try:
                 result = _parse(response.json(), latency, retries, waited, self._new_id)
             except (ValueError, KeyError, TypeError, AttributeError, IndexError) as exc:
                 return LLMError("bad_response", f"unparseable response ({type(exc).__name__})", latency, retries,
-                                waited)
+                                waited, attempts=attempts())
             if result.served_model is not None and result.served_model != self.model:
                 return LLMError("bad_response", f"served model {result.served_model!r} differs from the pinned "
-                                f"{self.model!r}", latency, retries, waited, provider_caused=True)
+                                f"{self.model!r}", latency, retries, waited, provider_caused=True, attempts=attempts())
+            if attempts():
+                result = replace(result, attempts=attempts())
             if result.usage.prompt_tokens is None:  # no usage reported: pace on a size estimate instead
                 used = math.ceil(len(json.dumps(body)) / CHARS_PER_TOKEN_FOR_PACING)
             else:
@@ -204,10 +216,21 @@ class OpenAICompatibleClient:
         self._generated_ids += 1
         return hashlib.sha256(f"{self.model}:{self._generated_ids}".encode()).hexdigest()[:9]
 
+    def _redact(self, text: str) -> str:
+        """Remove the key, organization IDs and UUIDs (account and workspace identifiers)."""
+        return UUID.sub("[redacted-id]", ORG_ID.sub("org_[redacted]", text.replace(self._key, "[redacted]")))
+
     def _clean(self, response: httpx.Response) -> str:
-        """A short error body without the key, organization IDs or UUIDs (account and workspace identifiers)."""
-        text = response.text.replace(self._key, "[redacted]")
-        return UUID.sub("[redacted-id]", ORG_ID.sub("org_[redacted]", text))[:300]
+        """A short, redacted error body."""
+        return self._redact(response.text)[:300]
+
+    def _attempt(self, response: httpx.Response, t_s: float) -> dict[str, Any]:
+        """One attempt for the trace: status, seconds since the call started, and on a 429 the rate-limit headers."""
+        record: dict[str, Any] = {"status": response.status_code, "t_s": round(t_s, 3)}
+        if response.status_code == 429:
+            record["headers"] = {name.lower(): self._redact(value)[:200] for name, value in response.headers.items()
+                                 if RATE_LIMIT_HEADER.match(name)}
+        return record
 
 
 def _retry_after(response: httpx.Response) -> float | None:

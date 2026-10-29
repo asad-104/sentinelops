@@ -60,6 +60,7 @@ class LLMResponse:
     retries: int = 0  # hosted backends: attempts repeated after a 429 or 5xx before this result
     wait_s: float = 0.0  # hosted backends: seconds slept for rate-limit pacing and backoff before this result
     served_model: str | None = None  # hosted backends: the model ID the server says answered
+    attempts: tuple[dict[str, Any], ...] = ()  # hosted: every HTTP attempt of a call that met a 429 or 5xx
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,7 @@ class LLMError:
     retries: int = 0
     wait_s: float = 0.0
     provider_caused: bool = False  # a provider rate limit or outage, not the model: the batch stops as incomplete
+    attempts: tuple[dict[str, Any], ...] = ()  # hosted: every HTTP attempt of a call that met a 429 or 5xx
 
 
 class LLMClient(Protocol):

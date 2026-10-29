@@ -453,3 +453,53 @@ def test_a_chunked_reply_with_a_tool_call_still_drives_the_agent(toolset: ToolSe
     models = [json.loads(line) for p in tmp_path.glob("*.jsonl") for line in p.read_text().splitlines()]
     models = [e for e in models if e["event"] == "model" and not e.get("error")]
     assert all(e["text"] == "" and e["thinking_chars"] == len("Let the first sister's age be 4...") for e in models)
+
+
+def test_a_429_records_each_attempt_and_the_rate_limit_headers_redacted() -> None:
+    """Change (a), 2026-10-29: on any 429 the result carries every attempt's status and time, and the 429s'
+    retry-after / x-ratelimit-* / ratelimit* headers; other headers are not kept, identifiers are redacted."""
+    limited = httpx.Response(429, text="Rate limit exceeded", headers={
+        "retry-after": "3", "x-ratelimit-remaining-tokens": "0", "x-ratelimit-reset-requests": "12s",
+        "RateLimit-Policy": "org_0fakeorg0id0for0tests;w=60", "x-request-id": "123e4567-e89b-12d3-a456-426614174000",
+        "set-cookie": "session=abc"})
+    replies = [limited, _ok(model=MISTRAL_MODEL)]
+    result, t = _mistral(lambda r: replies.pop(0))
+    result = result.chat([ChatMessage("user", "x")], [SPEC])
+    assert isinstance(result, LLMResponse) and result.retries == 1
+    first, second = result.attempts
+    assert (first["status"], second["status"]) == (429, 200) and second["t_s"] >= first["t_s"] + 3.0
+    assert first["headers"] == {"retry-after": "3", "x-ratelimit-remaining-tokens": "0",
+                                "x-ratelimit-reset-requests": "12s", "ratelimit-policy": "org_[redacted];w=60"}
+    assert "headers" not in second
+
+
+def test_attempts_are_empty_without_a_429_or_5xx_and_kept_on_the_final_error() -> None:
+    clean, _ = _mistral(lambda r: _ok(model=MISTRAL_MODEL))
+    assert clean.chat([ChatMessage("user", "x")], [SPEC]).attempts == ()
+    refused, _ = _mistral(lambda r: httpx.Response(403, text="tier"))
+    assert refused.chat([ChatMessage("user", "x")], [SPEC]).attempts == ()  # a single 403: nothing to diagnose
+    limited, _ = _mistral(lambda r: httpx.Response(429, text="limited"), max_retries=2)
+    error = limited.chat([ChatMessage("user", "x")], [SPEC])
+    assert isinstance(error, LLMError) and [a["status"] for a in error.attempts] == [429, 429, 429]
+    assert all(a["headers"] == {} for a in error.attempts)  # the Small 4 case: a 429 that sends no headers
+
+
+def test_the_trace_records_attempts(toolset: ToolSet, tmp_path: Path) -> None:
+    script = _scripted_handler(toolset)  # its first reply is a 429 with retry-after 3
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        reply = script(request)
+        if reply.status_code != 200:
+            return reply
+        data = reply.json()
+        data["model"] = MISTRAL_MODEL
+        return httpx.Response(200, json=data)
+
+    client, _ = _mistral(handler)
+    StateMachineInvestigator(client, traces=TraceWriter(tmp_path)).investigate(
+        CountingToolSet(toolset), toolset.call("get_window").items[0].scenario_id)
+    models = [json.loads(line) for p in tmp_path.glob("*.jsonl") for line in p.read_text().splitlines()]
+    models = [e for e in models if e["event"] == "model"]
+    assert [a["status"] for a in models[0]["attempts"]] == [429, 200]
+    assert models[0]["attempts"][0]["headers"] == {"retry-after": "3"}
+    assert all(e["attempts"] == [] for e in models[1:])

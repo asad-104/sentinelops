@@ -1625,7 +1625,26 @@ Each refusal is recorded.
 
 **Status:**
 - **Not yet done:** no v2 wording has been hashed, no code written, no split generated, no model call made.
-- **ID-collision check result:** _[not yet run; recorded here as yes/no when run]_.
+- **ID-collision check result:** _[not yet run. It runs inside the one-shot generator (`python -m sentinelops.evaluation.m5_fresh --generate`), so it has no result until the fresh split is generated, which waits for the user's go-ahead. Recorded here as yes/no when run.]_
+
+**Implementation (2026-10-29), in stages, each committed on its own with tests. No model call, nothing generated:**
+
+| Stage | Commit | What |
+|---|---|---|
+| Additions | c9997b1 | B1–B5 in the pre-registration |
+| B: the v2 wiring | 82056f8 | v2 hash **`0a788479eb8cb380f7fd737932e52f28c96d9463e250c6722ccbe31d91d7fc30`** (v1 is still `d269d28d`); `--prompt`, `--set dev-gate`, `--no-twins`; the dev gate report `evaluation.m5_gate` (G1–G4, plus dev top-1 and the compaction levels as information) |
+| C: the single-pass baseline | b9f05bc | **full** `2bf74a3f683b05653353f3018fe583dd886495f8a3a28b4a7df5885c4a9495da` and **no-timeline** `e4acb736ce5be6d76a4c4161c83cae2a6a32ad2d511da0d4fcc335a044d352a4`; the `evaluation.single_pass_run` runner |
+| D: the fresh-split generator | 87d0c39 | one-shot; prints only the count, the hash and the yes/no collision result; the hosted allowance for the fresh split |
+
+**Two test fixes, found on the way:**
+- **48854dc and 527810c:** two tests matched committed output directories too broadly. **The suite was red from f7c7224 to 48854dc, and from 3d3fdca to 527810c**, because the full suite was not rerun after outputs-only commits.
+- **From now on,** the full suite is rerun after every outputs commit.
+
+**Tests:** 450 passing; the real-data viewer check prints `OK`.
+
+**Remaining before the headline (not needed for the dev gate):**
+- a `--split m5fresh` run path, with the fixed slices, for the agent and the single-pass runner
+- the safety-test harness option
 
 
 

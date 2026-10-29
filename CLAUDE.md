@@ -55,6 +55,7 @@ Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS
 - Done: **M3 complete** (stage B: attempt 1 aborted by the swap guard and recorded; attempt 2 completed 7 runs, rule verdict `local_feasible` with caveats; merged to `main`, tag `m3-complete`)
 - Done: **M4 stage A** (explicit-state agent, managed context with bounded ledger, metrics incl. criterion (e), agent CLI, M4 viewer page; approved)
 - Done: **M4 stage B core runs** on `m4-stage-b` (Mistral `ministral-14b-2512`, outputs 3d3fdca): verdict `works_locally` (10/10 investigated and valid; top-1 8/10 originals, top-3 10/10). Hosted 14B; says nothing about the local 4B. Time thresholds on hosted are not evidence of quality. **Core results are consumed: no prompt, code or rule changes aimed at improving them.** Next: the M4 write-up with its caveats (PROGRESS), then the M4 viewer render and the milestone wrap-up
+- In progress: **M5** (pre-registered: `docs/m5_preregistration.md`, approved with A1-A5 and B1-B5). Implemented and tested, nothing run or generated: v2 prompt `0a788479` (v1 `d269d28d`), the dev gate report, the single-pass baseline (full `2bf74a3f`, no-timeline `e4acb736`), the one-shot fresh-split generator. NEXT: the user runs the dev gate (v1 and v2 on the 22 dev originals), after a go-ahead
 
 ## Standing rules
 

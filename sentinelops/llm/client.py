@@ -59,6 +59,7 @@ class LLMResponse:
     truncated: bool = False  # generation stopped at the output-token cap (done_reason "length")
     retries: int = 0  # hosted backends: attempts repeated after a 429 or 5xx before this result
     wait_s: float = 0.0  # hosted backends: seconds slept for rate-limit pacing and backoff before this result
+    served_model: str | None = None  # hosted backends: the model ID the server says answered
 
 
 @dataclass(frozen=True)

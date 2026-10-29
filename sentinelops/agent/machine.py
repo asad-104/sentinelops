@@ -247,7 +247,8 @@ class _Run:
                          prompt_tokens=r.usage.prompt_tokens, completion_tokens=r.usage.completion_tokens,
                          prompt_eval_s=r.prompt_eval_s, load_s=r.load_s, total_s=r.total_s, truncated=r.truncated,
                          thinking_chars=r.thinking_chars, guard_fired=guard, text=r.text[:TRACE_TEXT_CAP],
-                         tool_calls=[c.name for c in r.tool_calls], retries=r.retries, wait_s=r.wait_s)
+                         tool_calls=[c.name for c in r.tool_calls], retries=r.retries, wait_s=r.wait_s,
+                         served_model=r.served_model)
 
     def count_malformed(self, why: str) -> None:
         self.malformed += 1

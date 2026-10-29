@@ -218,3 +218,20 @@ def test_a_provider_caused_stop_aborts_the_batch_as_incomplete(generated, tmp_pa
     assert len(summary["runs"]) == 1 and summary["runs"][0]["stop_reason"] == "error"
     log = [json.loads(line) for line in (tmp_path / "run_log.jsonl").read_text().splitlines()]
     assert [e["event"] for e in log] == ["batch_start", "run_start", "abort", "run_end"]
+
+
+@pytest.mark.parametrize("backend", ["mistral", "groq"])
+def test_hosted_backends_receive_only_dev_data(generated, tmp_path: Path, backend: str) -> None:
+    """Data rule, enforced in code (2026-10-29): no held-out root, no scenario outside the dev manifest."""
+    from sentinelops.evaluation.agent_run import Refused
+
+    data_root, manifest_dir, scenarios = generated
+    ids = [o.scenario_id for o, _ in scenarios]
+    heldout_root = tmp_path / "data" / "heldout"
+    heldout_root.mkdir(parents=True)
+    with pytest.raises(Refused, match="held-out"):
+        run_agent(DemoAgentPolicy(), backend, "m", heldout_root, tmp_path / "o1", ids, manifest_dir, stats=_calm)
+    with pytest.raises(Refused, match="dev scenarios only"):
+        run_agent(DemoAgentPolicy(), backend, "m", data_root, tmp_path / "o2", [*ids[:1], "sc-ffffffffff"],
+                  manifest_dir, stats=_calm)
+    assert not (tmp_path / "o1").exists() and not (tmp_path / "o2").exists()  # refused before anything ran

@@ -8,12 +8,16 @@ Every failure becomes an ``LLMError`` value. 429 and 5xx responses are retried w
 returned as an error, since it usually means a daily limit. A client-side pace keeps requests under
 the provider's per-minute request and token limits. Retries and every second slept are returned on
 the result, so the agent trace records them. The request shape follows the provider's documented
-OpenAI compatibility; it is checked against a real server only in the hosted smoke run.
+OpenAI compatibility; it is checked against a real server only in the hosted smoke run. Providers differ
+in a few request fields (``Provider``); everything else is shared. Each response's ``model`` field must
+equal the pinned model ID, otherwise the run stops as provider-caused (the model changed behind us).
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import os
 import re
 import time
@@ -29,6 +33,8 @@ import httpx
 from sentinelops.llm.client import ChatMessage, LLMError, LLMResponse, ToolCallRequest, ToolSpec, Usage
 
 ORG_ID = re.compile(r"\borg_[A-Za-z0-9]{6,}")
+UUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
+CHARS_PER_TOKEN_FOR_PACING = 3.1  # only when a response reports no usage (the agent estimator's ratio)
 
 
 @dataclass(frozen=True)
@@ -36,11 +42,18 @@ class Provider:
     name: str
     base_url: str
     key_env: str
+    max_tokens_field: str = "max_completion_tokens"  # the request field that caps the output
+    tool_message_name: bool = False  # send the tool's name on tool-result messages
+    defaults: tuple[tuple[str, Any], ...] = ()  # extra request fields this provider always gets
 
 
-# Only providers whose free tier needs no card (research 2026-10-28). Add one only with a logged decision.
+# Only providers whose free tier needs no card (research 2026-10-28/29). Add one only with a logged decision.
 PROVIDERS: dict[str, Provider] = {
-    "groq": Provider("groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY"),
+    "groq": Provider("groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY"),  # rejects messages[].name
+    # Pre-registered 2026-10-29: Mistral documents max_tokens only, includes name on tool messages in its
+    # example, has random_seed, and parallel_tool_calls false "forces the model to use single tool calling".
+    "mistral": Provider("mistral", "https://api.mistral.ai/v1", "MISTRAL_API_KEY", max_tokens_field="max_tokens",
+                        tool_message_name=True, defaults=(("random_seed", 0), ("parallel_tool_calls", False))),
 }
 
 
@@ -83,6 +96,7 @@ class OpenAICompatibleClient:
         self._window: deque[tuple[float, int]] = deque()  # (finish time, tokens) of successful requests
         self._last_start: float | None = None
         self._last_tokens = 0
+        self._generated_ids = 0
         self._http = httpx.Client(base_url=self.provider.base_url, timeout=httpx.Timeout(timeout_s),
                                   transport=transport, follow_redirects=False,
                                   headers={"Authorization": f"Bearer {self._key}"})
@@ -93,7 +107,9 @@ class OpenAICompatibleClient:
     def describe(self) -> dict[str, Any]:
         return {"backend": self.provider.name, "api": "openai-compatible", "host": self.host, "model": self.model,
                 "date_utc": self.date_utc, "timeout_s": self.timeout_s, "temperature": 0,
-                "max_completion_tokens": self.max_tokens, "extra": self.extra,
+                "max_completion_tokens": self.max_tokens, "max_tokens_field": self.provider.max_tokens_field,
+                "provider_defaults": dict(self.provider.defaults),
+                "tool_message_name": self.provider.tool_message_name, "extra": self.extra,
                 "rate_limits": {"requests_per_minute": self.limits.requests_per_minute,
                                 "tokens_per_minute": self.limits.tokens_per_minute},
                 "max_retries": self.max_retries, "max_wait_s": self.max_wait_s, "key_env": self.provider.key_env}
@@ -101,11 +117,12 @@ class OpenAICompatibleClient:
     def request_body(self, messages: list[ChatMessage], tools: list[ToolSpec]) -> dict[str, Any]:
         return {
             "model": self.model,
-            "messages": [_message(m) for m in messages],
+            "messages": [_message(m, self.provider.tool_message_name) for m in messages],
             "tools": [{"type": "function", "function": {"name": t.name, "description": t.description,
                                                         "parameters": t.parameters}} for t in tools],
             "temperature": 0,
-            "max_completion_tokens": self.max_tokens,
+            self.provider.max_tokens_field: self.max_tokens,
+            **dict(self.provider.defaults),
             **self.extra,
         }
 
@@ -146,11 +163,17 @@ class OpenAICompatibleClient:
             if status != 200:
                 return LLMError("http_status", f"HTTP {status}: {self._clean(response)}", latency, retries, waited)
             try:
-                result = _parse(response.json(), latency, retries, waited)
+                result = _parse(response.json(), latency, retries, waited, self._new_id)
             except (ValueError, KeyError, TypeError, AttributeError, IndexError) as exc:
                 return LLMError("bad_response", f"unparseable response ({type(exc).__name__})", latency, retries,
                                 waited)
-            used = (result.usage.prompt_tokens or 0) + (result.usage.completion_tokens or 0)
+            if result.served_model is not None and result.served_model != self.model:
+                return LLMError("bad_response", f"served model {result.served_model!r} differs from the pinned "
+                                f"{self.model!r}", latency, retries, waited, provider_caused=True)
+            if result.usage.prompt_tokens is None:  # no usage reported: pace on a size estimate instead
+                used = math.ceil(len(json.dumps(body)) / CHARS_PER_TOKEN_FOR_PACING)
+            else:
+                used = result.usage.prompt_tokens + (result.usage.completion_tokens or 0)
             self._window.append((self.clock(), used))
             self._last_tokens = used
             return result
@@ -175,9 +198,15 @@ class OpenAICompatibleClient:
             waited += delay
         return waited
 
+    def _new_id(self) -> str:
+        """A deterministic 9-character alphanumeric tool-call ID, for a response that omits one."""
+        self._generated_ids += 1
+        return hashlib.sha256(f"{self.model}:{self._generated_ids}".encode()).hexdigest()[:9]
+
     def _clean(self, response: httpx.Response) -> str:
-        """A short error body with the key and organization IDs removed (Groq's 429 names the organization)."""
-        return ORG_ID.sub("org_[redacted]", response.text.replace(self._key, "[redacted]"))[:300]
+        """A short error body without the key, organization IDs or UUIDs (account and workspace identifiers)."""
+        text = response.text.replace(self._key, "[redacted]")
+        return UUID.sub("[redacted-id]", ORG_ID.sub("org_[redacted]", text))[:300]
 
 
 def _retry_after(response: httpx.Response) -> float | None:
@@ -188,9 +217,12 @@ def _retry_after(response: httpx.Response) -> float | None:
         return None
 
 
-def _message(m: ChatMessage) -> dict[str, Any]:
+def _message(m: ChatMessage, tool_name: bool = False) -> dict[str, Any]:
     if m.role == "tool":
-        return {"role": "tool", "tool_call_id": m.tool_call_id or "", "content": m.content}
+        out = {"role": "tool", "tool_call_id": m.tool_call_id or "", "content": m.content}
+        if tool_name and m.tool_name:
+            out["name"] = m.tool_name
+        return out
     out: dict[str, Any] = {"role": m.role, "content": m.content}
     if m.tool_calls:
         out["tool_calls"] = [{"id": c.id, "type": "function", "function": {"name": c.name, "arguments": c.raw_arguments}}
@@ -200,17 +232,19 @@ def _message(m: ChatMessage) -> dict[str, Any]:
     return out
 
 
-def _parse(data: dict[str, Any], latency: float, retries: int, waited: float) -> LLMResponse:
+def _parse(data: dict[str, Any], latency: float, retries: int, waited: float,
+           new_id: Callable[[], str]) -> LLMResponse:
     choice = data["choices"][0]
     message = choice["message"]
     calls = []
-    for i, tc in enumerate(message.get("tool_calls") or []):
+    for tc in message.get("tool_calls") or []:
         fn = tc["function"]
         arguments = fn.get("arguments", "")
         raw = arguments if isinstance(arguments, str) else json.dumps(arguments)
-        calls.append(ToolCallRequest(tc.get("id") or f"call-{i}", str(fn["name"]), raw))
+        calls.append(ToolCallRequest(tc.get("id") or new_id(), str(fn["name"]), raw))
     usage = data.get("usage") or {}
     return LLMResponse(text=message.get("content") or "", tool_calls=tuple(calls),
                        usage=Usage(usage.get("prompt_tokens"), usage.get("completion_tokens")), latency_s=latency,
                        thinking_chars=len(message.get("reasoning") or ""), total_s=latency,
-                       truncated=choice.get("finish_reason") == "length", retries=retries, wait_s=waited)
+                       truncated=choice.get("finish_reason") == "length", retries=retries, wait_s=waited,
+                       served_model=data.get("model"))

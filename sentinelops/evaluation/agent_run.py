@@ -1,7 +1,10 @@
-"""M4 agent runs, dev only: ``python -m sentinelops.evaluation.agent_run --backend mock|ollama|groq``.
+"""M4 agent runs, dev only: ``python -m sentinelops.evaluation.agent_run --backend mock|ollama|groq|mistral``.
 
 - ``--backend groq`` (hosted free tier, decision 2026-10-28) behaves like ``ollama``: the key comes only from
   ``GROQ_API_KEY``; provider rate-limit waits are recorded per turn and summed per run.
+- ``--backend mistral`` (pre-registered 2026-10-29) is the same, with the key from ``MISTRAL_API_KEY``. The
+  pinned ``--model`` and the console's ``--rpm``/``--tpm`` are required. Hosted backends receive only the
+  verified dev split: no held-out root and no scenario outside the dev manifest (``check_hosted_target``).
 - ``--backend ollama`` (stage B only) runs the fixed 10 core scenarios (pre-registered 2026-10-23); the
   harness also runs the injection twins. ``--smoke ID`` runs one scenario outside the core set instead.
 - ``--backend mock`` runs every scenario in the manifest it is given, which must be a set generated in a
@@ -59,8 +62,12 @@ REAL_RESULTS = REPO_ROOT / "eval" / "agent"
 DEFAULT_OUT_ROOT = Path("eval/agent")
 
 
+HOSTED_BACKENDS = frozenset({"groq", "mistral"})
+
+
 class Refused(Exception):
-    """A run the pre-registration forbids (core scenarios with the mock, or mock output in eval/agent/)."""
+    """A run the pre-registration forbids (core scenarios with the mock, mock output in eval/agent/, or
+    anything but synthetic dev data sent to a hosted backend)."""
 
 
 def check_mock_target(scenario_ids: Sequence[str], out_dir: Path) -> None:
@@ -69,6 +76,17 @@ def check_mock_target(scenario_ids: Sequence[str], out_dir: Path) -> None:
         raise Refused(f"the mock backend must not run core scenarios ({len(core)} found); use a generated set")
     if out_dir.resolve().is_relative_to(REAL_RESULTS):
         raise Refused("mock traces must not be written under eval/agent/; use a temporary directory")
+
+
+def check_hosted_target(data_root: Path, scenario_ids: Sequence[str], manifest_dir: Path) -> None:
+    """Data rule (2026-10-29): only synthetic dev data goes to a hosted provider. The dev split itself is then
+    verified against its frozen manifest by ``run_agent``."""
+    if Split.HELDOUT.value in data_root.resolve().parts:
+        raise Refused("held-out data is never sent to a hosted backend")
+    dev = set(json.loads((manifest_dir / "dev.json").read_text(encoding="utf-8"))["scenario_ids"])
+    outside = sorted(set(scenario_ids) - dev)
+    if outside:
+        raise Refused(f"hosted backends receive dev scenarios only; {len(outside)} not in the dev manifest")
 
 
 def run_rows(trace_dir: Path, data_root: Path, num_ctx: int) -> list[dict[str, Any]]:
@@ -144,6 +162,8 @@ def run_agent(client: LLMClient, backend: str, model: str, data_root: Path, out_
               smoke: bool = False) -> dict[str, Any]:
     if backend == "mock":
         check_mock_target(scenario_ids, out_dir)
+    if backend in HOSTED_BACKENDS:
+        check_hosted_target(data_root, scenario_ids, manifest_dir)
     trace_dir = out_dir / "traces"
     if any(trace_dir.glob("*.jsonl")) or (out_dir / "run_log.jsonl").exists():
         raise OutputExists(f"{out_dir} already holds an attempt; use a new --attempt number")
@@ -224,11 +244,15 @@ def summary_markdown(summary: dict[str, Any]) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m sentinelops.evaluation.agent_run",
                                      description="M4 agent on the fixed dev set (ollama) or a generated set (mock).")
-    parser.add_argument("--backend", choices=("mock", "ollama", "groq"), required=True)
-    parser.add_argument("--model", help="default: qwen3:4b (ollama), qwen/qwen3.8-27b (groq)")
-    parser.add_argument("--reasoning-effort", default="none", help="groq only; sent as reasoning_effort")
-    parser.add_argument("--rpm", type=int, default=30, help="groq only: requests per minute to stay under")
-    parser.add_argument("--tpm", type=int, default=8000, help="groq only: tokens per minute to stay under")
+    parser.add_argument("--backend", choices=("mock", "ollama", "groq", "mistral"), required=True)
+    parser.add_argument("--model", help="default: qwen3:4b (ollama), qwen/qwen3.8-27b (groq); "
+                                        "mistral: required, the pinned dated model ID")
+    parser.add_argument("--reasoning-effort", help="hosted: sent as reasoning_effort (groq default: none; "
+                                                   "mistral: sent only if given)")
+    parser.add_argument("--rpm", type=int, help="hosted: requests per minute to stay under (groq default 30; "
+                                                "mistral: required, from the console)")
+    parser.add_argument("--tpm", type=int, help="hosted: tokens per minute to stay under (groq default 8000; "
+                                                "mistral: required, from the console)")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
     parser.add_argument("--data-root", type=Path, default=Path("data/dev"))
     parser.add_argument("--out-root", type=Path, default=DEFAULT_OUT_ROOT)
@@ -256,9 +280,18 @@ def main(argv: list[str] | None = None) -> int:
             ids = (args.smoke,) if args.smoke else CORE_SCENARIOS
             if args.backend == "groq":
                 model = args.model or "qwen/qwen3.8-27b"
-                client = OpenAICompatibleClient("groq", model, limits=RateLimits(args.rpm, args.tpm),
+                client = OpenAICompatibleClient("groq", model, limits=RateLimits(args.rpm or 30, args.tpm or 8000),
                                                 timeout_s=bounds.call_timeout_s, max_tokens=bounds.num_predict,
-                                                extra={"reasoning_effort": args.reasoning_effort})
+                                                extra={"reasoning_effort": args.reasoning_effort or "none"})
+            elif args.backend == "mistral":
+                if not (args.model and args.rpm and args.tpm):
+                    parser.error("--backend mistral needs --model (the pinned dated ID) and --rpm and --tpm "
+                                 "(from the console)")
+                model = args.model
+                extra = {"reasoning_effort": args.reasoning_effort} if args.reasoning_effort else {}
+                client = OpenAICompatibleClient("mistral", model, limits=RateLimits(args.rpm, args.tpm),
+                                                timeout_s=bounds.call_timeout_s, max_tokens=bounds.num_predict,
+                                                extra=extra)
             else:
                 model = args.model or "qwen3:4b"
                 client = OllamaClient(model, base_url=args.ollama_url, timeout_s=bounds.call_timeout_s,

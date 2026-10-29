@@ -40,15 +40,17 @@ class FakeTime:
         self.now += seconds
 
 
-def _ok(calls=(), content="", prompt=100, completion=10, finish="tool_calls", reasoning=None) -> httpx.Response:
+def _ok(calls=(), content="", prompt=100, completion=10, finish="tool_calls", reasoning=None,
+        model="qwen/qwen3.8-27b", ids=True, usage=True) -> httpx.Response:
     message = {"role": "assistant", "content": content,
-               "tool_calls": [{"id": f"call_{i}", "type": "function", "function": {"name": n, "arguments": a}}
-                              for i, (n, a) in enumerate(calls)] or None}
+               "tool_calls": [{**({"id": f"call_{i}"} if ids else {}), "type": "function",
+                               "function": {"name": n, "arguments": a}} for i, (n, a) in enumerate(calls)] or None}
     if reasoning is not None:
         message["reasoning"] = reasoning
-    return httpx.Response(200, json={"model": "qwen/qwen3.8-27b", "choices": [
-        {"index": 0, "message": message, "finish_reason": finish}],
-        "usage": {"prompt_tokens": prompt, "completion_tokens": completion}})
+    body = {"model": model, "choices": [{"index": 0, "message": message, "finish_reason": finish}]}
+    if usage:
+        body["usage"] = {"prompt_tokens": prompt, "completion_tokens": completion}
+    return httpx.Response(200, json=body)
 
 
 def _client(handler, time_: FakeTime | None = None, limits=RateLimits(1000, 10_000_000), **kwargs):
@@ -246,3 +248,130 @@ def test_only_provider_limits_and_outages_are_flagged_provider_caused() -> None:
     for handler, expected in cases:
         error = _client(handler, max_retries=1)[0].chat([ChatMessage("user", "x")], [SPEC])
         assert isinstance(error, LLMError) and error.provider_caused is expected, (error.message, expected)
+
+
+MISTRAL_MODEL = "mistral-medium-2604"  # a dated-ID shape for tests only; the real pin comes from the console
+MISTRAL_KEY = "mistral_test_secret_value_456"
+
+
+def _mistral(handler, time_: FakeTime | None = None, limits=RateLimits(1000, 10_000_000), **kwargs):
+    t = time_ or FakeTime()
+    return OpenAICompatibleClient("mistral", MISTRAL_MODEL, limits=limits, environ={"MISTRAL_API_KEY": MISTRAL_KEY},
+                                  transport=httpx.MockTransport(handler), clock=t.clock, sleep=t.sleep,
+                                  today="2026-10-29", **kwargs), t
+
+
+def test_mistral_request_shape() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return _ok([("search_logs", '{"limit": 2}')], model=MISTRAL_MODEL)
+
+    client, _ = _mistral(handler)
+    messages = [ChatMessage("system", "sys"),
+                ChatMessage("assistant", "", tool_calls=(ToolCallRequest("D681PevKs", "search_logs", '{"limit": 1}'),)),
+                ChatMessage("tool", '{"ok": true}', tool_name="search_logs", tool_call_id="D681PevKs")]
+    assert isinstance(client.chat(messages, [SPEC]), LLMResponse)
+    request = seen[0]
+    assert request.url == httpx.URL("https://api.mistral.ai/v1/chat/completions")
+    assert request.headers["authorization"] == f"Bearer {MISTRAL_KEY}"
+    body = json.loads(request.content)
+    assert body["max_tokens"] == 2048 and "max_completion_tokens" not in body
+    assert body["random_seed"] == 0 and body["parallel_tool_calls"] is False
+    assert "reasoning_effort" not in body and body["temperature"] == 0 and body["model"] == MISTRAL_MODEL
+    assert body["messages"][2] == {"role": "tool", "tool_call_id": "D681PevKs", "content": '{"ok": true}',
+                                   "name": "search_logs"}
+
+
+def test_groq_request_shape_is_unchanged_by_the_mistral_options() -> None:
+    seen: list[httpx.Request] = []
+    client, _ = _client(lambda r: (seen.append(r), _ok())[1])
+    client.chat([ChatMessage("tool", "{}", tool_name="search_logs", tool_call_id="c1")], [SPEC])
+    body = json.loads(seen[0].content)
+    assert body["max_completion_tokens"] == 2048 and "max_tokens" not in body
+    assert not {"random_seed", "parallel_tool_calls"} & set(body) and "name" not in body["messages"][0]
+
+
+def test_a_missing_tool_call_id_gets_a_deterministic_nine_character_id() -> None:
+    def run() -> list[str]:
+        client, _ = _mistral(lambda r: _ok([("search_logs", "{}"), ("get_alert", "{}")], model=MISTRAL_MODEL,
+                                           ids=False))
+        return [c.id for c in client.chat([ChatMessage("user", "x")], [SPEC]).tool_calls]
+
+    first = run()
+    assert first == run() and len(set(first)) == 2
+    assert all(len(i) == 9 and i.isalnum() for i in first)
+
+
+def test_errors_are_stripped_of_key_org_and_uuid_identifiers() -> None:
+    body = (f"bad key {MISTRAL_KEY} in org_0fakeorg0id0for0tests workspace "
+            "123e4567-e89b-12d3-a456-426614174000")
+    error = _mistral(lambda r: httpx.Response(401, text=body))[0].chat([ChatMessage("user", "x")], [SPEC])
+    assert MISTRAL_KEY not in error.message and "org_0fakeorg" not in error.message
+    assert "123e4567" not in error.message and "[redacted-id]" in error.message
+
+
+def test_mistral_key_is_required_by_name() -> None:
+    with pytest.raises(MissingKey) as missing:
+        OpenAICompatibleClient("mistral", MISTRAL_MODEL, limits=RateLimits(50, 100000), environ={"GROQ_API_KEY": KEY})
+    assert str(missing.value) == "MISTRAL_API_KEY is not set"
+
+
+def test_absent_usage_is_none_and_pacing_falls_back_to_a_size_estimate() -> None:
+    client, _ = _mistral(lambda r: _ok(model=MISTRAL_MODEL, usage=False))
+    result = client.chat([ChatMessage("user", "x" * 3100)], [SPEC])
+    assert result.usage.prompt_tokens is None and result.usage.completion_tokens is None
+    assert client._window[-1][1] >= 1000  # about 3,100 characters / 3.1, not zero
+
+
+def test_a_different_served_model_stops_the_run_as_provider_caused() -> None:
+    error = _mistral(lambda r: _ok(model="mistral-medium-2610"))[0].chat([ChatMessage("user", "x")], [SPEC])
+    assert isinstance(error, LLMError) and error.provider_caused and "differs from the pinned" in error.message
+    same = _mistral(lambda r: _ok(model=MISTRAL_MODEL))[0].chat([ChatMessage("user", "x")], [SPEC])
+    assert isinstance(same, LLMResponse) and same.served_model == MISTRAL_MODEL
+
+
+def test_full_mistral_agent_run_records_model_date_served_model_and_never_the_key(toolset: ToolSet,
+                                                                                    tmp_path: Path) -> None:
+    groq_script = _scripted_handler(toolset)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        reply = groq_script(request)
+        if reply.status_code != 200:
+            return reply
+        data = reply.json()
+        data["model"] = MISTRAL_MODEL
+        return httpx.Response(200, json=data)
+
+    client, _ = _mistral(handler)
+    report = StateMachineInvestigator(client, traces=TraceWriter(tmp_path)).investigate(
+        CountingToolSet(toolset), toolset.call("get_window").items[0].scenario_id)
+    assert report.stop_reason == "sufficient_evidence"
+    text = "".join(p.read_text() for p in tmp_path.glob("*.jsonl"))
+    assert MISTRAL_KEY not in text
+    events = [json.loads(line) for line in text.splitlines()]
+    assert events[0]["client"]["model"] == MISTRAL_MODEL and events[0]["client"]["date_utc"] == "2026-10-29"
+    assert events[0]["client"]["provider_defaults"] == {"random_seed": 0, "parallel_tool_calls": False}
+    models = [e for e in events if e["event"] == "model" and not e.get("error")]
+    assert models and all(e["served_model"] == MISTRAL_MODEL for e in models)
+
+
+def test_cli_mistral_needs_the_pinned_model_and_console_limits(monkeypatch: pytest.MonkeyPatch, capsys,
+                                                               tmp_path: Path) -> None:
+    monkeypatch.setenv("MISTRAL_API_KEY", MISTRAL_KEY)
+    with pytest.raises(SystemExit):
+        agent_run.main(["--backend", "mistral", "--smoke", "sc-45fa1390ea", "--quiet"])
+    assert "needs --model" in capsys.readouterr().err
+    captured = {}
+
+    def fake_run_agent(client, backend, model, data_root, out_dir, ids, *args, **kwargs):
+        captured.update(out_dir=out_dir, client=client.describe())
+        raise agent_run.OutputExists("stop here")
+
+    monkeypatch.setattr(agent_run, "run_agent", fake_run_agent)
+    assert agent_run.main(["--backend", "mistral", "--model", MISTRAL_MODEL, "--rpm", "50", "--tpm", "400000",
+                           "--smoke", "sc-45fa1390ea", "--quiet", "--out-root", str(tmp_path)]) == 2
+    assert captured["out_dir"] == tmp_path / "generator-v5" / f"smoke-mistral-{MISTRAL_MODEL}"
+    assert captured["client"]["rate_limits"] == {"requests_per_minute": 50, "tokens_per_minute": 400000}
+    assert captured["client"]["extra"] == {} and MISTRAL_KEY not in json.dumps(captured["client"])

@@ -1,0 +1,5 @@
+{"event": "batch_start", "free_disk_gb": 33.41, "pressure_level": 1, "swap_used_mb": 231.0}
+{"event": "run_start", "free_disk_gb": 33.41, "pressure_level": 1, "scenario_id": "sc-45fa1390ea", "swap_used_mb": 231.0}
+{"event": "abort", "free_disk_gb": 33.4, "pressure_level": 1, "reasons": ["provider-caused: http_status: HTTP 429 after 4 retries: {\"object\":\"error\",\"message\":\"Rate limit exceeded\",\"type\":\"rate_limited\",\"param\":null,\"code\":\"1300\",\"raw_status_code\":429}"], "scenario_id": "sc-45fa1390ea", "swap_used_mb": 231.0}
+{"event": "run_end", "free_disk_gb": 33.4, "pressure_level": 1, "scenario_id": "sc-45fa1390ea", "swap_used_mb": 231.0}
+{"error": null, "event": "unload", "free_disk_gb": 33.4, "pressure_level": 1, "scenario_id": "sc-45fa1390ea", "swap_used_mb": 231.0}

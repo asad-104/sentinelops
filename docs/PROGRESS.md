@@ -1374,6 +1374,31 @@ Each refusal is recorded.
 - **f6a1631:** chunked `content` is handled. Text chunks are joined, thinking chunks are counted in `thinking_chars`, and a plain string is unchanged. **This is verified only against mock responses written from Mistral's reasoning docs, not against the real API.**
 - **Tests:** 410 passing; the real-data viewer check prints `OK`. Prompt hash unchanged (`d269d28d`).
 
+## M4 stage B: Mistral smoke on `mistral-small-2603`, rate-limited on the first request (run 2026-10-29; outputs committed with this entry)
+**The run:**
+- **Configuration:** code `8ad0147`; `--reasoning-effort none --rpm 50 --tpm 16000`; on `sc-45fa1390ea`.
+- **What happened:** run 1's **first** model request (turn 1, GATHER, right after the loop-issued TRIAGE) was rejected and retried 4 times on our fallback schedule of 2, 4, 8 and 16 s. The waits total exactly 30.0 s, so **no `retry-after` was sent**.
+- **The final response:** `HTTP 429 {"message":"Rate limit exceeded","type":"rate_limited","code":"1300"}`.
+- **Result:** the batch aborted as a provider-caused stop after 32.97 s (2.97 s active), and **run 2 never started**.
+- **No headers recorded:** the client then kept no response headers, and no per-attempt status or time.
+- **No earlier traffic from us:** in the 60 s before the first 429 this run had sent nothing, and our pacing was never engaged.
+- **Ruled out:** the console's limits of 1 request per second and 20,000 tokens per minute.
+- **The cause is unknown.** It points to a limit the console doesn't show.
+- **The pair does not count.**
+- **Outputs:** no key and no account identifier, scanned.
+
+**Rule clarification (user, 2026-10-29):** **a 429 on the very first request counts as "not usable on this tier"**, and it triggers the pre-registered fallback. Small 4 is not rerun unless the Ministral run also fails.
+
+**Recorded neutrally:** the user launched `ministral-14b-2512` (`--rpm 25 --tpm 750000`) with the client at `8ad0147`, **before** the three client changes below. That run's summary records `git_commit 8ad0147`, clean (checked).
+
+**Client changes approved (user, 2026-10-29),** each committed on its own with tests:
+- (a) record `retry-after` and `x-ratelimit-*` headers, names and values redacted, plus each attempt's status and time, on any 429
+- (b) when no `retry-after` is sent, back off 15, 30 and 60 s
+- (c) the pacer reserves the output cap, counting each request as estimate + `max_tokens`
+
+**Found while checking (not yet proposed):** `git_commit()` in the run summary is read at the **end** of a run. A commit made during a run would be recorded as the run's code. It did not happen here.
+
+
 
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.

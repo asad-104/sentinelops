@@ -221,6 +221,7 @@ About 24 pairs is a small sample.
 |---|---|
 | 2026-10-29 | Written and committed for review; not yet approved |
 | 2026-10-29 | **Approved by the user with amendments A1–A5** (section below). The text above is unchanged from 5a91582; where they differ, the amendments govern |
+| 2026-10-29 | Additions B1–B5 (user-approved): v2 tool names confirmed, single-pass no-timeline arm, bundle contains tool data only, single-pass parameters frozen, compaction levels in the dev gate report |
 
 ## Approval and amendments (user, 2026-10-29; the pre-registration as committed in 5a91582)
 **The pre-registration is approved with the five amendments below.** They govern wherever they differ from the text above. That text is left as committed, for the record.
@@ -254,3 +255,28 @@ About 24 pairs is a small sample.
 - **Recording:** the result is recorded in PROGRESS.md.
 
 **A5. The co-adaptation caveat is a headline caveat**, stated wherever M5's headline result is stated. The simulator generates config and deployment faults from change records, and v2 tells the agent to check changes; all of it has the same author. **The write-up makes no claim that the agent generalizes** beyond this simulator.
+
+## Additions approved 2026-10-29 (with the v2 wording and the single-pass design in `docs/m5_v2_and_single_pass.md`)
+**B1. v2 wording, confirmed before hashing.**
+- **Tool identifiers:** the only snake_case identifiers in the approved v2 GATHER text are `get_timeline`, `list_deployments`, `list_config_changes` and `finish_gathering`. All four are real tool names, and `finish_gathering` is carried over unchanged from v1.
+- **No invented names:** no nonexistent tool name appears.
+- **Plain words** that are also parts of tool names ("gather", "logs", "metrics", "window") appear only as ordinary prose.
+- **The approved phrase** is "Among your first calls in this stage".
+
+**B2. A secondary arm: single-pass without the change timeline.**
+- **The arm:** the same as the single-pass baseline (the same model, settings, system prompt, validation and reductions), except that **block 4 (`get_timeline`) is omitted**.
+- **Freezing:** it is hashed and frozen like the main baseline, before its first model call, and never tuned.
+- **Runs:** it runs on the same 22 dev originals (mechanics only) and the same 60 fresh originals. That adds about 82 runs, about 0.5M tokens and about 0.5 h.
+- **Status:** secondary only. It shows how much of the single-pass baseline's result comes from seeing the changes.
+
+**B3. The bundle contains only what the tools return.** The single-pass bundle holds only data the read-only tools return, in the tools' own record format:
+- **Changes:** the `get_timeline` result items, unmodified.
+- **Logs:** `search_logs` items, with `message` cut to a prefix of at most 160 characters.
+- **Alert, window and dependencies:** their tool items.
+- **Metrics:** summary lines computed only from `get_metrics` items, in the agent ledger's series format.
+
+**No ground-truth field and no label-derived text** (tier, diagnosis, trigger, red herring, decoy, template or variant, injection metadata) is in it. A test checks this on generated scenarios.
+
+**B4. The single-pass parameters are frozen.** The slice count (6), the log caps (1 ERROR + 1 WARN per slice, messages at most 160 characters), the metric list and the reduction order are **frozen before the first call and never tuned**.
+
+**B5. The dev gate report includes the compaction levels.** For v1 and v2 on the 22 dev originals, the report gives the **distribution of compaction levels** over all requests, and at the HYPOTHESIZE and REPORT requests. This is reported, not gated.

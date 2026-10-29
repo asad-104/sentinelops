@@ -24,12 +24,16 @@ from sentinelops.simulator.faults import FaultType
 from sentinelops.simulator.generator import GENERATOR_VERSION, Scenario, generate_scenario
 from sentinelops.simulator.profiles import PROFILES, Mechanisms, Split, Tier
 
-SPLIT_SEEDS: dict[Split, int] = {Split.DEV: 1001, Split.HELDOUT: 2002}
+# M5 fresh split seed, by a rule written down before generating (docs/m5_preregistration.md section 4): the first 4
+# bytes, big-endian, of sha256("sentinelops:m5:fresh-split:v1").
+M5FRESH_SEED_RULE = "sentinelops:m5:fresh-split:v1"
+SPLIT_SEEDS: dict[Split, int] = {Split.DEV: 1001, Split.HELDOUT: 2002, Split.M5FRESH: 447518130}
 
 # Scenarios per fault type in each tier.
 TIER_COUNTS: dict[Split, dict[Tier, int]] = {
     Split.DEV: {Tier.STANDARD: 4, Tier.AMBIGUOUS: 2, Tier.MISSING_EVIDENCE: 2},
     Split.HELDOUT: {Tier.STANDARD: 6, Tier.AMBIGUOUS: 3, Tier.MISSING_EVIDENCE: 3},
+    Split.M5FRESH: {Tier.STANDARD: 6, Tier.AMBIGUOUS: 3, Tier.MISSING_EVIDENCE: 3},  # held-out's counts: 60
 }
 
 DEFAULT_MANIFEST_DIR = Path("eval/manifests")

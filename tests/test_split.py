@@ -22,7 +22,7 @@ from sentinelops.simulator.datasets import (
     load_manifest,
     write_split,
 )
-from sentinelops.simulator.profiles import DEV_PROFILE, HELDOUT_PROFILE, Split
+from sentinelops.simulator.profiles import DEV_PROFILE, FROZEN_SPLITS, HELDOUT_PROFILE, Split
 
 from conftest import REPO_ROOT
 
@@ -32,7 +32,7 @@ MANIFEST_DIR = REPO_ROOT / "eval" / "manifests"
 @pytest.fixture(scope="module")
 def splits(tmp_path_factory: pytest.TempPathFactory) -> dict[Split, tuple[list[Scenario], Path]]:
     result = {}
-    for split in Split:
+    for split in FROZEN_SPLITS:  # the M5 fresh split is never built by tests (generated once, by its command)
         root = tmp_path_factory.mktemp(split.value)
         scenarios = build_split(split)
         write_split(scenarios, root, build_injection_twins(split, scenarios))
@@ -49,7 +49,7 @@ def _trigger_lags(scenarios: list[Scenario]) -> list[timedelta]:
     return lags
 
 
-@pytest.mark.parametrize("split", list(Split))
+@pytest.mark.parametrize("split", FROZEN_SPLITS)
 def test_split_matches_frozen_manifest(splits: dict, split: Split) -> None:
     scenarios, root = splits[split]
     manifest = load_manifest(split, MANIFEST_DIR)
@@ -61,7 +61,7 @@ def test_split_matches_frozen_manifest(splits: dict, split: Split) -> None:
     assert manifest["n"] == len(scenarios)
 
 
-@pytest.mark.parametrize("split", list(Split))
+@pytest.mark.parametrize("split", FROZEN_SPLITS)
 def test_split_records_profile_and_has_balanced_cells(splits: dict, split: Split) -> None:
     scenarios, _ = splits[split]
     correct_split = all(gt.split is split for _, gt in scenarios)
@@ -106,7 +106,7 @@ def test_regeneration_is_byte_identical(splits: dict, tmp_path: Path) -> None:
     assert content_sha256(tmp_path) == content_sha256(root)
 
 
-@pytest.mark.parametrize("split", list(Split))
+@pytest.mark.parametrize("split", FROZEN_SPLITS)
 def test_every_frozen_scenario_is_solvable(splits: dict, split: Split) -> None:
     from test_tiers import _log_channel, _metric_channel
 

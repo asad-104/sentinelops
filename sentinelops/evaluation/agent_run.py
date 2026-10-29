@@ -84,15 +84,29 @@ def check_mock_target(scenario_ids: Sequence[str], out_dir: Path) -> None:
         raise Refused("mock traces must not be written under eval/agent/; use a temporary directory")
 
 
-def check_hosted_target(data_root: Path, scenario_ids: Sequence[str], manifest_dir: Path) -> None:
-    """Data rule (2026-10-29): only synthetic dev data goes to a hosted provider. The dev split itself is then
-    verified against its frozen manifest by ``run_agent``."""
-    if Split.HELDOUT.value in data_root.resolve().parts:
+def manifest_ids(split: Split, manifest_dir: Path) -> set[str]:
+    """The scenario IDs a frozen manifest lists (the data guard's membership set). Never printed."""
+    return set(json.loads((manifest_dir / f"{split.value}.json").read_text(encoding="utf-8"))["scenario_ids"])
+
+
+def check_hosted_target(data_root: Path, scenario_ids: Sequence[str], manifest_dir: Path,
+                        split: Split = Split.DEV) -> None:
+    """Data rule (2026-10-29): only synthetic dev data, and the M5 fresh split (pre-registered allowance), goes to a
+    hosted provider; held-out never does. The split itself is then verified against its frozen manifest."""
+    if Split.HELDOUT.value in data_root.resolve().parts or split is Split.HELDOUT:
         raise Refused("held-out data is never sent to a hosted backend")
-    dev = set(json.loads((manifest_dir / "dev.json").read_text(encoding="utf-8"))["scenario_ids"])
-    outside = sorted(set(scenario_ids) - dev)
+    if split not in (Split.DEV, Split.M5FRESH):
+        raise Refused(f"no hosted allowance for the {split.value} split")
+    outside = sorted(set(scenario_ids) - manifest_ids(split, manifest_dir))
     if outside:
-        raise Refused(f"hosted backends receive dev scenarios only; {len(outside)} not in the dev manifest")
+        raise Refused(f"hosted backends receive {split.value} scenarios only; {len(outside)} not in the "
+                      f"{split.value} manifest")
+
+
+def collides_with_frozen_splits(scenario_ids: Sequence[str], manifest_dir: Path) -> bool:
+    """A4 (2026-10-29): the fresh split's ID-collision check, using only the data guard's membership sets."""
+    ids = set(scenario_ids)
+    return any(ids & manifest_ids(split, manifest_dir) for split in (Split.DEV, Split.HELDOUT))
 
 
 def run_rows(trace_dir: Path, data_root: Path, num_ctx: int) -> list[dict[str, Any]]:

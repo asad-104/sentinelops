@@ -18,7 +18,7 @@ from sentinelops.evaluation.tables import full_report
 from sentinelops.scenario_files import dump_json
 from sentinelops.simulator.datasets import DEFAULT_MANIFEST_DIR
 from sentinelops.simulator.generator import GENERATOR_VERSION
-from sentinelops.simulator.profiles import Split
+from sentinelops.simulator.profiles import FROZEN_SPLITS, Split
 
 DEFAULT_RESULTS_ROOT = Path("eval/results")
 HELDOUT_RUN_LOG = Path("eval/heldout_runs.jsonl")
@@ -26,7 +26,7 @@ HELDOUT_RUN_LOG = Path("eval/heldout_runs.jsonl")
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m sentinelops.evaluation", description="Evaluate investigators.")
-    parser.add_argument("--split", type=Split, choices=list(Split), required=True)
+    parser.add_argument("--split", type=Split, choices=FROZEN_SPLITS, required=True)
     parser.add_argument("--investigator", choices=[*INVESTIGATORS, "all"], default="all")
     parser.add_argument("--final", action="store_true", help="required for the held-out split (milestones only)")
     parser.add_argument("--data-root", type=Path, help="default: data/<split>")

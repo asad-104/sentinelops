@@ -15,6 +15,11 @@ from enum import StrEnum
 class Split(StrEnum):
     DEV = "dev"
     HELDOUT = "heldout"
+    M5FRESH = "m5fresh"  # M5's fresh split (pre-registered 2026-10-29); generated only by sentinelops.evaluation.m5_fresh
+
+
+# The splits the generic CLIs and split tests handle. The M5 fresh split is generated once, by its own command.
+FROZEN_SPLITS: tuple[Split, ...] = (Split.DEV, Split.HELDOUT)
 
 
 class Tier(StrEnum):
@@ -32,7 +37,11 @@ class SplitProfile:
 
 DEV_PROFILE = SplitProfile(Split.DEV, variants=(0, 1, 2), trigger_lag_min=(1.0, 6.0))
 HELDOUT_PROFILE = SplitProfile(Split.HELDOUT, variants=(0, 1, 2, 3), trigger_lag_min=(1.0, 12.0))
-PROFILES: dict[Split, SplitProfile] = {Split.DEV: DEV_PROFILE, Split.HELDOUT: HELDOUT_PROFILE}
+# M5 fresh split: held-out's profile (template variants 0-3, trigger lag 1-12 min), pre-registered 2026-10-29.
+M5FRESH_PROFILE = SplitProfile(Split.M5FRESH, variants=HELDOUT_PROFILE.variants,
+                               trigger_lag_min=HELDOUT_PROFILE.trigger_lag_min)
+PROFILES: dict[Split, SplitProfile] = {Split.DEV: DEV_PROFILE, Split.HELDOUT: HELDOUT_PROFILE,
+                                       Split.M5FRESH: M5FRESH_PROFILE}
 
 @dataclass(frozen=True)
 class Mechanisms:

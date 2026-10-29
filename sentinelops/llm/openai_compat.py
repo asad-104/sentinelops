@@ -160,8 +160,9 @@ class OpenAICompatibleClient:
                 waited += delay
                 retries += 1
                 continue
-            if status != 200:
-                return LLMError("http_status", f"HTTP {status}: {self._clean(response)}", latency, retries, waited)
+            if status != 200:  # 401/403 (bad key, model not on this tier) cannot succeed on retry: the batch stops
+                return LLMError("http_status", f"HTTP {status}: {self._clean(response)}", latency, retries, waited,
+                                provider_caused=status in (401, 403))
             try:
                 result = _parse(response.json(), latency, retries, waited, self._new_id)
             except (ValueError, KeyError, TypeError, AttributeError, IndexError) as exc:

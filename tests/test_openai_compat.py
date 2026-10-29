@@ -244,7 +244,7 @@ def test_only_provider_limits_and_outages_are_flagged_provider_caused() -> None:
         raise httpx.ReadTimeout("slow", request=request)
 
     cases = [(status(429, {"retry-after": "9999"}), True), (status(429), True), (status(503), True),
-             (status(400), False), (status(401), False), (timeout, False)]
+             (status(400), False), (status(401), True), (status(403), True), (timeout, False)]
     for handler, expected in cases:
         error = _client(handler, max_retries=1)[0].chat([ChatMessage("user", "x")], [SPEC])
         assert isinstance(error, LLMError) and error.provider_caused is expected, (error.message, expected)
@@ -375,3 +375,26 @@ def test_cli_mistral_needs_the_pinned_model_and_console_limits(monkeypatch: pyte
     assert captured["out_dir"] == tmp_path / "generator-v5" / f"smoke-mistral-{MISTRAL_MODEL}"
     assert captured["client"]["rate_limits"] == {"requests_per_minute": 50, "tokens_per_minute": 400000}
     assert captured["client"]["extra"] == {} and MISTRAL_KEY not in json.dumps(captured["client"])
+
+
+TIER_REFUSAL = ('{"object":"error","message":"This model is not available in your subscription tier",'
+                '"type":"tier_not_allowed","param":null,"code":"1910","raw_status_code":403}')  # from attempt 1
+
+
+def test_a_tier_refusal_aborts_the_batch_after_one_request(tmp_path: Path) -> None:
+    """User decision 2026-10-29: a 403 like Mistral attempt 1's ends the batch at once (HarnessAbort), instead of a
+    second request and a second, meaningless run."""
+    from agent_sets import generated_set
+    from sentinelops.evaluation.harness import HarnessAbort
+
+    data_root, manifest_dir, scenarios = generated_set(tmp_path / "set")
+    requests: list[httpx.Request] = []
+    client, _ = _mistral(lambda r: (requests.append(r), httpx.Response(403, text=TIER_REFUSAL))[1])
+    out = tmp_path / "out"
+    with pytest.raises(HarnessAbort) as aborted:
+        agent_run.run_agent(client, "mistral", MISTRAL_MODEL, data_root, out, [o.scenario_id for o, _ in scenarios],
+                            manifest_dir, stats=lambda p: {"free_disk_gb": 50.0, "swap_used_mb": 0.0,
+                                                           "pressure_level": 1})
+    assert len(requests) == 1 and "tier_not_allowed" in str(aborted.value)
+    summary = json.loads((out / "summary.json").read_text())
+    assert summary["metadata"]["aborted"] and len(summary["runs"]) == 1

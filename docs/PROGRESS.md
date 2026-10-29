@@ -1345,6 +1345,31 @@ Then the signup and run steps. The user sends the console numbers (limits, free 
 
 **Still open before the smoke pair:** the user confirms that `mistral-large-2512` is free, that no card was requested, and that the training opt-out is on. **No request is sent until all three are confirmed.**
 
+## M4 stage B: Mistral smoke attempt 1, `mistral-large-2512` refused (run 2026-10-29; outputs committed together with this entry)
+**The refusal:**
+- **Configuration:** code `6154875`, `--rpm 50 --tpm 200000`, on `sc-45fa1390ea`, original and twin.
+- **Every request:** all 4 (turns 1 and 2 of each run, in GATHER, right after the loop-issued TRIAGE) returned `HTTP 403 {"message":"This model is not available in your subscription tier","type":"tier_not_allowed","code":"1910"}`.
+- **Result:** **0 completed model turns** and no usage reported. Both runs stopped with `error` after 2 consecutive client errors (1.5 s and 2.4 s).
+- **Classification:** **the model is not available on the user's free tier.** It is not a rejected request field, an alias or served-model mismatch, a limit, or our client.
+- **The request shape** (`max_tokens`, `name` on tool messages, `random_seed`, `parallel_tool_calls`) **is still untested**, because the model was refused first.
+- **The pair does not count.** The pre-registered "not free" fallback applies: `mistral-small-2603` next, in its own directory.
+- **Outputs:** no key and no account identifier, scanned; the only long hex values are the prompt hash and the dev-manifest hash.
+
+**Procedure point, recorded neutrally:** the run happened **before** the three confirmations this file requires (model free, no card, opt-out on). The 4 refused requests carried the system prompt and triage data of the dev scenario `sc-45fa1390ea`. That is synthetic dev data, allowed under the data rule.
+
+**Training opt-out status at the time of the run:** _[pending: the user will state it; recorded here verbatim when sent]_
+
+**Next (user decision 2026-10-29):**
+1. `mistral-small-2603` with `--reasoning-effort none --rpm 50 --tpm 16000`, in its own directory.
+2. If that is also refused with a 403: `ministral-14b-2512` with `--rpm 25 --tpm 750000`, in its own directory, as pre-registered.
+
+Each refusal is recorded.
+
+**Before that, two client fixes (user-approved),** each committed on its own:
+1. 401 and 403 become provider-caused, so the batch aborts at once.
+2. `content` returned as a list of chunks is handled.
+
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

@@ -57,6 +57,12 @@ from sentinelops.simulator.profiles import Split
 CORE_SCENARIOS = ("sc-30385ffc64", "sc-3836c69ef7", "sc-3e3ceb314e", "sc-4001bf784c", "sc-408b514aeb",
                   "sc-4251e8920a", "sc-497fd61898", "sc-5b55b772de", "sc-5c5b9b9197", "sc-91404ea5fc")
 M3_SMOKE_SCENARIO = "sc-2c422896a9"
+M4_SMOKE_SCENARIO = "sc-45fa1390ea"
+# M5 dev gate (pre-registered 2026-10-29, docs/m5_preregistration.md section 2): the 22 dev scenarios never used before.
+M5_DEV_SCENARIOS = ("sc-47610c9e02", "sc-694130798c", "sc-6d023322e9", "sc-8e6dbe7f20", "sc-918356ee90", "sc-9969d4b81d",
+                    "sc-a59e0e61c7", "sc-ba353abbc7", "sc-be7c6ab28b", "sc-be91d5105d", "sc-bf8ef04f56", "sc-c1e7d959c8",
+                    "sc-cc007aa1ee", "sc-d74c46a899", "sc-dca259caa6", "sc-df583a5a54", "sc-e2cea1c0c0", "sc-ec3e7c879f",
+                    "sc-f7e6249083", "sc-fada5df47f", "sc-fb1c777397", "sc-ff655f01df")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REAL_RESULTS = REPO_ROOT / "eval" / "agent"
 DEFAULT_OUT_ROOT = Path("eval/agent")
@@ -168,7 +174,7 @@ def run_agent(client: LLMClient, backend: str, model: str, data_root: Path, out_
               bounds: AgentBounds = AgentBounds(), min_free_gb: float = MIN_FREE_GB,
               max_swap_growth_gb: float = MAX_SWAP_GROWTH_GB, stats: Any = None, progress: bool = False,
               clock: Callable[[], float] = time.monotonic, progress_stream: Any = None, attempt: int = 1,
-              smoke: bool = False) -> dict[str, Any]:
+              smoke: bool = False, prompt_version: str = "v1", twins: bool = True) -> dict[str, Any]:
     if backend == "mock":
         check_mock_target(scenario_ids, out_dir)
     if backend in HOSTED_BACKENDS:
@@ -179,26 +185,29 @@ def run_agent(client: LLMClient, backend: str, model: str, data_root: Path, out_
     manifest = verify_split(Split.DEV, data_root, manifest_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stats = stats or system_stats
-    twins = sum(GroundTruth.model_validate_json((data_root / "ground_truth" / f"{sid}.json").read_text(
+    run_twins = twins
+    twins = 0 if not run_twins else sum(GroundTruth.model_validate_json((data_root / "ground_truth" / f"{sid}.json").read_text(
         encoding="utf-8")).injection is not None for sid in scenario_ids)
     unload = getattr(client, "unload", None)
     reporter = None
     if progress:
         reporter = Progress(len(scenario_ids) + twins, bounds.max_tool_calls, stats, out_dir, progress_stream)
         client = ProgressClient(client, reporter)
-    inner = StateMachineInvestigator(client, bounds=bounds, traces=TraceWriter(trace_dir), clock=clock)
+    inner = StateMachineInvestigator(client, bounds=bounds, traces=TraceWriter(trace_dir), clock=clock,
+                                     prompt_version=prompt_version)
     guarded = GuardedInvestigator(inner, out_dir / "run_log.jsonl", out_dir, min_free_gb=min_free_gb,
                                   max_swap_growth_gb=max_swap_growth_gb, stats=stats, progress=reporter,
                                   after_run=unload)
     aborted: HarnessAbort | None = None
     try:
-        run_split(guarded, Split.DEV, data_root, manifest_dir=manifest_dir, scenario_ids=scenario_ids)
+        run_split(guarded, Split.DEV, data_root, manifest_dir=manifest_dir, scenario_ids=scenario_ids, twins=run_twins)
     except HarnessAbort as exc:
         aborted = exc
     rows = run_rows(trace_dir, data_root, bounds.num_ctx)
     complete = aborted is None and len(rows) == len(scenario_ids) + twins
     summary = {
-        "metadata": {"backend": backend, "model": model, "client": client.describe(), "prompt_sha256": prompt_sha256(),
+        "metadata": {"backend": backend, "model": model, "client": client.describe(),
+                     "prompt_sha256": prompt_sha256(prompt_version), "prompt_version": prompt_version, "twins": run_twins,
                      "bounds": asdict(bounds), "generator_version": manifest["generator_version"],
                      "manifest_sha256": manifest["content_sha256"], "git_commit": git_commit(),
                      "scenarios": list(scenario_ids), "attempt": attempt, "smoke": smoke,
@@ -271,6 +280,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest-dir", type=Path, default=DEFAULT_MANIFEST_DIR)
     parser.add_argument("--attempt", type=int, default=1)
     parser.add_argument("--smoke", metavar="SCENARIO_ID", help="ollama/groq: one dev scenario outside the core set")
+    parser.add_argument("--set", choices=("core", "dev-gate"), default="core",
+                        help="core: the 10 M4 core scenarios; dev-gate: the 22 pre-registered M5 dev scenarios")
+    parser.add_argument("--prompt", choices=("v1", "v2"), default="v1", help="agent prompt version (v1 = d269d28d)")
+    parser.add_argument("--no-twins", action="store_true", help="run originals only (M5 dev gate and headline)")
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--min-free-gb", type=float, default=MIN_FREE_GB, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -289,7 +302,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             if args.smoke and args.smoke in (*CORE_SCENARIOS, *PILOT_SCENARIOS):
                 parser.error("--smoke must name a dev scenario outside the core and M3 pilot sets")
-            ids = (args.smoke,) if args.smoke else CORE_SCENARIOS
+            if args.smoke and args.set != "core":
+                parser.error("--smoke and --set are exclusive")
+            ids = (args.smoke,) if args.smoke else (M5_DEV_SCENARIOS if args.set == "dev-gate" else CORE_SCENARIOS)
             if args.backend == "groq":
                 model = args.model or "qwen/qwen3.8-27b"
                 client = OpenAICompatibleClient("groq", model, limits=RateLimits(args.rpm or 30, args.tpm or 8000),
@@ -309,13 +324,16 @@ def main(argv: list[str] | None = None) -> int:
                 client = OllamaClient(model, base_url=args.ollama_url, timeout_s=bounds.call_timeout_s,
                                       num_ctx=bounds.num_ctx, think=False, num_predict=bounds.num_predict)
         slug = re.sub(r"[^A-Za-z0-9._-]+", "-", model)
-        name = f"{'smoke-' if args.smoke else ''}{args.backend}-{slug}{f'-attempt{args.attempt}' if args.attempt > 1 else ''}"
+        prefix = "smoke-" if args.smoke else ("m5-dev-gate-" if args.set == "dev-gate" else "")
+        suffix = (f"-prompt-{args.prompt}" if args.prompt != "v1" or args.set == "dev-gate" else "") + \
+            (f"-attempt{args.attempt}" if args.attempt > 1 else "")
+        name = f"{prefix}{args.backend}-{slug}{suffix}"
         out_dir = args.out_root / f"generator-v{GENERATOR_VERSION}" / name
         if args.backend == "mock":
             check_mock_target(ids, out_dir)
         summary = run_agent(client, args.backend, model, args.data_root, out_dir, ids, args.manifest_dir, bounds,
                             min_free_gb=args.min_free_gb, progress=not args.quiet, attempt=args.attempt,
-                            smoke=bool(args.smoke))
+                            smoke=bool(args.smoke), prompt_version=args.prompt, twins=not args.no_twins)
     except (Refused, DataMismatch, HarnessAbort, OutputExists, FileNotFoundError, MissingKey,
             DisallowedEndpoint) as exc:
         print(f"refused: {exc}", file=sys.stderr)

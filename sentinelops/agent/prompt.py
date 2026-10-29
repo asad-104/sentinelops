@@ -54,6 +54,24 @@ STATE_INSTRUCTIONS: dict[State, str] = {
     State.REPORT: f"Write the final report with {SUBMIT_REPORT}, citing only ledger IDs.",
 }
 
+# M5 v2 (pre-registered 2026-10-29, docs/m5_preregistration.md, wording approved in docs/m5_v2_and_single_pass.md):
+# a new M5 prompt, not an M4 revision. Only the GATHER instruction changes; v1 above stays byte-identical (d269d28d).
+GATHER_V2 = ("Gather evidence with the read tools. Among your first calls in this stage, check what changed during the "
+             "incident window: call get_timeline with the window's start and end, or call list_deployments and "
+             "list_config_changes for the same window. Treat each change on an affected service, or on a service it "
+             "depends on, as a candidate cause, and support or rule it out with logs and metrics. Errors, latency and "
+             "pool pressure are symptoms; name a cause only after you have checked what changed. Call only the tools "
+             f"offered in this request, by their exact names. When you have enough to rank causes (at least 4 calls "
+             f"that returned new evidence on the first pass), call {FINISH_GATHERING}.")
+PROMPT_VERSIONS = ("v1", "v2")
+
+
+def state_instructions(version: str = "v1") -> dict[State, str]:
+    if version not in PROMPT_VERSIONS:
+        raise ValueError(f"unknown prompt version {version!r}; known: {', '.join(PROMPT_VERSIONS)}")
+    return STATE_INSTRUCTIONS if version == "v1" else {**STATE_INSTRUCTIONS, State.GATHER: GATHER_V2}
+
+
 # The STAGE block the harness appends to every request (always last). Model-facing, so it is part of the hash.
 # Placeholders: state, used, budget, instruction; progress lines; notes. Revision 1 added the progress lines.
 STAGE_TEMPLATE: dict[str, str] = {
@@ -121,10 +139,11 @@ TOOL_DESCRIPTIONS: dict[str, str] = {**{k: v for k, v in READ_TOOL_DESCRIPTIONS.
                                      **STATE_TOOL_DESCRIPTIONS}
 
 
-def prompt_sha256() -> str:
-    """Hash of the system prompt, state instructions, tool descriptions, STAGE template, DATA headers, harness
-    notes and messages (sorted keys)."""
-    payload = json.dumps({"system": SYSTEM_PROMPT, "states": {s.value: t for s, t in STATE_INSTRUCTIONS.items()},
+def prompt_sha256(version: str = "v1") -> str:
+    """Hash of the system prompt, state instructions (of ``version``), tool descriptions, STAGE template, DATA
+    headers, harness notes and messages (sorted keys). v1's payload is unchanged by the existence of v2."""
+    states = state_instructions(version)
+    payload = json.dumps({"system": SYSTEM_PROMPT, "states": {s.value: t for s, t in states.items()},
                           "tools": TOOL_DESCRIPTIONS, "stage_template": STAGE_TEMPLATE, "data_headers": DATA_HEADERS,
                           "notes": HARNESS_NOTES, "messages": HARNESS_MESSAGES}, sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()

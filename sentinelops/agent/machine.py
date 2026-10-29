@@ -28,9 +28,9 @@ from sentinelops.agent.prompt import (
     DATA_HEADERS,
     HARNESS_MESSAGES,
     HARNESS_NOTES,
-    STATE_INSTRUCTIONS,
     SYSTEM_PROMPT,
     prompt_sha256,
+    state_instructions,
 )
 from sentinelops.agent.schemas import STATE_TOOL_MODELS, HypothesesDraft, agent_tool_specs, state_tool_specs
 from sentinelops.agent.states import (
@@ -84,8 +84,10 @@ def call_kind(name: str, arguments: dict[str, Any]) -> str | None:
 
 class StateMachineInvestigator:
     def __init__(self, client: LLMClient, *, name: str = "m4_agent", bounds: AgentBounds = AgentBounds(),
-                 traces: TraceWriter | None = None, clock: Callable[[], float] = time.monotonic) -> None:
+                 traces: TraceWriter | None = None, clock: Callable[[], float] = time.monotonic,
+                 prompt_version: str = "v1") -> None:
         self.name, self.client, self.bounds, self.traces, self.clock = name, client, bounds, traces, clock
+        self.prompt_version, self.instructions = prompt_version, state_instructions(prompt_version)
         self.specs = agent_tool_specs()
 
     def investigate(self, tools: ToolCaller, scenario_id: str) -> InvestigationReport:
@@ -140,7 +142,8 @@ class _Run:
 
     def execute(self) -> InvestigationReport:
         self.trace.event("start", scenario_id=self.scenario_id, investigator=self.o.name,
-                         client=self.o.client.describe(), bounds=asdict(self.b), prompt_sha256=prompt_sha256())
+                         client=self.o.client.describe(), bounds=asdict(self.b), prompt_sha256=prompt_sha256(self.o.prompt_version),
+                         prompt_version=self.o.prompt_version)
         self.trace.event("state_enter", state=State.TRIAGE.value, turn=0, reason="start")
         try:
             self.triage()
@@ -184,7 +187,7 @@ class _Run:
             raise self.stop("budget_exhausted", f"model turn cap of {self.b.max_turns} reached")
         progress = {"evidence": self.gather_evidence_first_pass if self.returns == 0 else self.gather_evidence_second_pass,
                     "verify": self.verify_calls}
-        stage = self.builder.stage_block(self.state, STATE_INSTRUCTIONS[self.state], self.tool_calls, self.notes,
+        stage = self.builder.stage_block(self.state, self.o.instructions[self.state], self.tool_calls, self.notes,
                                          progress)
         try:
             request = self.builder.build(SYSTEM_PROMPT, self.triage_text, self.ledger, self.exchanges, stage,

@@ -113,8 +113,9 @@ def _investigate(investigator: Investigator, tools: CountingToolSet,
 
 def run_split(investigator: Investigator, split: Split, data_root: Path, *, final: bool = False,
               manifest_dir: Path = DEFAULT_MANIFEST_DIR, budget: int = DEFAULT_CALL_BUDGET,
-              scenario_ids: Sequence[str] | None = None) -> RunResult:
-    """``scenario_ids`` restricts the run to a subset of the manifest, in the given order."""
+              scenario_ids: Sequence[str] | None = None, twins: bool = True) -> RunResult:
+    """``scenario_ids`` restricts the run to a subset of the manifest, in the given order. ``twins=False`` runs the
+    originals only (M5 dev gate and headline, pre-registered 2026-10-29)."""
     if split is Split.HELDOUT and not final:
         raise HeldOutLocked("the held-out split is locked; it runs only with --final at milestones")
     manifest = verify_split(split, data_root, manifest_dir)
@@ -132,7 +133,7 @@ def run_split(investigator: Investigator, split: Split, data_root: Path, *, fina
         elapsed = time.perf_counter() - started
         truth = _truth(data_root, scenario_id)
         twin_report, twin_error = None, None
-        if truth.injection is not None:
+        if twins and truth.injection is not None:
             twin_root = data_root / TWINS_DIR
             if _truth(twin_root, scenario_id).mechanisms_off != ("injection",):
                 raise DataMismatch(f"{scenario_id} has no valid injection twin")

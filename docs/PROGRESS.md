@@ -1298,6 +1298,53 @@ Then the signup and run steps. The user sends the console numbers (limits, free 
 - **Tests:** 406 passing; the real-data viewer check prints `OK`.
 - **Next:** the user signs up and sends the console numbers. The model is then chosen and recorded here, by the rule in c), before the smoke pair.
 
+## M4 stage B: Mistral model choice (2026-10-29, made AFTER seeing the console numbers; before any run)
+**Console numbers sent by the user** (per model: tokens per minute / requests per second):
+
+| Console ID | Limits | Note |
+|---|---|---|
+| `mistral-large-4` | 20,000 / 0.83 | alias only |
+| `mistral-medium-latest` | 20,000 / 1.00 | alias only |
+| `mistral-small-2603` | 20,000 / 1.00 | |
+| `mistral-large-2512` | 250,000 / 1.00 | |
+| `ministral-14b-2512` | 937,500 / 0.50 | |
+| `ministral-8b-2512` | 625,000 / 3.13 | |
+| `ministral-3b-2512` | 1,300,000 / 12.50 | |
+| `codestral-2508` | 625,000 / 2.08 | |
+
+**Not yet confirmed by the user:** a monthly token cap, which models are actually free, the training opt-out status, and whether a card is requested.
+
+**What the IDs mean, from Mistral's own pages:**
+- **`mistral-large-2512`** is **Mistral Large 3** (v25.12, GA, December 2, 2025): MoE with 41B active and 675B total parameters, 256k context, function calling listed (model card). The card shows the ID as `mistral-large-2512+1`, and the `+1` is not explained.
+- **`mistral-large-4`** is **Large 4**, in "Public Preview" since October 6, 2026. **There is no dated ID**, and the changelog entry does not mention function calling.
+- **`mistral-small-2603`** is **Small 4** (v26.03, GA): 119B total and 6.5B active, function calling listed, a hybrid instruct and reasoning model. Its launch post describes `reasoning_effort: "none"`.
+- **`mistral-medium-latest`** is Medium 3.5 (`mistral-medium-3-5`) with **no dated ID**. The changelog says it "supports adjustable reasoning via the `reasoning_effort` parameter". **Correction:** the earlier pre-registration text called Medium 3.5 a model with "no reasoning claim"; that was wrong.
+- **`ministral-14b-2512`** is Ministral 3 14B (v25.12), in the function-calling list.
+
+**Choice: `mistral-large-2512` (Mistral Large 3), with no `reasoning_effort` sent.**
+
+**This deviates from the pre-registered rule in c), and is recorded as made after seeing the numbers:**
+1. **The pre-registered list put Large 4 first and allowed an alias as a recorded limitation.** The user's principle, stated after the numbers, is the **strongest available model with a dated ID** and enough room. That excludes `mistral-large-4` and `mistral-medium-latest`, which are alias-only. Large 4 is also a Public Preview, and its function calling is not documented.
+2. **`mistral-large-2512` (Large 3) was not on the pre-registered list.** The list wrongly assumed that "Large 4" had a dated ID.
+3. **Among the dated models with function calling,** Large 3 (675B total, 41B active) is the largest. It needs no reasoning switch for the non-thinking setup.
+
+**Room against about 20 turns of about 6,000 tokens per run (about 120k):**
+- At 250,000 tokens per minute and 1 request per second, the binding limit is the request rate. Tokens per minute never bind (about 6k per request).
+- `mistral-small-2603` has room too, at 20,000 tokens per minute, about 3 turns per minute.
+
+**Fallbacks, by the same principle, if the chosen model turns out not to be free:**
+1. `mistral-small-2603`, with `reasoning_effort: "none"`
+2. `ministral-14b-2512`
+
+**A much stronger model could hide design flaws.** Large 3 is far more capable than the 4B local model. It may make up for weak context management, the state design or the harness-forced transitions. Good results would then reflect the model rather than the agent design. This caveat goes with every result from this backend, together with the choice and its reason.
+
+**Run settings:**
+- `--model mistral-large-2512`
+- `--rpm 50`: one request every 1.2 s, against the console's 1.00 per second
+- `--tpm 200000`: 80% of 250,000
+
+**Still open before the smoke pair:** the user confirms that `mistral-large-2512` is free, that no card was requested, and that the training opt-out is on. **No request is sent until all three are confirmed.**
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

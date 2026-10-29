@@ -54,7 +54,7 @@ Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS
 - Done: **M3 stage A** (LLM adapter, mock, Ollama client untested against a server, tool loop, traces, crash-catching harness, pilot CLI, network guard, M3 viewer page; merged to `main`)
 - Done: **M3 complete** (stage B: attempt 1 aborted by the swap guard and recorded; attempt 2 completed 7 runs, rule verdict `local_feasible` with caveats; merged to `main`, tag `m3-complete`)
 - Done: **M4 stage A** (explicit-state agent, managed context with bounded ledger, metrics incl. criterion (e), agent CLI, M4 viewer page; approved)
-- In progress: **M4 stage B** on `m4-stage-b`. The local and Groq gates failed; paid hosted is withdrawn. Mistral free tier: Large 3 refused (403), Small 4 not usable (429 on the first request); Ministral 14B reached VERIFY, then `context_exhausted` (the sticky estimator ratio). One logged-exception rerun pair is pending: `ministral-14b-2512 --rpm 25 --tpm 750000 --attempt 2`, after client changes (a)-(c) and context revision 4 (estimator per tool list plus two ratios). If it fails again for a harness reason: stop and pre-register C. Prompt `d269d28d` (revision 2 of 2, the last); context revision 4
+- In progress: **M4 stage B** on `m4-stage-b`. The Mistral `ministral-14b-2512` smoke gate PASSED (attempt 2, f7c7224). The 12 core runs are approved (user runs them: `--backend mistral --model ministral-14b-2512 --rpm 25 --tpm 750000`), but are held until the user confirms the training opt-out (Anonymous improvement data toggle) is off. The rule uses active time on hosted backends (46e8a42); not evidence of quality. Write-up caveats are listed in PROGRESS. Prompt `d269d28d` (revision 2 of 2, the last); context revision 4
 
 ## Standing rules
 

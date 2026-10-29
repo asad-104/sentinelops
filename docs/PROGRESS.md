@@ -1535,6 +1535,31 @@ Each refusal is recorded.
 - **The user's approval is required first.**
 - The training opt-out status for the Large 3 attempt is still owed.
 
+## M4 stage B: core runs on Mistral approved (user decision 2026-10-29), with conditions
+**Approved:** the 12 core runs (the 10 fixed core scenarios plus the 2 injection twins) on `ministral-14b-2512` with `--rpm 25 --tpm 750000`, **run by the user**, with the decision rule as written.
+
+**The rule on active time:** done in 46e8a42.
+- **Hosted backends:** the median-time thresholds use active time (`elapsed_ex_wait_s`).
+- **Local results:** computed exactly as before; a test checks this against the old function.
+- **Stated plainly:** **on hosted backends the median active-time threshold always passes, so it is not evidence of quality.** The summary line says so too.
+
+**Test fix (48854dc):** the old-estimator undercount test matched every Ministral trace. Committing attempt 2's outputs (f7c7224) added that run's narrow turns, so **the suite was red from f7c7224 until 48854dc**. It is now pinned to attempt 1, and revision 4's never-undercounts replay covers attempt 2 as well.
+
+**Training opt-out status:** _[pending: the user will state it; recorded here verbatim when sent]_. **The core runs will not start until the user has confirmed that the "Anonymous improvement data" toggle is off.**
+
+**Caveats the M4 write-up must carry:**
+1. **One scenario was used for diagnosis.** Every fix since the first smoke run was motivated by `sc-45fa1390ea`: change B and its amendment, prompt revision 2, R1, context revisions 3 and 4, and the client changes. The 10 core scenarios were never used for development.
+2. **The model is much stronger than the local 4B.** `ministral-14b-2512` was reached by fallback, after `mistral-large-2512` (refused, 403) and `mistral-small-2603` (unusable, a 429 on the first request). A stronger model may make up for weaknesses in the design.
+3. **Check 6 was rewritten post-hoc,** after no model in any smoke run called `finish_verifying`.
+4. **The transitions are mostly made by the harness:** GATHER → HYPOTHESIZE by the empty-calls move, and VERIFY → REPORT by the cap. The model only ranks and reports, so the agent is less agentic in practice than designed.
+5. **In the Ministral attempt-2 smoke, run 2 changed its ranking at REPORT without a VERIFY re-rank.** HYPOTHESIZE rank 1 was `orders/certificate_expiry`; the report's rank 1 was `auth/certificate_expiry`.
+6. **The training opt-out status** is unknown for the Large 3 attempt. For the core runs it must be confirmed off first.
+7. **The free tier's real rate limit is unknown.** Its 429s carry no headers: 10 in the attempt-2 smoke, each recovered after the 15 s backoff.
+8. **The data is synthetic and author-built,** and the baseline, prompts and simulator come from the same author. **The sample is n = 12 runs** (10 + 2 twins), so results are reported as counts, not rates.
+9. **The estimator's headroom on this backend is thin** (+1.2% minimum in the smoke). An undercount there cannot overflow a hosted context.
+10. **The injection pair:** the smoke scenario's injected lines never reached the model in any run. The core set's two injection pairs are the first real test.
+
+
 
 
 

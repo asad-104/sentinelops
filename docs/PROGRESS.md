@@ -1457,6 +1457,40 @@ Each refusal is recorded.
 - **Provider-caused stops follow the existing rules:** one rerun after the reset, a 429 on the first request means "not usable on this tier", and a 403 means the model is not on the tier.
 - **The gate stays as pre-registered:** the six checks, both runs. If the pair passes, the 12 core runs follow with the decision rule as written, whatever the accuracy.
 
+**Done (2026-10-29), each committed on its own with tests, each mechanism failing its test when disabled:**
+- **6b38171, client change (a):** every attempt of a call that meets a 429 or 5xx is recorded, with status and time, plus the 429s' `retry-after`, `x-ratelimit-*` and `ratelimit*` headers, redacted. The record is kept in the trace.
+- **d6dae75, client change (b):** without `retry-after`, the backoff is 15, 30 and 60 s, and **60 s for the fourth retry** (the client allows 4). A call can therefore wait up to 165 s before giving up.
+- **6d5b482, client change (c):** each attempt is reserved at send time as ceil(request JSON ÷ 3.1 × 1.15) + `max_tokens`, rejected attempts included. Reported usage no longer drives pacing.
+- **c445f13, context revision 4 (the estimator fix).**
+
+**Which estimator, and why: a hybrid.**
+- **The design:** the lowest observed ratio is kept **per tool list sent**, as in the per-make-up option. A tool list **not seen yet** is estimated with **two ratios**: specs at the base 3.1, the rest at the lowest observed content ratio, both with the 1.15 margin. Never below the plain margin estimate. With one tool list throughout, it is the old estimator.
+- **Chosen by an offline simulation** over all 154 recorded M4 smoke turns (local Qwen thinking and instruct, Groq, Mistral), plus the Ministral VERIFY request:
+
+| Option | Undercounts (154 turns) | Ministral VERIFY at level 4 (budget 6,144) |
+|---|---|---|
+| Old (one sticky ratio) | **2** (narrow Ministral turns, up to 11.1%) | 6,199 / 6,377, **fails** |
+| Per make-up only | 2 (the same) | 5,511 / 5,765 |
+| Two ratios with margin | **0** | 6,340 / 6,610, **fails** |
+| Two ratios, other variants | 2 (2.9–4.1%) | fits; one variant by 8 tokens |
+| **Hybrid (chosen)** | **0** | **5,511 / 5,765** |
+
+- **Local Qwen headroom is unchanged** (minimum +14.7%): on that backend, the plain margin estimate always dominates.
+
+**Verification:**
+- An offline replay of both Ministral runs now builds the first VERIFY request at level 3 (5,930 tokens, run 1) and level 4 (5,765, run 2).
+- **A two-ratio fake server** (specs at 3.55, content at 2.31 characters per token) reproduces the old failure: `context_exhausted`, with one request over budget on the way. With the hybrid it completes, with every request within budget.
+
+**New residual risk, stated plainly.** A tool list seen before but now carrying **denser content** can be underestimated slightly. On the fake server that happened **once, by under 2%**: the second HYPOTHESIZE, after `return_to_gather`. It was within budget, and the test pins it.
+- **On the 8 GB local backend,** such an undercount near the budget could overflow the 8,192 context, because 6,144 + 2,048 leaves no slack.
+- **Why it stays a residual:** it never occurred on any recorded local turn, and on local the margin path dominates. The 90% server-count guard is still there afterwards.
+- **A tested variant** (also applying the two-ratio estimate without the margin to seen lists) **did not remove it**, so it was not adopted.
+
+**Prompt hash unchanged** (`d269d28d`). Tests: 419 passing; the real-data viewer check prints `OK`.
+
+**The rerun (the one pair of this exception):** `ministral-14b-2512`, `--rpm 25 --tpm 750000 --attempt 2`, writing to `smoke-mistral-ministral-14b-2512-attempt2/`.
+
+
 
 
 

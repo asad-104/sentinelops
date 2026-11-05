@@ -15,6 +15,12 @@ Operational change (user-approved 2026-11-05, not a design change): a run takes 
 slices of the exposed pairs in manifest order (sizes as equal as possible, larger first), fixed before the fresh
 split's exposure check was run. Each slice runs its pairs (original, then twin) and may be rerun once, as
 ``--attempt 2``, after a provider-caused stop.
+
+E1 (user-approved 2026-11-05, exploratory and post hoc: decided after seeing the safety counts, 7 of 19 top-1
+changed). A replicate-noise control: ``--replicate`` reruns each slice's originals once, with the identical forced
+queries and no twins, into ``m5-safety-replicate-...-slice<K>``. ``--e1-report`` (offline, no model) pairs each
+safety original with its replicate and counts top-1 disagreements, reported next to the pre-registered safety counts
+and never in place of them.
 """
 
 from __future__ import annotations
@@ -57,6 +63,7 @@ WINDOWS_MIN = (3, 1)  # +/- minutes around each injected line, tried in order
 LIMIT, MIN_LEVEL = 200, "WARN"
 DEFAULT_OUT_ROOT = Path("eval/safety")
 SAFETY_SLICES, MAX_ATTEMPT = 3, 2
+E1_LABEL = "E1: exploratory, post hoc replicate-noise control (decided after the safety counts)"
 ACCURACY_ROOTS = (REPO_ROOT / "eval" / "agent", REPO_ROOT / "eval" / "results", REPO_ROOT / "eval" / "pilot")
 
 
@@ -193,8 +200,9 @@ def run_safety(client: LLMClient, backend: str, model: str, data_root: Path, out
                split: Split = Split.M5FRESH, manifest_dir: Path = DEFAULT_MANIFEST_DIR,
                bounds: AgentBounds = AgentBounds(), min_free_gb: float = MIN_FREE_GB, stats: Any = None,
                clock: Callable[[], float] = time.monotonic, attempt: int = 1,
-               slice_k: int | None = None) -> dict[str, Any]:
-    """``slice_k`` None runs every exposed pair (tests only; the CLI always passes a slice)."""
+               slice_k: int | None = None, replicate: bool = False) -> dict[str, Any]:
+    """``slice_k`` None runs every exposed pair (tests only; the CLI always passes a slice). ``replicate`` (E1) runs
+    the originals only, with the same forced queries, and computes no pair rows."""
     if not 1 <= attempt <= MAX_ATTEMPT:
         raise Refused(f"one rerun per slice: --attempt must be 1 or {MAX_ATTEMPT}")
     if any(out_dir.resolve().is_relative_to(root) for root in ACCURACY_ROOTS):
@@ -220,21 +228,25 @@ def run_safety(client: LLMClient, backend: str, model: str, data_root: Path, out
                                   after_run=getattr(client, "unload", None))
     aborted: HarnessAbort | None = None
     try:
-        run_split(guarded, split, data_root, manifest_dir=manifest_dir, scenario_ids=ids, twins=True)
+        run_split(guarded, split, data_root, manifest_dir=manifest_dir, scenario_ids=ids, twins=not replicate)
     except HarnessAbort as exc:
         aborted = exc
     rows = run_rows(trace_dir, data_root, bounds.num_ctx)
+    if replicate:
+        summary = {"metadata": {**_metadata(client, backend, model, split, manifest, attempt, slice_k, ids, aborted,
+                                            bounds), "replicate": True, "label": E1_LABEL},
+                   "runs": rows, "counts": {"runs": len(rows), "reports": sum(r["top"] is not None for r in rows),
+                                            "complete": aborted is None and len(rows) == len(ids)}}
+        dump_json(out_dir / "summary.json", summary)
+        (out_dir / "summary.md").write_text(f"# {E1_LABEL}\n\nslice {slice_k}, attempt {attempt}: "
+                                            f"{summary['counts']}\n", encoding="utf-8", newline="\n")
+        if aborted is not None:
+            raise aborted
+        return summary
     pairs = pair_rows(rows, trace_dir, data_root)
     complete = aborted is None and len(rows) == 2 * len(ids)
     summary = {
-        "metadata": {"backend": backend, "model": model, "client": client.describe(), "split": split.value,
-                     "prompt_version": M5_AGENT_PROMPT, "prompt_sha256": prompt_sha256(M5_AGENT_PROMPT),
-                     "generator_version": manifest["generator_version"], "manifest_sha256": manifest["content_sha256"],
-                     "git_commit": git_commit(), "attempt": attempt, "slice": slice_k, "scenarios": ids,
-                     "aborted": None if aborted is None else str(aborted),
-                     "query": {"windows_min": list(WINDOWS_MIN), "limit": LIMIT, "min_level": MIN_LEVEL,
-                               "result_char_cap": bounds.result_char_cap},
-                     "note": "a separate, labelled safety test; never mixed with the accuracy results"},
+        "metadata": _metadata(client, backend, model, split, manifest, attempt, slice_k, ids, aborted, bounds),
         "exposure": exposure_counts(plans),
         "pairs": pairs, "runs": rows,
         "counts": {"pairs_run": len(pairs), "complete": complete,
@@ -251,6 +263,91 @@ def run_safety(client: LLMClient, backend: str, model: str, data_root: Path, out
     if aborted is not None:
         raise aborted
     return summary
+
+
+def _metadata(client: LLMClient, backend: str, model: str, split: Split, manifest: dict[str, Any], attempt: int,
+              slice_k: int | None, ids: list[str], aborted: HarnessAbort | None, bounds: AgentBounds) -> dict[str, Any]:
+    return {"backend": backend, "model": model, "client": client.describe(), "split": split.value,
+            "prompt_version": M5_AGENT_PROMPT, "prompt_sha256": prompt_sha256(M5_AGENT_PROMPT),
+            "generator_version": manifest["generator_version"], "manifest_sha256": manifest["content_sha256"],
+            "git_commit": git_commit(), "attempt": attempt, "slice": slice_k, "scenarios": ids,
+            "aborted": None if aborted is None else str(aborted),
+            "query": {"windows_min": list(WINDOWS_MIN), "limit": LIMIT, "min_level": MIN_LEVEL,
+                      "result_char_cap": bounds.result_char_cap},
+            "note": "a separate, labelled safety test; never mixed with the accuracy results"}
+
+
+def safety_stems(backend: str, model: str) -> tuple[str, str]:
+    """(safety, E1 replicate) directory names of slice K, without the attempt suffix."""
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", model)
+    return (f"m5-safety-{backend}-{slug}-prompt-{M5_AGENT_PROMPT}-slice{{k}}",
+            f"m5-safety-replicate-{backend}-{slug}-prompt-{M5_AGENT_PROMPT}-slice{{k}}")
+
+
+def _forced_queries(trace: Path) -> list[str]:
+    return [e["arguments"] for e in _safety_calls(read_trace(trace))]
+
+
+def e1_compare(root: Path, backend: str, model: str) -> dict[str, Any]:
+    """E1: each safety original against its replicate, from committed outputs only (no model). A pair counts when
+    both runs have a report; ``disagree`` is a different top-1. ``among_twin_pairs`` restricts to the pairs whose
+    original and twin both have reports, the denominator of the pre-registered ``top1_changed``."""
+    from sentinelops.evaluation.m5_analysis import resolve  # m5_analysis imports this module
+
+    stem, rep_stem = safety_stems(backend, model)
+    rows, slices = [], []
+    for k in range(1, SAFETY_SLICES + 1):
+        (orig_dir, orig_attempt), (rep_dir, rep_attempt) = resolve(root, stem.format(k=k)), resolve(root, rep_stem.format(k=k))
+        if orig_dir is None or rep_dir is None:
+            slices.append({"slice": k, "safety": orig_dir and orig_dir.name, "replicate": rep_dir and rep_dir.name,
+                           "complete": False})
+            continue
+        orig, rep = (json.loads((d / "summary.json").read_text(encoding="utf-8")) for d in (orig_dir, rep_dir))
+        om, rm = orig["metadata"], rep["metadata"]
+        problems = [key for key in ("model", "manifest_sha256", "prompt_sha256", "scenarios", "slice", "query")
+                    if om.get(key) != rm.get(key)]
+        if not rm.get("replicate") or om.get("replicate") or rm.get("attempt") != rep_attempt:
+            problems.append("replicate flag or attempt")
+        if problems:
+            raise DataMismatch(f"{rep_dir.name}: does not match {orig_dir.name} ({', '.join(problems)})")
+        originals = {r["scenario_id"]: r for r in orig["runs"] if r["variant"] == "original"}
+        pairs = {p["scenario_id"]: p for p in orig["pairs"]}
+        for r in rep["runs"]:
+            o = originals.get(r["scenario_id"])
+            if o is None:
+                continue
+            both = o["top"] is not None and r["top"] is not None
+            rows.append({"scenario_id": r["scenario_id"], "slice": k, "original_top": o["top"], "replicate_top": r["top"],
+                         "both_reports": both, "disagree": both and o["top"] != r["top"],
+                         "queries_identical": _forced_queries(orig_dir / "traces" / o["trace"])
+                         == _forced_queries(rep_dir / "traces" / r["trace"]),
+                         "twin_pair_both_reports": bool(pairs.get(r["scenario_id"], {}).get("both_reports")),
+                         "twin_changed": bool(pairs.get(r["scenario_id"], {}).get("top1_changed"))})
+        slices.append({"slice": k, "safety": orig_dir.name, "safety_attempt": orig_attempt, "replicate": rep_dir.name,
+                       "replicate_attempt": rep_attempt, "complete": bool(rep["counts"]["complete"])
+                       and len(rep["runs"]) == len(om["scenarios"])})
+    twin_pairs = [r for r in rows if r["both_reports"] and r["twin_pair_both_reports"]]
+    return {"label": E1_LABEL, "slices": slices, "complete": all(s["complete"] for s in slices), "rows": rows,
+            "counts": {"replicates": len(rows), "both_reports": sum(r["both_reports"] for r in rows),
+                       "disagree": sum(r["disagree"] for r in rows),
+                       "queries_identical": sum(r["queries_identical"] for r in rows),
+                       "among_twin_pairs": {"n": len(twin_pairs), "disagree": sum(r["disagree"] for r in twin_pairs),
+                                            "twin_changed": sum(r["twin_changed"] for r in twin_pairs)}}}
+
+
+def e1_markdown(e: dict[str, Any]) -> str:
+    c, t = e["counts"], e["counts"]["among_twin_pairs"]
+    lines = [f"# {e['label']}", "",
+             "Reported next to the pre-registered safety counts, never in place of them. One replicate per original; "
+             "counts, not rates; no test.", ""]
+    if not e["complete"]:
+        lines += ["**INCOMPLETE:** " + ", ".join(f"slice {s['slice']}" for s in e["slices"] if not s["complete"]), ""]
+    lines += [f"Replicates {c['replicates']}, both reports {c['both_reports']}, top-1 disagreements between original "
+              f"and replicate **{c['disagree']}**; forced queries identical {c['queries_identical']}.", "",
+              f"Among the pairs whose original and twin both have reports and whose replicate has one (n = {t['n']}): "
+              f"original against replicate disagree {t['disagree']}; original against twin changed {t['twin_changed']} "
+              "(the pre-registered count, restricted to the same pairs).", ""]
+    return "\n".join(lines)
 
 
 def summary_markdown(summary: dict[str, Any]) -> str:
@@ -286,8 +383,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--slice", type=int, help=f"a run: safety slice 1-{SAFETY_SLICES} of the exposed pairs")
     parser.add_argument("--attempt", type=int, default=1, choices=range(1, MAX_ATTEMPT + 1),
                         help="2 only for the one rerun of a slice after a provider-caused stop")
+    parser.add_argument("--replicate", action="store_true", help="E1: rerun the slice's originals once, no twins")
+    parser.add_argument("--e1-report", action="store_true", help="E1, offline, no model: originals against replicates")
     args = parser.parse_args(argv)
     try:
+        if args.e1_report:
+            if args.backend:
+                parser.error("--e1-report makes no model call; drop --backend")
+            e = e1_compare(args.out_root / f"generator-v{GENERATOR_VERSION}", "mistral", args.model or "ministral-14b-2512")
+            out = args.out_root / f"generator-v{GENERATOR_VERSION}" / "m5-safety-e1-report"
+            out.mkdir(parents=True, exist_ok=True)
+            dump_json(out / "e1.json", e)
+            (out / "e1.md").write_text(e1_markdown(e), encoding="utf-8", newline="\n")
+            print(e1_markdown(e))
+            return 0
         if args.check_exposure:
             if args.backend:
                 parser.error("--check-exposure makes no model call; drop --backend")
@@ -299,16 +408,16 @@ def main(argv: list[str] | None = None) -> int:
         bounds = AgentBounds()
         client = OpenAICompatibleClient(args.backend, args.model, limits=RateLimits(args.rpm, args.tpm),
                                         timeout_s=bounds.call_timeout_s, max_tokens=bounds.num_predict)
-        slug = re.sub(r"[^A-Za-z0-9._-]+", "-", args.model)
-        name = (f"m5-safety-{args.backend}-{slug}-prompt-{M5_AGENT_PROMPT}-slice{args.slice}"
-                f"{f'-attempt{args.attempt}' if args.attempt > 1 else ''}")
+        stem = safety_stems(args.backend, args.model)[1 if args.replicate else 0].format(k=args.slice)
+        name = f"{stem}{f'-attempt{args.attempt}' if args.attempt > 1 else ''}"
         out_dir = args.out_root / f"generator-v{GENERATOR_VERSION}" / name
         summary = run_safety(client, args.backend, args.model, args.data_root, out_dir, Split.M5FRESH,
-                             args.manifest_dir, bounds, attempt=args.attempt, slice_k=args.slice)
+                             args.manifest_dir, bounds, attempt=args.attempt, slice_k=args.slice,
+                             replicate=args.replicate)
     except (Refused, DataMismatch, HarnessAbort, OutputExists, FileNotFoundError, MissingKey, DisallowedEndpoint) as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 2
-    print(summary_markdown(summary))
+    print(f"{E1_LABEL}: {summary['counts']}" if args.replicate else summary_markdown(summary))
     print(f"wrote {out_dir}")
     return 0
 

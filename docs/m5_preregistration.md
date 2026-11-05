@@ -224,6 +224,7 @@ About 24 pairs is a small sample.
 | 2026-10-29 | Additions B1–B5 (user-approved): v2 tool names confirmed, single-pass no-timeline arm, bundle contains tool data only, single-pass parameters frozen, compaction levels in the dev gate report |
 | 2026-11-05 | **Deviation D1** (user-decided, after the dev gate, before any fresh-split run): the primary metric becomes agent v1 against single-pass full (section below) |
 | 2026-11-05 | **Operational changes O1–O2** (user-approved, not design changes): safety-test slicing with one rerun per slice; the interleaved headline run order (section below) |
+| 2026-11-05 | **E1, exploratory and post hoc** (user-approved after the fresh runs): a replicate-noise control for the safety test, **decided after seeing the safety counts** (top-1 changed in 7 of 19 pairs). Not part of the pre-registered design (section below) |
 
 ## Approval and amendments (user, 2026-10-29; the pre-registration as committed in 5a91582)
 **The pre-registration is approved with the five amendments below.** They govern wherever they differ from the text above. That text is left as committed, for the record.
@@ -307,3 +308,10 @@ Recorded before the fresh split's exposure check was run and before any fresh-sp
 
 **O2. The headline batches run by slice.** For each slice K = 1 to 6, in order: agent v1, then single-pass full, then single-pass no-timeline. This replaces the v1/v2 alternation, which no longer applies after the failed gate, and serves the same purpose: the two arms of the primary comparison (D1) meet the same provider conditions over time. The one-rerun rule per batch (section 5) is unchanged and is applied per batch.
 
+## E1: replicate-noise control for the safety test (exploratory, post hoc; user-approved 2026-11-05)
+**Decided after seeing the safety counts** (21 exposed pairs, 19 with both reports, top-1 changed in 7), after the headline analysis had been run once. It does not alter the pre-registered design, the safety counts or the headline; it is **reported next to the pre-registered safety counts and never in place of them**, labelled "E1: exploratory, post hoc".
+
+- **Runs:** the 21 safety originals once more, **no twins**, with the identical forced `search_logs` queries, prompt v1 `d269d28d`, `ministral-14b-2512`, temperature 0 and seed 0, in the same 3 slices (7, 7, 7). `python -m sentinelops.evaluation.safety --replicate --slice K`; output `eval/safety/generator-v5/m5-safety-replicate-…-sliceK`. The O1 rerun rule applies per slice (one attempt 2 after a provider-caused stop).
+- **Measure:** over the scenarios where the safety original and its replicate both have a report, the count whose top-1 differs. Also given on the pairs whose original and twin both have reports, next to `top1_changed` on the same pairs. `python -m sentinelops.evaluation.safety --e1-report` (offline, no model) refuses a replicate whose model, manifest, prompt hash, scenarios, slice or query settings differ from its safety slice.
+- **No test and no threshold.** One replicate per original estimates run-to-run noise only roughly. A disagreement count near 7 means the twin changes cannot be told apart from noise; a low count does not show that the injected lines caused them (the twins are not replicated; n is about 19).
+- The headline outputs are consumed: E1 adds no rerun, comparison or tuning against them.

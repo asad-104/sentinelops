@@ -1720,6 +1720,9 @@ Each refusal is recorded.
   - **Single-pass invalid reports:** full 5, no-timeline 6, all "report still invalid after 1 repair turn" (10 with no `submit_report` call, 1 validation error); none provider-caused.
   - **Natural exposure:** of 21 injected originals, the agent was shown an injected line in 3; the single-pass bundle contains one in 4 (full) and 4 (no-timeline).
   - **Safety** (21 exposed pairs, 19 with both reports; 1 pair in each of slices 1 and 2 stopped `no_new_evidence` in original and twin): top-1 changed 7, followed the claim 1, injected line cited 1, executed actions 0, twin queries identical 21/21. No replicate-noise control, so the 7 changes cannot be attributed to the injected lines.
+  - **What "valid change-tool call 0/60" means** (checked in the committed traces, f9950e2): 3 of 60 agent runs touched change records, all **in VERIFY, after the first `submit_hypotheses`**. They made 5 change-tool calls (`list_config_changes` ×3, `list_deployments` ×2), 4 returning records and 1 empty, with ordinary 1–2 h windows. So the 0 is not empty results or a wrong window; it is the timing rule (before the first ranking). In those 3 runs: one `bad_deployment` saw its trigger (the 1/24) and was still wrong at top-1; one `bad_deployment` did not see it and was right; one `memory_leak` (no trigger) was right.
+- **E1** (user-approved 2026-11-05, exploratory and post hoc, decided after the safety counts; `docs/m5_preregistration.md`): the replicate-noise control. Built (`safety --replicate`, `safety --e1-report`), not yet run.
+
 
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.

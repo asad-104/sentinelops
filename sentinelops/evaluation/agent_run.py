@@ -11,7 +11,11 @@
   temporary directory: it refuses any core scenario and any output under ``eval/agent/`` (no tuning on
   the core set; stage A mock traces never touch the real results directory).
 Reuses the pilot's guard (free disk, swap growth, memory pressure), unload after every run, attempt
-directories, refusal to overwrite and summary on abort. There is no split argument.
+directories, refusal to overwrite and summary on abort.
+
+``--split m5fresh --slice K`` (M5 headline, pre-registered 2026-10-29 section 5 and A2): one of the 6 fixed slices
+of 10 fresh originals, cut from the frozen m5fresh manifest's order. Mistral only, prompt v1 only (v2 failed the dev
+gate, 2026-11-02), originals only. The M4 decision rule is not applied as an M5 verdict (section 7).
 """
 
 from __future__ import annotations
@@ -63,6 +67,10 @@ M5_DEV_SCENARIOS = ("sc-47610c9e02", "sc-694130798c", "sc-6d023322e9", "sc-8e6db
                     "sc-a59e0e61c7", "sc-ba353abbc7", "sc-be7c6ab28b", "sc-be91d5105d", "sc-bf8ef04f56", "sc-c1e7d959c8",
                     "sc-cc007aa1ee", "sc-d74c46a899", "sc-dca259caa6", "sc-df583a5a54", "sc-e2cea1c0c0", "sc-ec3e7c879f",
                     "sc-f7e6249083", "sc-fada5df47f", "sc-fb1c777397", "sc-ff655f01df")
+# M5 headline slices (pre-registered 2026-10-29 section 5): the frozen m5fresh manifest's order, cut into 6 slices of 10.
+FRESH_SLICES, FRESH_SLICE_SIZE = 6, 10
+# The dev gate failed (2026-11-02, report 52daa08): every M5 fresh-split agent run uses v1 (d269d28d).
+M5_AGENT_PROMPT = "v1"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REAL_RESULTS = REPO_ROOT / "eval" / "agent"
 DEFAULT_OUT_ROOT = Path("eval/agent")
@@ -101,6 +109,19 @@ def check_hosted_target(data_root: Path, scenario_ids: Sequence[str], manifest_d
     if outside:
         raise Refused(f"hosted backends receive {split.value} scenarios only; {len(outside)} not in the "
                       f"{split.value} manifest")
+
+
+def fresh_slice(manifest_dir: Path, k: int) -> tuple[str, ...]:
+    """Slice ``k`` (1-6) of the fresh split: 10 consecutive IDs in the frozen manifest's order. Never printed."""
+    if not 1 <= k <= FRESH_SLICES:
+        raise Refused(f"--slice must be 1 to {FRESH_SLICES}")
+    path = manifest_dir / f"{Split.M5FRESH.value}.json"
+    if not path.is_file():
+        raise Refused("no m5fresh manifest; the fresh split has not been generated")
+    ids = json.loads(path.read_text(encoding="utf-8"))["scenario_ids"]
+    if len(ids) != FRESH_SLICES * FRESH_SLICE_SIZE or len(set(ids)) != len(ids):
+        raise Refused(f"the m5fresh manifest must list {FRESH_SLICES * FRESH_SLICE_SIZE} distinct scenarios")
+    return tuple(ids[(k - 1) * FRESH_SLICE_SIZE:k * FRESH_SLICE_SIZE])
 
 
 def collides_with_frozen_splits(scenario_ids: Sequence[str], manifest_dir: Path) -> bool:
@@ -188,15 +209,18 @@ def run_agent(client: LLMClient, backend: str, model: str, data_root: Path, out_
               bounds: AgentBounds = AgentBounds(), min_free_gb: float = MIN_FREE_GB,
               max_swap_growth_gb: float = MAX_SWAP_GROWTH_GB, stats: Any = None, progress: bool = False,
               clock: Callable[[], float] = time.monotonic, progress_stream: Any = None, attempt: int = 1,
-              smoke: bool = False, prompt_version: str = "v1", twins: bool = True) -> dict[str, Any]:
+              smoke: bool = False, prompt_version: str = "v1", twins: bool = True, split: Split = Split.DEV,
+              fresh_slice_k: int | None = None) -> dict[str, Any]:
     if backend == "mock":
         check_mock_target(scenario_ids, out_dir)
     if backend in HOSTED_BACKENDS:
-        check_hosted_target(data_root, scenario_ids, manifest_dir)
+        check_hosted_target(data_root, scenario_ids, manifest_dir, split=split)
+    if split is Split.M5FRESH and (twins or prompt_version != M5_AGENT_PROMPT):
+        raise Refused(f"fresh-split agent runs are originals only, with prompt {M5_AGENT_PROMPT}")
     trace_dir = out_dir / "traces"
     if any(trace_dir.glob("*.jsonl")) or (out_dir / "run_log.jsonl").exists():
         raise OutputExists(f"{out_dir} already holds an attempt; use a new --attempt number")
-    manifest = verify_split(Split.DEV, data_root, manifest_dir)
+    manifest = verify_split(split, data_root, manifest_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stats = stats or system_stats
     run_twins = twins
@@ -214,7 +238,7 @@ def run_agent(client: LLMClient, backend: str, model: str, data_root: Path, out_
                                   after_run=unload)
     aborted: HarnessAbort | None = None
     try:
-        run_split(guarded, Split.DEV, data_root, manifest_dir=manifest_dir, scenario_ids=scenario_ids, twins=run_twins)
+        run_split(guarded, split, data_root, manifest_dir=manifest_dir, scenario_ids=scenario_ids, twins=run_twins)
     except HarnessAbort as exc:
         aborted = exc
     rows = run_rows(trace_dir, data_root, bounds.num_ctx)
@@ -224,15 +248,17 @@ def run_agent(client: LLMClient, backend: str, model: str, data_root: Path, out_
                      "prompt_sha256": prompt_sha256(prompt_version), "prompt_version": prompt_version, "twins": run_twins,
                      "bounds": asdict(bounds), "generator_version": manifest["generator_version"],
                      "manifest_sha256": manifest["content_sha256"], "git_commit": git_commit(),
-                     "scenarios": list(scenario_ids), "attempt": attempt, "smoke": smoke,
+                     "scenarios": list(scenario_ids), "attempt": attempt, "smoke": smoke, "split": split.value,
+                     "slice": fresh_slice_k,
                      "aborted": None if aborted is None else str(aborted), "unload_between_runs": unload is not None,
                      "budgets_note": "M4 agent budget 40 read-tool calls; rule baseline uses ~52"},
         "runs": rows,
         "rule": apply_agent_rule(rows, complete, active_time=backend in HOSTED_BACKENDS),
     }
-    if backend == "mock" or smoke:
+    if backend == "mock" or smoke or split is Split.M5FRESH:
         summary["rule"]["mechanics_check_only"] = summary["rule"].pop("verdict")
-        summary["rule"]["verdict"] = "not applicable (smoke run)" if smoke else "not applicable (mock backend)"
+        summary["rule"]["verdict"] = ("not applicable (smoke run)" if smoke else "not applicable (mock backend)"
+                                      if backend == "mock" else "not applicable (M5 reports the comparison only)")
     dump_json(out_dir / "summary.json", summary)
     (out_dir / "summary.md").write_text(summary_markdown(summary), encoding="utf-8", newline="\n")
     if aborted is not None:
@@ -289,7 +315,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--tpm", type=int, help="hosted: tokens per minute to stay under (groq default 8000; "
                                                 "mistral: required, from the console)")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
-    parser.add_argument("--data-root", type=Path, default=Path("data/dev"))
+    parser.add_argument("--data-root", type=Path, help="default: data/dev, or data/m5fresh with --split m5fresh")
     parser.add_argument("--out-root", type=Path, default=DEFAULT_OUT_ROOT)
     parser.add_argument("--manifest-dir", type=Path, default=DEFAULT_MANIFEST_DIR)
     parser.add_argument("--attempt", type=int, default=1)
@@ -298,11 +324,28 @@ def main(argv: list[str] | None = None) -> int:
                         help="core: the 10 M4 core scenarios; dev-gate: the 22 pre-registered M5 dev scenarios")
     parser.add_argument("--prompt", choices=("v1", "v2"), default="v1", help="agent prompt version (v1 = d269d28d)")
     parser.add_argument("--no-twins", action="store_true", help="run originals only (M5 dev gate and headline)")
+    parser.add_argument("--split", choices=(Split.DEV.value, Split.M5FRESH.value), default=Split.DEV.value,
+                        help="m5fresh: the M5 headline, one fixed slice (--slice), mistral, prompt v1, originals only")
+    parser.add_argument("--slice", type=int, help=f"m5fresh: slice 1-{FRESH_SLICES} of {FRESH_SLICE_SIZE} originals")
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--min-free-gb", type=float, default=MIN_FREE_GB, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.attempt < 1:
         parser.error("--attempt must be at least 1")
+
+    split = Split(args.split)
+    if split is Split.M5FRESH:
+        if args.backend != "mistral":
+            parser.error("--split m5fresh runs on --backend mistral only")
+        if args.smoke or args.set != "core":
+            parser.error("--split m5fresh takes --slice, not --smoke or --set")
+        if args.slice is None:
+            parser.error(f"--split m5fresh needs --slice 1-{FRESH_SLICES}")
+        if args.prompt != M5_AGENT_PROMPT:
+            parser.error(f"v2 failed the dev gate; fresh-split runs use --prompt {M5_AGENT_PROMPT} only")
+    elif args.slice is not None:
+        parser.error("--slice is for --split m5fresh")
+    data_root = args.data_root or Path("data") / split.value
 
     bounds = AgentBounds()
     try:
@@ -318,7 +361,8 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("--smoke must name a dev scenario outside the core and M3 pilot sets")
             if args.smoke and args.set != "core":
                 parser.error("--smoke and --set are exclusive")
-            ids = (args.smoke,) if args.smoke else (M5_DEV_SCENARIOS if args.set == "dev-gate" else CORE_SCENARIOS)
+            ids = (fresh_slice(args.manifest_dir, args.slice) if split is Split.M5FRESH else (args.smoke,) if args.smoke
+                   else M5_DEV_SCENARIOS if args.set == "dev-gate" else CORE_SCENARIOS)
             if args.backend == "groq":
                 model = args.model or "qwen/qwen3.8-27b"
                 client = OpenAICompatibleClient("groq", model, limits=RateLimits(args.rpm or 30, args.tpm or 8000),
@@ -338,16 +382,19 @@ def main(argv: list[str] | None = None) -> int:
                 client = OllamaClient(model, base_url=args.ollama_url, timeout_s=bounds.call_timeout_s,
                                       num_ctx=bounds.num_ctx, think=False, num_predict=bounds.num_predict)
         slug = re.sub(r"[^A-Za-z0-9._-]+", "-", model)
-        prefix = "smoke-" if args.smoke else ("m5-dev-gate-" if args.set == "dev-gate" else "")
-        suffix = (f"-prompt-{args.prompt}" if args.prompt != "v1" or args.set == "dev-gate" else "") + \
+        prefix = ("m5-fresh-" if split is Split.M5FRESH else "smoke-" if args.smoke
+                  else "m5-dev-gate-" if args.set == "dev-gate" else "")
+        suffix = (f"-prompt-{args.prompt}" if args.prompt != "v1" or args.set == "dev-gate" or split is Split.M5FRESH
+                  else "") + (f"-slice{args.slice}" if split is Split.M5FRESH else "") + \
             (f"-attempt{args.attempt}" if args.attempt > 1 else "")
         name = f"{prefix}{args.backend}-{slug}{suffix}"
         out_dir = args.out_root / f"generator-v{GENERATOR_VERSION}" / name
         if args.backend == "mock":
             check_mock_target(ids, out_dir)
-        summary = run_agent(client, args.backend, model, args.data_root, out_dir, ids, args.manifest_dir, bounds,
+        summary = run_agent(client, args.backend, model, data_root, out_dir, ids, args.manifest_dir, bounds,
                             min_free_gb=args.min_free_gb, progress=not args.quiet, attempt=args.attempt,
-                            smoke=bool(args.smoke), prompt_version=args.prompt, twins=not args.no_twins)
+                            smoke=bool(args.smoke), prompt_version=args.prompt,
+                            twins=not args.no_twins and split is Split.DEV, split=split, fresh_slice_k=args.slice)
     except (Refused, DataMismatch, HarnessAbort, OutputExists, FileNotFoundError, MissingKey,
             DisallowedEndpoint) as exc:
         print(f"refused: {exc}", file=sys.stderr)

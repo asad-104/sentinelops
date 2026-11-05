@@ -2,8 +2,8 @@
 
 ``--variant full|no-timeline`` (pre-registered 2026-10-29). ``--set dev-gate`` runs the 22 pre-registered dev
 originals (the mechanics check; accuracy is information only). Originals only, never twins. Reuses the agent
-runner's hosted data guard, provider settings, run guard, attempt directories and refusal to overwrite. The fresh
-split is added with its generator (stage D).
+runner's hosted data guard, provider settings, run guard, attempt directories and refusal to overwrite.
+``--split m5fresh --slice K`` runs one of the agent's 6 fixed slices of 10 fresh originals (the same slices).
 """
 
 from __future__ import annotations
@@ -20,9 +20,11 @@ from sentinelops.agent.single_pass import VARIANTS, SinglePassInvestigator, sing
 from sentinelops.evaluation.agent_run import (
     DEFAULT_OUT_ROOT,
     HOSTED_BACKENDS,
+    FRESH_SLICES,
     M5_DEV_SCENARIOS,
     Refused,
     check_hosted_target,
+    fresh_slice,
 )
 from sentinelops.evaluation.harness import DataMismatch, HarnessAbort, git_commit, run_split, verify_split
 from sentinelops.evaluation.pilot import MAX_SWAP_GROWTH_GB, MIN_FREE_GB, GuardedInvestigator, OutputExists, system_stats
@@ -65,13 +67,14 @@ def rows(trace_dir: Path, data_root: Path) -> list[dict[str, Any]]:
 def run_single_pass(client: LLMClient, backend: str, model: str, variant: str, data_root: Path, out_dir: Path,
                     scenario_ids: Sequence[str], manifest_dir: Path = DEFAULT_MANIFEST_DIR,
                     min_free_gb: float = MIN_FREE_GB, stats: Any = None,
-                    clock: Callable[[], float] = time.monotonic, attempt: int = 1) -> dict[str, Any]:
+                    clock: Callable[[], float] = time.monotonic, attempt: int = 1, split: Split = Split.DEV,
+                    fresh_slice_k: int | None = None) -> dict[str, Any]:
     if backend in HOSTED_BACKENDS:
-        check_hosted_target(data_root, scenario_ids, manifest_dir)
+        check_hosted_target(data_root, scenario_ids, manifest_dir, split=split)
     trace_dir = out_dir / "traces"
     if any(trace_dir.glob("*.jsonl")) or (out_dir / "run_log.jsonl").exists():
         raise OutputExists(f"{out_dir} already holds an attempt; use a new --attempt number")
-    manifest = verify_split(Split.DEV, data_root, manifest_dir)
+    manifest = verify_split(split, data_root, manifest_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     unload = getattr(client, "unload", None)
     inner = SinglePassInvestigator(client, variant=variant, traces=TraceWriter(trace_dir), clock=clock)
@@ -79,7 +82,7 @@ def run_single_pass(client: LLMClient, backend: str, model: str, variant: str, d
                                   max_swap_growth_gb=MAX_SWAP_GROWTH_GB, stats=stats or system_stats, after_run=unload)
     aborted: HarnessAbort | None = None
     try:
-        run_split(guarded, Split.DEV, data_root, manifest_dir=manifest_dir, scenario_ids=scenario_ids, twins=False)
+        run_split(guarded, split, data_root, manifest_dir=manifest_dir, scenario_ids=scenario_ids, twins=False)
     except HarnessAbort as exc:
         aborted = exc
     runs = rows(trace_dir, data_root)
@@ -87,7 +90,8 @@ def run_single_pass(client: LLMClient, backend: str, model: str, variant: str, d
                             "single_pass_sha256": single_pass_sha256(variant), "scenarios": list(scenario_ids),
                             "generator_version": manifest["generator_version"],
                             "manifest_sha256": manifest["content_sha256"], "git_commit": git_commit(),
-                            "attempt": attempt, "aborted": None if aborted is None else str(aborted), "twins": False},
+                            "attempt": attempt, "aborted": None if aborted is None else str(aborted), "twins": False,
+                            "split": split.value, "slice": fresh_slice_k},
                "runs": runs,
                "counts": {"n": len(runs), "valid_reports": sum(r["report_valid"] for r in runs),
                           "top1": sum(r["top1"] for r in runs), "top3": sum(r["top3"] for r in runs),
@@ -122,21 +126,34 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rpm", type=int, required=True)
     parser.add_argument("--tpm", type=int, required=True)
     parser.add_argument("--variant", choices=VARIANTS, required=True)
-    parser.add_argument("--set", choices=("dev-gate",), required=True)
-    parser.add_argument("--data-root", type=Path, default=Path("data/dev"))
+    parser.add_argument("--set", choices=("dev-gate",), help="dev: the 22 pre-registered dev originals")
+    parser.add_argument("--split", choices=(Split.DEV.value, Split.M5FRESH.value), default=Split.DEV.value)
+    parser.add_argument("--slice", type=int, help=f"m5fresh: slice 1-{FRESH_SLICES} of 10 originals")
+    parser.add_argument("--data-root", type=Path, help="default: data/dev, or data/m5fresh with --split m5fresh")
     parser.add_argument("--out-root", type=Path, default=DEFAULT_OUT_ROOT)
     parser.add_argument("--manifest-dir", type=Path, default=DEFAULT_MANIFEST_DIR)
     parser.add_argument("--attempt", type=int, default=1)
     args = parser.parse_args(argv)
+    split = Split(args.split)
+    if split is Split.M5FRESH:
+        if args.set is not None or args.slice is None:
+            parser.error(f"--split m5fresh takes --slice 1-{FRESH_SLICES}, not --set")
+    elif args.set is None or args.slice is not None:
+        parser.error("--split dev needs --set dev-gate and takes no --slice")
+    data_root = args.data_root or Path("data") / split.value
     try:
+        ids = fresh_slice(args.manifest_dir, args.slice) if split is Split.M5FRESH else M5_DEV_SCENARIOS
         client = OpenAICompatibleClient(args.backend, args.model, limits=RateLimits(args.rpm, args.tpm),
                                         max_tokens=2048)
         slug = re.sub(r"[^A-Za-z0-9._-]+", "-", args.model)
-        name = (f"m5-dev-gate-single-pass-{args.variant}-{args.backend}-{slug}"
+        stem = f"m5-fresh-single-pass-{args.variant}" if split is Split.M5FRESH else \
+            f"m5-dev-gate-single-pass-{args.variant}"
+        name = (f"{stem}-{args.backend}-{slug}{f'-slice{args.slice}' if split is Split.M5FRESH else ''}"
                 f"{f'-attempt{args.attempt}' if args.attempt > 1 else ''}")
         out_dir = args.out_root / f"generator-v{GENERATOR_VERSION}" / name
-        summary = run_single_pass(client, args.backend, args.model, args.variant, args.data_root, out_dir,
-                                  M5_DEV_SCENARIOS, args.manifest_dir, attempt=args.attempt)
+        summary = run_single_pass(client, args.backend, args.model, args.variant, data_root, out_dir,
+                                  ids, args.manifest_dir, attempt=args.attempt, split=split,
+                                  fresh_slice_k=args.slice)
     except (Refused, DataMismatch, HarnessAbort, OutputExists, FileNotFoundError, MissingKey, DisallowedEndpoint) as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 2

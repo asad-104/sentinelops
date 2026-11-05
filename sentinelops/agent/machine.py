@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from typing import Any
 
@@ -85,10 +85,15 @@ def call_kind(name: str, arguments: dict[str, Any]) -> str | None:
 class StateMachineInvestigator:
     def __init__(self, client: LLMClient, *, name: str = "m4_agent", bounds: AgentBounds = AgentBounds(),
                  traces: TraceWriter | None = None, clock: Callable[[], float] = time.monotonic,
-                 prompt_version: str = "v1") -> None:
+                 prompt_version: str = "v1",
+                 triage_extra: Callable[[str], Sequence[tuple[str, dict[str, Any]]]] | None = None) -> None:
+        """``triage_extra`` (M5 safety test only, pre-registered 2026-10-29 section 6): read calls per scenario that
+        the loop issues at the end of TRIAGE and shows as ordinary tool results. The caller supplies them; the
+        agent never sees where they come from. Off by default, which leaves every other run unchanged."""
         self.name, self.client, self.bounds, self.traces, self.clock = name, client, bounds, traces, clock
         self.prompt_version, self.instructions = prompt_version, state_instructions(prompt_version)
         self.specs = agent_tool_specs()
+        self.triage_extra = triage_extra
 
     def investigate(self, tools: ToolCaller, scenario_id: str) -> InvestigationReport:
         trace = self.traces.start(scenario_id) if self.traces else RunTrace(None)
@@ -178,7 +183,28 @@ class _Run:
                              new_ids=new, records=self._records(dump["items"]), data_kind=CALL_KINDS.get(name),
                              evidence=False, result_chars=len(json.dumps(dump)), shown="", compacted="")
         self.triage_text = "\n".join(parts)
+        for k, (name, arguments) in enumerate(self.o.triage_extra(self.scenario_id) if self.o.triage_extra else (), 1):
+            self.loop_read(ToolCallRequest(f"safety{k:03d}", name, json.dumps(arguments, sort_keys=True)), arguments)
         self.move(State.GATHER, "triage done")
+
+    def loop_read(self, call: ToolCallRequest, arguments: dict[str, Any]) -> None:
+        """A loop-issued read call shown to the model as an ordinary tool result (an exchange, compacted like any
+        other). It counts toward the tool-call budget and the ledger, never toward GATHER evidence or the
+        malformed and identical-call streaks."""
+        if call.name not in READ_TOOLS:
+            raise AssertionError(f"loop-issued calls must be read tools, not {call.name}")  # a harness bug
+        signature = (call.name, json.dumps(arguments, sort_keys=True))
+        duplicate = signature in self.seen
+        self.seen.add(signature)
+        self.tool_calls += 1
+        result = self.tools.call(call.name, arguments)
+        dump = result.model_dump(mode="json")
+        shown = self.cap(json.dumps(dump, sort_keys=True))
+        new = self.ledger.add(dump["items"], shown) if result.ok else []
+        code = result.error.code if result.error else None
+        self.record(call, dump, valid=code not in ("unknown_tool", "invalid_arguments"), code=code, new=new,
+                    records=self._records(dump["items"]), kind=call_kind(call.name, arguments), evidence=False,
+                    duplicate=duplicate, by_loop=True)
 
     def step(self) -> InvestigationReport | None:
         if self.active() >= self.b.total_timeout_s:
@@ -437,7 +463,8 @@ class _Run:
         return {i for h in self.ranking for i in (*h.get("supporting_evidence", ()), *h.get("contradicting_evidence", ()))}
 
     def record(self, call: ToolCallRequest, result: dict[str, Any], *, valid: bool, code: str | None, new: list[str],
-               records: list[dict[str, Any]], kind: str | None, evidence: bool, duplicate: bool) -> None:
+               records: list[dict[str, Any]], kind: str | None, evidence: bool, duplicate: bool,
+               by_loop: bool = False) -> None:
         full = json.dumps(result, sort_keys=True)
         shown = self.cap(full)
         arguments = self.parse(call)
@@ -450,7 +477,7 @@ class _Run:
         exchange = Exchange(call, shown, summary)
         self.exchanges.append(exchange)
         self.trace.event("tool", turn=self.turns, state=self.state.value, call_id=call.id, name=call.name,
-                         by_loop=False, arguments=call.raw_arguments[:TRACE_TEXT_CAP], valid=valid,
+                         by_loop=by_loop, arguments=call.raw_arguments[:TRACE_TEXT_CAP], valid=valid,
                          ok=code is None and bool(result.get("ok", True)), error_code=code, duplicate=duplicate,
                          new_ids=new, records=records, data_kind=kind, evidence=evidence, result_chars=len(full), shown=shown[:TRACE_TEXT_CAP], compacted=exchange.compact(160))
 

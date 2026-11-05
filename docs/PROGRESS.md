@@ -1652,6 +1652,34 @@ Each refusal is recorded.
 
 
 
+## M5: dev gate result, v2 fails (run by the user 2026-11-02; outputs 129b672, report 52daa08)
+**The runs:** v1 (`d269d28d`) and v2 (`0a788479`) on the 22 dev originals, no twins, Mistral `ministral-14b-2512`, attempt 1, code `390a573`, complete, no abort. Single-pass full and no-timeline ran on the same 22 as a mechanics check. Report: `eval/agent/generator-v5/m5-dev-gate-report/`.
+
+| Check | v1 | v2 | Requirement | Met |
+|---|---|---|---|---|
+| G1 runs with a valid change-tool call before the first ranking | 0/22 | 22/22 | v2 ≥ 16 of 22 | yes |
+| G2 valid reports | 19/22 | 17/22 | v2 ≥ v1 | **no** |
+| G3 `unknown_tool` calls | 0 | 0 | v2 = 0 | yes |
+| G4 overflow runs (`context_exhausted` included) | 1 | 4 | v2 = 0 | **no** |
+
+**Outcome (user decision 2026-11-05: stands as written):** v2 failed the gate. **M5 uses `d269d28d` only**; the v2 arm is dropped from the headline and the failed attempt is reported with these counts. No second revision.
+
+**Information only (not gated, dev, n = 22):**
+- **Dev top-1:** agent v1 8/22 (36%), agent v2 12/22 (55%), single-pass full 20/22 (91%), single-pass no-timeline 15/22 (68%).
+- **Single-pass mechanics:** 22/22 valid reports in both arms, all `sufficient_evidence`, no reductions applied, a repair turn in 5 (full) and 4 (no-timeline) runs, largest estimate 6,120 against the 6,144 budget.
+- **Compaction levels** (all requests): v1 {0: 36, 1: 29, 2: 29, 3: 217, 4: 138}, v2 {0: 64, 1: 33, 2: 15, 3: 180, 4: 126}.
+
+**Caveats:**
+- **The single-pass full baseline scored 20/22 on dev against agent v1's 8/22.** Dev, n = 22, information only; it was seen before deviation D1 chose agent v1 against single-pass full as the primary comparison.
+- **The single-pass bundle design followed the M4 failure pattern:** it hands the model the change timeline, which the M4 agent never called. Same author as the simulator, the agent and v2 (A5).
+- **`context_exhausted` is a harness budget stop, not a provider limit.** All 5 (1 v1, 4 v2) are the next VERIFY request at compaction level 4, **built but never sent**, 17–96 estimated tokens over the 6,144 budget (0.3–1.6%). On the previous request of each run the estimator was 8–12% above the server's count, so whether the unsent requests would have fit on the server is unknown. v2's extra instruction text appears only in GATHER requests; the overflowing VERIFY requests have the same stage, system and tool-spec sizes in both arms. Whether v2's extra change-tool calls make VERIFY overflow more frequent is not established at 4 against 1 of 22.
+
+**Deviation D1 (user, 2026-11-05, after the dev gate, before any fresh-split run):** A3 had no fallback for a failed gate. **The primary metric becomes top-1 on the 60 fresh originals, agent v1 against single-pass full, with an exact two-sided paired sign test on the discordant pairs.** Wilson 95% intervals for all arms are secondary. Recorded in `docs/m5_preregistration.md`.
+
+**Test fix:** the estimator replay globbed every trace under `eval/agent/generator-v5`, so the single-pass traces broke it in 129b672 (red from 129b672 to dedd4e7). It now reads a pinned list of agent-trace directories. No estimator change; no turn of the 44 new agent runs is undercounted.
+
+**Updated hosted plan without v2** (A2 and B2 estimates): headline agent v1 60 runs (about 7.4M tokens, about 2.3 h); single-pass full 60 (about 0.5M); single-pass no-timeline 60 (about 0.4M); safety test about 48 with v1 (about 5.9M). **About 228 hosted runs, about 14.2M tokens.** Measured dev medians (v1 117k tokens per run, single-pass about 9k) put it near 12.9M.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

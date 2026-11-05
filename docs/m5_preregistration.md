@@ -222,6 +222,7 @@ About 24 pairs is a small sample.
 | 2026-10-29 | Written and committed for review; not yet approved |
 | 2026-10-29 | **Approved by the user with amendments A1–A5** (section below). The text above is unchanged from 5a91582; where they differ, the amendments govern |
 | 2026-10-29 | Additions B1–B5 (user-approved): v2 tool names confirmed, single-pass no-timeline arm, bundle contains tool data only, single-pass parameters frozen, compaction levels in the dev gate report |
+| 2026-11-05 | **Deviation D1** (user-decided, after the dev gate, before any fresh-split run): the primary metric becomes agent v1 against single-pass full (section below) |
 
 ## Approval and amendments (user, 2026-10-29; the pre-registration as committed in 5a91582)
 **The pre-registration is approved with the five amendments below.** They govern wherever they differ from the text above. That text is left as committed, for the record.
@@ -280,3 +281,21 @@ About 24 pairs is a small sample.
 **B4. The single-pass parameters are frozen.** The slice count (6), the log caps (1 ERROR + 1 WARN per slice, messages at most 160 characters), the metric list and the reduction order are **frozen before the first call and never tuned**.
 
 **B5. The dev gate report includes the compaction levels.** For v1 and v2 on the 22 dev originals, the report gives the **distribution of compaction levels** over all requests, and at the HYPOTHESIZE and REPORT requests. This is reported, not gated.
+
+## Deviation D1 (user, 2026-11-05): the primary metric after the failed dev gate
+**When:** decided on 2026-11-05, **after the dev gate results** (v2 failed G2 and G4; report committed in 52daa08) and **before any fresh-split run**. The fresh split had not been generated when D1 was decided.
+
+**Why:** A3 defined the primary metric as v2 against v1. Section 3 drops the v2 arm when the gate fails, and A3 had **no fallback** for that case, so the primary metric as written could not be computed.
+
+**The primary metric becomes:** **top-1 on the 60 fresh-split originals, agent v1 (`d269d28d`) against the single-pass full baseline (`2bf74a3f`)**, with an **exact two-sided paired sign test on the discordant pairs**. It is reported with the discordant counts (agent right with single-pass wrong, and the reverse) and the test's n.
+
+**Secondary:**
+- **Wilson 95% intervals** for every arm's top-1 and top-3 (agent v1, single-pass full, single-pass no-timeline, the local baselines), as k/n.
+- Everything else in section 7 stays secondary, as in A3.
+
+**Unchanged:** there is no pass/fail verdict for M5 (A3). The gate outcome stands as written: M5 uses `d269d28d` only, and the failed v2 attempt is reported with its counts (sections 1 and 3).
+
+**Known before D1 was decided, and stated wherever the primary result is stated:**
+- On the 22 dev originals, single-pass full scored **20/22 top-1** against agent v1's **8/22**. These are dev mechanics runs, information only, and they were seen before this choice of comparison.
+- The single-pass bundle design followed the M4 failure pattern: it includes the change timeline (`get_timeline`), which the M4 agent never called.
+

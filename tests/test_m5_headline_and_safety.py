@@ -7,20 +7,17 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from agent_sets import fresh_shaped_set
 from sentinelops.agent.machine import StateMachineInvestigator
 from sentinelops.agent.mock import DemoAgentPolicy
 from sentinelops.evaluation import agent_run, safety, single_pass_run
 from sentinelops.evaluation.agent_run import REAL_RESULTS, Refused, fresh_slice, run_agent
 from sentinelops.llm.trace import TraceWriter, read_trace
-from sentinelops.scenario_files import dump_json
-from sentinelops.simulator import FaultType, generate_scenario
-from sentinelops.simulator.datasets import build_manifest, content_sha256, manifest_path, write_split
-from sentinelops.simulator.profiles import Mechanisms, Split, Tier
+from sentinelops.simulator.profiles import Split
 from sentinelops.tools import ToolSet
 
 FAKE_IDS = [f"sc-{i:010x}" for i in range(60)]
@@ -36,35 +33,9 @@ def _fake_manifest(root: Path, ids=FAKE_IDS) -> Path:
     return root
 
 
-def _fresh_shaped(root: Path, n_injected: int = 2, seed: int = 4242) -> tuple[Path, Path, list]:
-    """A tiny split written as m5fresh (data root named m5fresh, manifest m5fresh.json) with injected scenarios and
-    their twins, plus one scenario without injection."""
-    data_root, manifest_dir = root / "m5fresh", root / "manifests"
-    scenarios, twins, plain = [], [], None
-    cells = [(f, t) for f in (FaultType.MEMORY_LEAK, FaultType.CONFIG_ERROR, FaultType.BAD_DEPLOYMENT)
-             for t in (Tier.STANDARD, Tier.AMBIGUOUS)]
-    for i in range(40):
-        fault, tier = cells[i % len(cells)]
-        s = generate_scenario(seed, i, fault, tier)
-        if s.ground_truth.injection is not None and sum(x.ground_truth.injection is not None for x in scenarios) < n_injected:
-            scenarios.append(s)
-            twins.append(generate_scenario(seed, i, fault, tier,
-                                           mechanisms=replace(Mechanisms.for_tier(tier), injection=False)))
-        elif s.ground_truth.injection is None and plain is None:
-            plain = s
-            scenarios.append(s)
-        if plain is not None and len(twins) == n_injected:
-            break
-    write_split(scenarios, data_root, twins)
-    manifest_dir.mkdir(parents=True, exist_ok=True)
-    dump_json(manifest_path(Split.M5FRESH, manifest_dir),
-              build_manifest(Split.M5FRESH, scenarios, content_sha256(data_root)))
-    return data_root, manifest_dir, scenarios
-
-
 @pytest.fixture(scope="module")
 def fresh(tmp_path_factory):
-    return _fresh_shaped(tmp_path_factory.mktemp("fresh"))
+    return fresh_shaped_set(tmp_path_factory.mktemp("fresh"))
 
 
 # The fixed slices

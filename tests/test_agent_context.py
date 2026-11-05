@@ -390,29 +390,53 @@ def test_a_two_ratio_server_breaks_the_old_estimator_and_not_revision_4(traces, 
     assert len(under) == 1 and under[0][1] < 0.02
 
 
+# The committed agent-trace directories the replay reads, pinned with their backends: the M4 smoke attempts, the M4
+# core runs and the two M5 dev-gate agent arms. Single-pass traces are not agent traces and are never listed. Trace
+# files come from each directory's summary.json, so a new output directory never enters the replay by accident.
+AGENT_TRACE_DIRS = (
+    ("smoke-ollama-qwen3-4b", "ollama"),
+    ("smoke-ollama-qwen3-4b-attempt2", "ollama"),
+    ("smoke-ollama-qwen3-4b-instruct-2507-q4_K_M", "ollama"),
+    ("smoke-ollama-qwen3-4b-instruct-2507-q4_K_M-attempt2", "ollama"),
+    ("smoke-groq-qwen-qwen3.8-27b", "groq"),
+    ("smoke-mistral-mistral-large-2512", "mistral"),
+    ("smoke-mistral-mistral-small-2603", "mistral"),
+    ("smoke-mistral-ministral-14b-2512", "mistral"),
+    ("smoke-mistral-ministral-14b-2512-attempt2", "mistral"),
+    ("mistral-ministral-14b-2512", "mistral"),
+    ("m5-dev-gate-mistral-ministral-14b-2512-prompt-v1", "mistral"),
+    ("m5-dev-gate-mistral-ministral-14b-2512-prompt-v2", "mistral"),
+)
+
+
 def _replayed_runs():
-    """Every committed M4 smoke trace as (path, [(chars, tool-spec chars, reported tokens)]) in turn order."""
-    for path in sorted((REPO_ROOT / "eval/agent/generator-v5").glob("*/traces/*.jsonl")):
-        events = read_trace(path)
-        contexts = {e["turn"]: e for e in events if e["event"] == "context"}
-        turns = [(contexts[e["turn"]]["chars"], contexts[e["turn"]]["components"]["tool_specs"], e["prompt_tokens"])
-                 for e in events if e["event"] == "model" and e.get("prompt_tokens")]
-        if turns:
-            yield path, turns
+    """Every trace in the pinned agent-trace directories as (path, backend, [(chars, tool-spec chars, reported
+    tokens)]) in turn order."""
+    for name, backend in AGENT_TRACE_DIRS:
+        directory = REPO_ROOT / "eval/agent/generator-v5" / name
+        summary = json.loads((directory / "summary.json").read_text(encoding="utf-8"))
+        for path in (directory / "traces" / r["trace"] for r in summary["runs"]):
+            events = read_trace(path)
+            contexts = {e["turn"]: e for e in events if e["event"] == "context"}
+            turns = [(contexts[e["turn"]]["chars"], contexts[e["turn"]]["components"]["tool_specs"],
+                      e["prompt_tokens"]) for e in events if e["event"] == "model" and e.get("prompt_tokens")]
+            if turns:
+                yield path, backend, turns
 
 
 def test_revision_4_never_undercounts_any_turn_of_any_m4_smoke_run() -> None:
-    """Stateful replay of every committed M4 smoke trace (local Qwen thinking and instruct, Groq, Mistral): each
-    turn is estimated with what the estimator had learned so far, then the server's count is observed. The tool
-    list is keyed by its spec size (traces record the size, not the names; each list has a distinct size)."""
+    """Stateful replay of every pinned agent trace (M4 smoke: local Qwen thinking and instruct, Groq, Mistral; M4
+    core; the M5 dev-gate agent arms): each turn is estimated with what the estimator had learned so far, then the
+    server's count is observed. The tool list is keyed by its spec size (traces record the size, not the names; each
+    list has a distinct size)."""
     checked, backends = 0, set()
-    for path, turns in _replayed_runs():
+    for path, backend, turns in _replayed_runs():
         estimator = TokenEstimator()
         for chars, spec, reported in turns:
             assert estimator.estimate(chars, spec, spec) >= reported, (path.parent.parent.name, chars, reported)
             estimator.observe(chars, reported, spec, spec)
             checked += 1
-        backends.add(path.parent.parent.name.removeprefix("smoke-").split("-")[0])  # core runs have no smoke- prefix
+        backends.add(backend)
     assert checked >= 150 and backends == {"ollama", "groq", "mistral"}
 
 
@@ -420,7 +444,7 @@ def test_the_one_ratio_estimator_undercounted_the_narrow_ministral_turns() -> No
     """What revision 4 also removes: the old estimator undercounted the first narrow (HYPOTHESIZE) request of both
     Ministral runs by about 10-11% (estimate 4,652 against 5,232 reported in run 1)."""
     under = []
-    for path, turns in _replayed_runs():
+    for path, _, turns in _replayed_runs():
         if path.parent.parent.name != "smoke-mistral-ministral-14b-2512":  # attempt 1 only (the failing pair)
             continue
         estimator = _OneRatio()
@@ -437,7 +461,7 @@ def test_the_ministral_verify_request_fits_with_revision_4(run: str, level4_char
     8,019 characters). After the run's recorded turns, the old estimator puts level 4 over the 6,144 budget;
     revision 4 fits it (and run 1's level 3)."""
     path = REPO_ROOT / f"eval/agent/generator-v5/smoke-mistral-ministral-14b-2512/traces/{run}-sc-45fa1390ea.jsonl"
-    turns = next(t for p, t in _replayed_runs() if p == path)
+    turns = next(t for p, _, t in _replayed_runs() if p == path)
     old, new = _OneRatio(), TokenEstimator()
     for chars, spec, reported in turns:
         old.observe(chars, reported)

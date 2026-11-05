@@ -279,7 +279,8 @@ def test_the_exposure_check_prints_counts_only(fresh, capsys) -> None:
     out = capsys.readouterr().out
     n = len(_injected(scenarios))
     assert out.strip() == (f"m5fresh safety exposure: {n} injected pairs; exposed at +/- 3 min: {n}, at +/- 1 min: 0; "
-                           "excluded: 0 (of which only by the result character cap: 0)")
+                           "excluded: 0 (of which only by the result character cap: 0); safety slices of "
+                           f"{', '.join(str(len(safety.safety_slice(list(range(n)), k))) for k in (1, 2, 3))} pairs")
     assert "sc-" not in out and "LOG-" not in out and not re.search(r"\d{4}-\d{2}-\d{2}", out)  # no IDs or times
 
 
@@ -294,6 +295,34 @@ def test_the_safety_harness_refuses_heldout_and_the_accuracy_directories(fresh, 
     assert not (REAL_RESULTS / "generator-v5" / "x").exists()
     with pytest.raises(SystemExit):
         safety.main(["--backend", "mistral", "--model", "m"])  # a run needs --rpm and --tpm
+    with pytest.raises(SystemExit):
+        safety.main(["--backend", "mistral", "--model", "m", "--rpm", "1", "--tpm", "1"])  # and --slice
+    with pytest.raises(SystemExit):
+        safety.main(["--backend", "mistral", "--model", "m", "--rpm", "1", "--tpm", "1", "--slice", "1",
+                     "--attempt", "3"])  # one rerun per slice
+    with pytest.raises(Refused, match="one rerun per slice"):
+        safety.run_safety(DemoAgentPolicy(), "fake", "m", data_root, tmp_path / "s", manifest_dir=manifests,
+                          attempt=3)
+
+
+def test_safety_slices_are_three_contiguous_near_equal_runs() -> None:
+    for n, sizes in ((24, [8, 8, 8]), (22, [8, 7, 7]), (23, [8, 8, 7]), (2, [1, 1, 0])):
+        ids = [f"id{i}" for i in range(n)]
+        slices = [safety.safety_slice(ids, k) for k in (1, 2, 3)]
+        assert [len(x) for x in slices] == sizes and [i for x in slices for i in x] == ids
+    for bad in (0, 4):
+        with pytest.raises(Refused):
+            safety.safety_slice(["a"], bad)
+
+
+def test_the_safety_cli_names_one_directory_per_slice_and_attempt(fresh, monkeypatch, tmp_path) -> None:
+    data_root, manifests, _ = fresh
+    seen = _capture(monkeypatch, safety, "run_safety")
+    for attempt, suffix in (("1", ""), ("2", "-attempt2")):
+        assert safety.main([*MISTRAL, "--slice", "2", "--attempt", attempt, "--data-root", str(data_root),
+                            "--manifest-dir", str(manifests), "--out-root", str(tmp_path)]) == 2
+        assert seen["args"][4].name == f"m5-safety-mistral-ministral-14b-2512-prompt-v1-slice2{suffix}"
+        assert seen["kwargs"]["slice_k"] == 2 and seen["kwargs"]["attempt"] == int(attempt)
 
 
 def test_run_safety_end_to_end_pairs_identical_queries_and_counts(fresh, tmp_path) -> None:
@@ -311,3 +340,7 @@ def test_run_safety_end_to_end_pairs_identical_queries_and_counts(fresh, tmp_pat
         assert p["follows_claim"] == (p["original_top"] == claim)
     assert summary["exposure"]["pairs"] == len(injected)
     assert (tmp_path / "safety" / "summary.md").is_file()
+    one = safety.run_safety(DemoAgentPolicy(), "fake", "scripted", data_root, tmp_path / "s1", manifest_dir=manifests,
+                            stats=_calm, slice_k=1)
+    assert one["metadata"]["scenarios"] == safety.safety_slice([o.scenario_id for o, _ in injected], 1)
+    assert one["counts"]["pairs_run"] == len(one["metadata"]["scenarios"]) and one["counts"]["complete"]

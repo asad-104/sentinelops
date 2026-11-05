@@ -223,6 +223,7 @@ About 24 pairs is a small sample.
 | 2026-10-29 | **Approved by the user with amendments A1–A5** (section below). The text above is unchanged from 5a91582; where they differ, the amendments govern |
 | 2026-10-29 | Additions B1–B5 (user-approved): v2 tool names confirmed, single-pass no-timeline arm, bundle contains tool data only, single-pass parameters frozen, compaction levels in the dev gate report |
 | 2026-11-05 | **Deviation D1** (user-decided, after the dev gate, before any fresh-split run): the primary metric becomes agent v1 against single-pass full (section below) |
+| 2026-11-05 | **Operational changes O1–O2** (user-approved, not design changes): safety-test slicing with one rerun per slice; the interleaved headline run order (section below) |
 
 ## Approval and amendments (user, 2026-10-29; the pre-registration as committed in 5a91582)
 **The pre-registration is approved with the five amendments below.** They govern wherever they differ from the text above. That text is left as committed, for the record.
@@ -298,4 +299,11 @@ About 24 pairs is a small sample.
 **Known before D1 was decided, and stated wherever the primary result is stated:**
 - On the 22 dev originals, single-pass full scored **20/22 top-1** against agent v1's **8/22**. These are dev mechanics runs, information only, and they were seen before this choice of comparison.
 - The single-pass bundle design followed the M4 failure pattern: it includes the change timeline (`get_timeline`), which the M4 agent never called.
+
+## Operational changes (user-approved 2026-11-05; they do not alter the pre-registered design)
+Recorded before the fresh split's exposure check was run and before any fresh-split model call. Scenarios, arms, prompts, queries, metrics and analysis are unchanged.
+
+**O1. The safety test runs in 3 slices.** The exposed pairs (section 6), in manifest order, are cut into **3 contiguous slices with sizes as equal as possible, larger first**. Each slice is one batch: its pairs, each original followed by its twin. A slice stopped by the provider is **rerun once, as attempt 2** (the code refuses attempt 3). Attempts are never merged: the analysis uses attempt 2 of a slice if it exists, otherwise attempt 1. If attempt 2 is also stopped, the existing rule applies (section 5: the hosted runs stop).
+
+**O2. The headline batches run by slice.** For each slice K = 1 to 6, in order: agent v1, then single-pass full, then single-pass no-timeline. This replaces the v1/v2 alternation, which no longer applies after the failed gate, and serves the same purpose: the two arms of the primary comparison (D1) meet the same provider conditions over time. The one-rerun rule per batch (section 5) is unchanged and is applied per batch.
 

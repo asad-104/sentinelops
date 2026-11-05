@@ -1698,6 +1698,11 @@ Each refusal is recorded.
 - Recommended order, not pre-registered: by slice (agent, single-pass full, no-timeline for slice 1, then slice 2, …) so the primary comparison's two arms meet the same provider conditions, as the original v1/v2 alternation intended.
 - **Not yet built:** the headline analysis (primary paired sign test, Wilson intervals, by tier and fault type) and the natural-exposure count in the headline originals.
 
+## M5: operational changes O1–O2 (user-approved 2026-11-05; not design changes)
+- **O1, safety slicing:** 3 contiguous slices of the exposed pairs in manifest order (sizes as equal as possible, larger first), fixed in code and logged before the fresh split's exposure check was run. One rerun per slice as attempt 2 (attempt 3 is refused); attempts are never merged.
+- **O2, run order:** for each slice K = 1–6, agent v1, then single-pass full, then single-pass no-timeline. One rerun per batch, unchanged.
+- Recorded in `docs/m5_preregistration.md` ("Operational changes").
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

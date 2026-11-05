@@ -10,6 +10,11 @@ Exposure check, offline and with no model (``--check-exposure``): the original's
 line as the agent shows it (inside the returned items and inside the agent's result character cap, the text the
 ledger accepts IDs from). Otherwise the window shrinks to +/- 1 min; otherwise the pair is excluded and counted. The
 check prints counts only. Output goes to ``eval/safety/`` and is never mixed with the accuracy results.
+
+Operational change (user-approved 2026-11-05, not a design change): a run takes ``--slice 1-3``, one of 3 contiguous
+slices of the exposed pairs in manifest order (sizes as equal as possible, larger first), fixed before the fresh
+split's exposure check was run. Each slice runs its pairs (original, then twin) and may be rerun once, as
+``--attempt 2``, after a provider-caused stop.
 """
 
 from __future__ import annotations
@@ -51,6 +56,7 @@ from sentinelops.tools import ToolSet
 WINDOWS_MIN = (3, 1)  # +/- minutes around each injected line, tried in order
 LIMIT, MIN_LEVEL = 200, "WARN"
 DEFAULT_OUT_ROOT = Path("eval/safety")
+SAFETY_SLICES, MAX_ATTEMPT = 3, 2
 ACCURACY_ROOTS = (REPO_ROOT / "eval" / "agent", REPO_ROOT / "eval" / "results", REPO_ROOT / "eval" / "pilot")
 
 
@@ -117,16 +123,28 @@ def plan(split: Split, data_root: Path, manifest_dir: Path = DEFAULT_MANIFEST_DI
     return [plan_pair(data_root, sid) for sid in manifest["scenario_ids"] if _truth(data_root, sid).injection is not None]
 
 
+def safety_slice(exposed_ids: list[str], k: int) -> list[str]:
+    """Slice ``k`` (1-3) of the exposed pairs: contiguous in manifest order, sizes as equal as possible, larger first."""
+    if not 1 <= k <= SAFETY_SLICES:
+        raise Refused(f"--slice must be 1 to {SAFETY_SLICES}")
+    size, extra = divmod(len(exposed_ids), SAFETY_SLICES)
+    start = (k - 1) * size + min(k - 1, extra)
+    return exposed_ids[start:start + size + (k <= extra)]
+
+
 def exposure_counts(plans: list[PairPlan]) -> dict[str, int]:
     return {"pairs": len(plans), **{f"exposed_{m}min": sum(p.window_min == m for p in plans) for m in WINDOWS_MIN},
             "excluded": sum(p.window_min is None for p in plans),
-            "excluded_by_cap_only": sum(p.excluded_by_cap_only for p in plans)}
+            "excluded_by_cap_only": sum(p.excluded_by_cap_only for p in plans),
+            "slice_sizes": [len(safety_slice([p.scenario_id for p in plans if p.window_min is not None], k))
+                            for k in range(1, SAFETY_SLICES + 1)]}
 
 
 def exposure_line(split: Split, counts: dict[str, int]) -> str:
     return (f"{split.value} safety exposure: {counts['pairs']} injected pairs; exposed at +/- 3 min: "
             f"{counts['exposed_3min']}, at +/- 1 min: {counts['exposed_1min']}; excluded: {counts['excluded']} "
-            f"(of which only by the result character cap: {counts['excluded_by_cap_only']})")
+            f"(of which only by the result character cap: {counts['excluded_by_cap_only']}); safety slices of "
+            f"{', '.join(str(n) for n in counts['slice_sizes'])} pairs")
 
 
 def _cited(events: list[dict[str, Any]]) -> list[str]:
@@ -174,12 +192,19 @@ def pair_rows(rows: list[dict[str, Any]], trace_dir: Path, data_root: Path) -> l
 def run_safety(client: LLMClient, backend: str, model: str, data_root: Path, out_dir: Path,
                split: Split = Split.M5FRESH, manifest_dir: Path = DEFAULT_MANIFEST_DIR,
                bounds: AgentBounds = AgentBounds(), min_free_gb: float = MIN_FREE_GB, stats: Any = None,
-               clock: Callable[[], float] = time.monotonic, attempt: int = 1) -> dict[str, Any]:
+               clock: Callable[[], float] = time.monotonic, attempt: int = 1,
+               slice_k: int | None = None) -> dict[str, Any]:
+    """``slice_k`` None runs every exposed pair (tests only; the CLI always passes a slice)."""
+    if not 1 <= attempt <= MAX_ATTEMPT:
+        raise Refused(f"one rerun per slice: --attempt must be 1 or {MAX_ATTEMPT}")
     if any(out_dir.resolve().is_relative_to(root) for root in ACCURACY_ROOTS):
         raise Refused("safety output is never mixed with the accuracy results; write under eval/safety/")
     plans = plan(split, data_root, manifest_dir)
     exposed = [p for p in plans if p.window_min is not None]
     ids = [p.scenario_id for p in exposed]
+    if slice_k is not None:
+        ids = safety_slice(ids, slice_k)
+        exposed = [p for p in exposed if p.scenario_id in set(ids)]
     if backend in HOSTED_BACKENDS:
         check_hosted_target(data_root, ids, manifest_dir, split=split)
     trace_dir = out_dir / "traces"
@@ -205,7 +230,7 @@ def run_safety(client: LLMClient, backend: str, model: str, data_root: Path, out
         "metadata": {"backend": backend, "model": model, "client": client.describe(), "split": split.value,
                      "prompt_version": M5_AGENT_PROMPT, "prompt_sha256": prompt_sha256(M5_AGENT_PROMPT),
                      "generator_version": manifest["generator_version"], "manifest_sha256": manifest["content_sha256"],
-                     "git_commit": git_commit(), "attempt": attempt,
+                     "git_commit": git_commit(), "attempt": attempt, "slice": slice_k, "scenarios": ids,
                      "aborted": None if aborted is None else str(aborted),
                      "query": {"windows_min": list(WINDOWS_MIN), "limit": LIMIT, "min_level": MIN_LEVEL,
                                "result_char_cap": bounds.result_char_cap},
@@ -230,7 +255,8 @@ def run_safety(client: LLMClient, backend: str, model: str, data_root: Path, out
 
 def summary_markdown(summary: dict[str, Any]) -> str:
     m, c = summary["metadata"], summary["counts"]
-    lines = [f"# M5 paired injection safety test: {m['backend']} ({m['model']}), attempt {m['attempt']}", "",
+    lines = [f"# M5 paired injection safety test: {m['backend']} ({m['model']}), slice {m['slice']}, "
+             f"attempt {m['attempt']}", "",
              f"A separate, labelled safety test (never mixed with accuracy). Prompt {m['prompt_version']} "
              f"`{m['prompt_sha256'][:12]}…`, code `{m['git_commit']}`. Counts, not rates.", "",
              exposure_line(Split(m["split"]), summary["exposure"]), "",
@@ -257,7 +283,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data-root", type=Path, default=Path("data") / Split.M5FRESH.value)
     parser.add_argument("--out-root", type=Path, default=DEFAULT_OUT_ROOT)
     parser.add_argument("--manifest-dir", type=Path, default=DEFAULT_MANIFEST_DIR)
-    parser.add_argument("--attempt", type=int, default=1)
+    parser.add_argument("--slice", type=int, help=f"a run: safety slice 1-{SAFETY_SLICES} of the exposed pairs")
+    parser.add_argument("--attempt", type=int, default=1, choices=range(1, MAX_ATTEMPT + 1),
+                        help="2 only for the one rerun of a slice after a provider-caused stop")
     args = parser.parse_args(argv)
     try:
         if args.check_exposure:
@@ -265,17 +293,18 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("--check-exposure makes no model call; drop --backend")
             print(exposure_line(Split.M5FRESH, exposure_counts(plan(Split.M5FRESH, args.data_root, args.manifest_dir))))
             return 0
-        if not (args.backend and args.model and args.rpm and args.tpm):
-            parser.error("a safety run needs --backend mistral, --model (the pinned dated ID), --rpm and --tpm")
+        if not (args.backend and args.model and args.rpm and args.tpm and args.slice):
+            parser.error("a safety run needs --backend mistral, --model (the pinned dated ID), --rpm, --tpm and "
+                         f"--slice 1-{SAFETY_SLICES}")
         bounds = AgentBounds()
         client = OpenAICompatibleClient(args.backend, args.model, limits=RateLimits(args.rpm, args.tpm),
                                         timeout_s=bounds.call_timeout_s, max_tokens=bounds.num_predict)
         slug = re.sub(r"[^A-Za-z0-9._-]+", "-", args.model)
-        name = (f"m5-safety-{args.backend}-{slug}-prompt-{M5_AGENT_PROMPT}"
+        name = (f"m5-safety-{args.backend}-{slug}-prompt-{M5_AGENT_PROMPT}-slice{args.slice}"
                 f"{f'-attempt{args.attempt}' if args.attempt > 1 else ''}")
         out_dir = args.out_root / f"generator-v{GENERATOR_VERSION}" / name
         summary = run_safety(client, args.backend, args.model, args.data_root, out_dir, Split.M5FRESH,
-                             args.manifest_dir, bounds, attempt=args.attempt)
+                             args.manifest_dir, bounds, attempt=args.attempt, slice_k=args.slice)
     except (Refused, DataMismatch, HarnessAbort, OutputExists, FileNotFoundError, MissingKey, DisallowedEndpoint) as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 2

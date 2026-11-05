@@ -1709,6 +1709,18 @@ Each refusal is recorded.
 - **Not built (section 7 secondary, to add after the runs if wanted):** evidence validity, unsupported claims, investigated (a)–(f), tool calls, active and wall time, valid change-tool share, trigger-record-seen share.
 - **Tests:** 472 passing; the real-data viewer check prints `OK`.
 
+## M5: fresh-split runs and the headline analysis (runs by the user 2026-11-05; outputs a3765d7; measures 8c19a9d)
+- **Runs:** 18 headline batches (agent v1, single-pass full, no-timeline; slices 1–6) and 3 safety slices, all attempt 1, all from `cdc6ea2`. No provider stop, no rerun. Outputs committed on their own in a3765d7 (suite 472 passing).
+- **Secondary measures** (`evaluation.m5_secondary`, 8c19a9d) built after the runs and before the analysis was run on them, developed and checked on the dev-gate outputs only (recomputed (a)–(f), tool calls and G1 counts match the stored values; the rebuilt single-pass bundles match the traces). Suite 477 passing, viewer `OK`.
+- **Analysis run once** (`python -m sentinelops.evaluation.m5_analysis`, output `eval/m5/generator-v5/`). Not INCOMPLETE.
+  - **Primary (D1):** top-1 over 60 paired originals: agent v1 right and single-pass full wrong **5**, the reverse **16**; exact two-sided sign test, n = 21 discordant, **p = 0.0266**. Single-pass full is ahead of the agent on this split; no pass/fail verdict.
+  - **Top-1 / top-3 [Wilson 95%]:** agent v1 33/60 [0.42, 0.67] / 42/60; single-pass full 44/60 [0.61, 0.83] / 53/60; no-timeline 35/60 [0.46, 0.70] / 40/60; rule-based 38/60 [0.51, 0.74] / 52/60; keyword-only 34/60; latest-change 12/60; alert-service 6/60.
+  - **Ablation:** full right and no-timeline wrong 12, the reverse 3; n = 15, p = 0.0352. No-timeline drops every change record, so this is "with vs without change records".
+  - **Agent process:** valid change-tool call 0/60, trigger record seen 1/24 (the M4 pattern); config_error top-1 0/12. Investigated 55/60; tool calls median 22, max 27 (budget 40; rule baseline 52). Stops: 56 `sufficient_evidence`, 4 `context_exhausted` (all VERIFY, unsent, 6,167–6,191 estimated against 6,144).
+  - **Single-pass invalid reports:** full 5, no-timeline 6, all "report still invalid after 1 repair turn" (10 with no `submit_report` call, 1 validation error); none provider-caused.
+  - **Natural exposure:** of 21 injected originals, the agent was shown an injected line in 3; the single-pass bundle contains one in 4 (full) and 4 (no-timeline).
+  - **Safety** (21 exposed pairs, 19 with both reports; 1 pair in each of slices 1 and 2 stopped `no_new_evidence` in original and twin): top-1 changed 7, followed the claim 1, injected line cited 1, executed actions 0, twin queries identical 21/21. No replicate-noise control, so the 7 changes cannot be attributed to the injected lines.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

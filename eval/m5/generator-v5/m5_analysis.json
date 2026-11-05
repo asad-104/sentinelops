@@ -1,0 +1,1348 @@
+{
+  "ablation": {
+    "a_right_b_wrong": 12,
+    "b_right_a_wrong": 3,
+    "discordant": 15,
+    "metric": "top-1, single-pass full against no-timeline (secondary)",
+    "n_pairs": 60,
+    "p_two_sided": 0.03515625
+  },
+  "arms": {
+    "agent_v1": {
+      "by_fault_type": {
+        "bad_deployment": {
+          "n": 12,
+          "top1": 7,
+          "top3": 9
+        },
+        "certificate_expiry": {
+          "n": 12,
+          "top1": 4,
+          "top3": 4
+        },
+        "config_error": {
+          "n": 12,
+          "top1": 0,
+          "top3": 6
+        },
+        "connection_pool_exhaustion": {
+          "n": 12,
+          "top1": 10,
+          "top3": 11
+        },
+        "memory_leak": {
+          "n": 12,
+          "top1": 12,
+          "top3": 12
+        }
+      },
+      "by_tier": {
+        "ambiguous": {
+          "top1": {
+            "k": 10,
+            "n": 15,
+            "wilson_95": [
+              0.4171,
+              0.8482
+            ]
+          },
+          "top3": {
+            "k": 11,
+            "n": 15,
+            "wilson_95": [
+              0.4805,
+              0.891
+            ]
+          }
+        },
+        "missing_evidence": {
+          "top1": {
+            "k": 8,
+            "n": 15,
+            "wilson_95": [
+              0.3012,
+              0.7519
+            ]
+          },
+          "top3": {
+            "k": 9,
+            "n": 15,
+            "wilson_95": [
+              0.3575,
+              0.8018
+            ]
+          }
+        },
+        "standard": {
+          "top1": {
+            "k": 15,
+            "n": 30,
+            "wilson_95": [
+              0.3315,
+              0.6685
+            ]
+          },
+          "top3": {
+            "k": 22,
+            "n": 30,
+            "wilson_95": [
+              0.5555,
+              0.8582
+            ]
+          }
+        }
+      },
+      "top1": {
+        "k": 33,
+        "n": 60,
+        "wilson_95": [
+          0.4249,
+          0.6691
+        ]
+      },
+      "top3": {
+        "k": 42,
+        "n": 60,
+        "wilson_95": [
+          0.5749,
+          0.801
+        ]
+      },
+      "valid_reports": {
+        "k": 56,
+        "n": 60
+      }
+    },
+    "alert_service": {
+      "by_fault_type": {
+        "bad_deployment": {
+          "n": 12,
+          "top1": 6,
+          "top3": 6
+        },
+        "certificate_expiry": {
+          "n": 12,
+          "top1": 0,
+          "top3": 5
+        },
+        "config_error": {
+          "n": 12,
+          "top1": 0,
+          "top3": 9
+        },
+        "connection_pool_exhaustion": {
+          "n": 12,
+          "top1": 0,
+          "top3": 0
+        },
+        "memory_leak": {
+          "n": 12,
+          "top1": 0,
+          "top3": 0
+        }
+      },
+      "by_tier": {
+        "ambiguous": {
+          "top1": {
+            "k": 0,
+            "n": 15,
+            "wilson_95": [
+              0.0,
+              0.2039
+            ]
+          },
+          "top3": {
+            "k": 3,
+            "n": 15,
+            "wilson_95": [
+              0.0705,
+              0.4519
+            ]
+          }
+        },
+        "missing_evidence": {
+          "top1": {
+            "k": 3,
+            "n": 15,
+            "wilson_95": [
+              0.0705,
+              0.4519
+            ]
+          },
+          "top3": {
+            "k": 6,
+            "n": 15,
+            "wilson_95": [
+              0.1982,
+              0.6425
+            ]
+          }
+        },
+        "standard": {
+          "top1": {
+            "k": 3,
+            "n": 30,
+            "wilson_95": [
+              0.0346,
+              0.2562
+            ]
+          },
+          "top3": {
+            "k": 11,
+            "n": 30,
+            "wilson_95": [
+              0.2187,
+              0.5449
+            ]
+          }
+        }
+      },
+      "top1": {
+        "k": 6,
+        "n": 60,
+        "wilson_95": [
+          0.0466,
+          0.2015
+        ]
+      },
+      "top3": {
+        "k": 20,
+        "n": 60,
+        "wilson_95": [
+          0.2273,
+          0.4594
+        ]
+      },
+      "valid_reports": {
+        "k": 60,
+        "n": 60
+      }
+    },
+    "keyword_only": {
+      "by_fault_type": {
+        "bad_deployment": {
+          "n": 12,
+          "top1": 9,
+          "top3": 9
+        },
+        "certificate_expiry": {
+          "n": 12,
+          "top1": 0,
+          "top3": 9
+        },
+        "config_error": {
+          "n": 12,
+          "top1": 9,
+          "top3": 9
+        },
+        "connection_pool_exhaustion": {
+          "n": 12,
+          "top1": 7,
+          "top3": 10
+        },
+        "memory_leak": {
+          "n": 12,
+          "top1": 9,
+          "top3": 10
+        }
+      },
+      "by_tier": {
+        "ambiguous": {
+          "top1": {
+            "k": 8,
+            "n": 15,
+            "wilson_95": [
+              0.3012,
+              0.7519
+            ]
+          },
+          "top3": {
+            "k": 13,
+            "n": 15,
+            "wilson_95": [
+              0.6212,
+              0.9626
+            ]
+          }
+        },
+        "missing_evidence": {
+          "top1": {
+            "k": 5,
+            "n": 15,
+            "wilson_95": [
+              0.1518,
+              0.5829
+            ]
+          },
+          "top3": {
+            "k": 7,
+            "n": 15,
+            "wilson_95": [
+              0.2481,
+              0.6988
+            ]
+          }
+        },
+        "standard": {
+          "top1": {
+            "k": 21,
+            "n": 30,
+            "wilson_95": [
+              0.5212,
+              0.8334
+            ]
+          },
+          "top3": {
+            "k": 27,
+            "n": 30,
+            "wilson_95": [
+              0.7438,
+              0.9654
+            ]
+          }
+        }
+      },
+      "top1": {
+        "k": 34,
+        "n": 60,
+        "wilson_95": [
+          0.441,
+          0.6843
+        ]
+      },
+      "top3": {
+        "k": 47,
+        "n": 60,
+        "wilson_95": [
+          0.6638,
+          0.8688
+        ]
+      },
+      "valid_reports": {
+        "k": 60,
+        "n": 60
+      }
+    },
+    "latest_change": {
+      "by_fault_type": {
+        "bad_deployment": {
+          "n": 12,
+          "top1": 4,
+          "top3": 12
+        },
+        "certificate_expiry": {
+          "n": 12,
+          "top1": 0,
+          "top3": 0
+        },
+        "config_error": {
+          "n": 12,
+          "top1": 8,
+          "top3": 12
+        },
+        "connection_pool_exhaustion": {
+          "n": 12,
+          "top1": 0,
+          "top3": 0
+        },
+        "memory_leak": {
+          "n": 12,
+          "top1": 0,
+          "top3": 0
+        }
+      },
+      "by_tier": {
+        "ambiguous": {
+          "top1": {
+            "k": 1,
+            "n": 15,
+            "wilson_95": [
+              0.0119,
+              0.2982
+            ]
+          },
+          "top3": {
+            "k": 6,
+            "n": 15,
+            "wilson_95": [
+              0.1982,
+              0.6425
+            ]
+          }
+        },
+        "missing_evidence": {
+          "top1": {
+            "k": 3,
+            "n": 15,
+            "wilson_95": [
+              0.0705,
+              0.4519
+            ]
+          },
+          "top3": {
+            "k": 6,
+            "n": 15,
+            "wilson_95": [
+              0.1982,
+              0.6425
+            ]
+          }
+        },
+        "standard": {
+          "top1": {
+            "k": 8,
+            "n": 30,
+            "wilson_95": [
+              0.1418,
+              0.4445
+            ]
+          },
+          "top3": {
+            "k": 12,
+            "n": 30,
+            "wilson_95": [
+              0.2459,
+              0.5768
+            ]
+          }
+        }
+      },
+      "top1": {
+        "k": 12,
+        "n": 60,
+        "wilson_95": [
+          0.1183,
+          0.3178
+        ]
+      },
+      "top3": {
+        "k": 24,
+        "n": 60,
+        "wilson_95": [
+          0.2857,
+          0.5263
+        ]
+      },
+      "valid_reports": {
+        "k": 60,
+        "n": 60
+      }
+    },
+    "rule_based": {
+      "by_fault_type": {
+        "bad_deployment": {
+          "n": 12,
+          "top1": 9,
+          "top3": 12
+        },
+        "certificate_expiry": {
+          "n": 12,
+          "top1": 0,
+          "top3": 7
+        },
+        "config_error": {
+          "n": 12,
+          "top1": 9,
+          "top3": 9
+        },
+        "connection_pool_exhaustion": {
+          "n": 12,
+          "top1": 10,
+          "top3": 12
+        },
+        "memory_leak": {
+          "n": 12,
+          "top1": 10,
+          "top3": 12
+        }
+      },
+      "by_tier": {
+        "ambiguous": {
+          "top1": {
+            "k": 11,
+            "n": 15,
+            "wilson_95": [
+              0.4805,
+              0.891
+            ]
+          },
+          "top3": {
+            "k": 13,
+            "n": 15,
+            "wilson_95": [
+              0.6212,
+              0.9626
+            ]
+          }
+        },
+        "missing_evidence": {
+          "top1": {
+            "k": 6,
+            "n": 15,
+            "wilson_95": [
+              0.1982,
+              0.6425
+            ]
+          },
+          "top3": {
+            "k": 11,
+            "n": 15,
+            "wilson_95": [
+              0.4805,
+              0.891
+            ]
+          }
+        },
+        "standard": {
+          "top1": {
+            "k": 21,
+            "n": 30,
+            "wilson_95": [
+              0.5212,
+              0.8334
+            ]
+          },
+          "top3": {
+            "k": 28,
+            "n": 30,
+            "wilson_95": [
+              0.7868,
+              0.9815
+            ]
+          }
+        }
+      },
+      "top1": {
+        "k": 38,
+        "n": 60,
+        "wilson_95": [
+          0.5068,
+          0.7438
+        ]
+      },
+      "top3": {
+        "k": 52,
+        "n": 60,
+        "wilson_95": [
+          0.7583,
+          0.9309
+        ]
+      },
+      "valid_reports": {
+        "k": 60,
+        "n": 60
+      }
+    },
+    "single_pass_full": {
+      "by_fault_type": {
+        "bad_deployment": {
+          "n": 12,
+          "top1": 7,
+          "top3": 10
+        },
+        "certificate_expiry": {
+          "n": 12,
+          "top1": 8,
+          "top3": 10
+        },
+        "config_error": {
+          "n": 12,
+          "top1": 7,
+          "top3": 9
+        },
+        "connection_pool_exhaustion": {
+          "n": 12,
+          "top1": 10,
+          "top3": 12
+        },
+        "memory_leak": {
+          "n": 12,
+          "top1": 12,
+          "top3": 12
+        }
+      },
+      "by_tier": {
+        "ambiguous": {
+          "top1": {
+            "k": 10,
+            "n": 15,
+            "wilson_95": [
+              0.4171,
+              0.8482
+            ]
+          },
+          "top3": {
+            "k": 12,
+            "n": 15,
+            "wilson_95": [
+              0.5481,
+              0.9295
+            ]
+          }
+        },
+        "missing_evidence": {
+          "top1": {
+            "k": 10,
+            "n": 15,
+            "wilson_95": [
+              0.4171,
+              0.8482
+            ]
+          },
+          "top3": {
+            "k": 14,
+            "n": 15,
+            "wilson_95": [
+              0.7018,
+              0.9881
+            ]
+          }
+        },
+        "standard": {
+          "top1": {
+            "k": 24,
+            "n": 30,
+            "wilson_95": [
+              0.6269,
+              0.905
+            ]
+          },
+          "top3": {
+            "k": 27,
+            "n": 30,
+            "wilson_95": [
+              0.7438,
+              0.9654
+            ]
+          }
+        }
+      },
+      "top1": {
+        "k": 44,
+        "n": 60,
+        "wilson_95": [
+          0.6099,
+          0.8287
+        ]
+      },
+      "top3": {
+        "k": 53,
+        "n": 60,
+        "wilson_95": [
+          0.7782,
+          0.9423
+        ]
+      },
+      "valid_reports": {
+        "k": 55,
+        "n": 60
+      }
+    },
+    "single_pass_no_timeline": {
+      "by_fault_type": {
+        "bad_deployment": {
+          "n": 12,
+          "top1": 5,
+          "top3": 9
+        },
+        "certificate_expiry": {
+          "n": 12,
+          "top1": 9,
+          "top3": 9
+        },
+        "config_error": {
+          "n": 12,
+          "top1": 0,
+          "top3": 0
+        },
+        "connection_pool_exhaustion": {
+          "n": 12,
+          "top1": 9,
+          "top3": 10
+        },
+        "memory_leak": {
+          "n": 12,
+          "top1": 12,
+          "top3": 12
+        }
+      },
+      "by_tier": {
+        "ambiguous": {
+          "top1": {
+            "k": 8,
+            "n": 15,
+            "wilson_95": [
+              0.3012,
+              0.7519
+            ]
+          },
+          "top3": {
+            "k": 11,
+            "n": 15,
+            "wilson_95": [
+              0.4805,
+              0.891
+            ]
+          }
+        },
+        "missing_evidence": {
+          "top1": {
+            "k": 6,
+            "n": 15,
+            "wilson_95": [
+              0.1982,
+              0.6425
+            ]
+          },
+          "top3": {
+            "k": 8,
+            "n": 15,
+            "wilson_95": [
+              0.3012,
+              0.7519
+            ]
+          }
+        },
+        "standard": {
+          "top1": {
+            "k": 21,
+            "n": 30,
+            "wilson_95": [
+              0.5212,
+              0.8334
+            ]
+          },
+          "top3": {
+            "k": 21,
+            "n": 30,
+            "wilson_95": [
+              0.5212,
+              0.8334
+            ]
+          }
+        }
+      },
+      "top1": {
+        "k": 35,
+        "n": 60,
+        "wilson_95": [
+          0.4573,
+          0.6994
+        ]
+      },
+      "top3": {
+        "k": 40,
+        "n": 60,
+        "wilson_95": [
+          0.5406,
+          0.7727
+        ]
+      },
+      "valid_reports": {
+        "k": 54,
+        "n": 60
+      }
+    }
+  },
+  "metadata": {
+    "agent_prompt_sha256": "d269d28d9581a9d931c936c333259de648526a3970de99b952e0011fe2b2e9eb",
+    "backend": "mistral",
+    "complete": true,
+    "manifest_sha256": "574908adb8ecf8dc3932a13539a923602bafa954052c2883a58ad042942307fe",
+    "model": "ministral-14b-2512",
+    "n_scenarios": 60,
+    "note": "D1 primary; no pass/fail verdict; synthetic, author-built data; co-adaptation caveat (A5)",
+    "run_commits": [
+      "cdc6ea2"
+    ],
+    "safety_complete": true,
+    "split": "m5fresh"
+  },
+  "natural_exposure": {
+    "agent_exposed": 3,
+    "agent_runs": 21,
+    "injected_originals": 21,
+    "note": "agent from traces; single-pass from the rebuilt bundle",
+    "single_pass_full_exposed": 4,
+    "single_pass_no_timeline_exposed": 4
+  },
+  "primary": {
+    "a_right_b_wrong": 5,
+    "b_right_a_wrong": 16,
+    "discordant": 21,
+    "metric": "top-1, agent v1 against single-pass full, exact two-sided paired sign test",
+    "n_pairs": 60,
+    "p_two_sided": 0.02660369873046875
+  },
+  "safety": {
+    "complete": true,
+    "counts": {
+      "both_reports": 19,
+      "executed_actions": 0,
+      "exposed_in_run": 21,
+      "follows_claim": 1,
+      "injected_cited": 1,
+      "pairs_run": 21,
+      "top1_changed": 7,
+      "twin_queries_identical": 21
+    },
+    "exposed_pairs": 21,
+    "slices": [
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-safety-mistral-ministral-14b-2512-prompt-v1-slice1",
+        "slice": 1
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-safety-mistral-ministral-14b-2512-prompt-v1-slice2",
+        "slice": 2
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-safety-mistral-ministral-14b-2512-prompt-v1-slice3",
+        "slice": 3
+      }
+    ]
+  },
+  "secondary": {
+    "agent_v1": {
+      "active_s": {
+        "max": 108.45433003999642,
+        "median": 64.5229286870017,
+        "min": 39.42103224897873,
+        "n": 60
+      },
+      "evidence_headline": {
+        "k": 237,
+        "n": 413,
+        "pct": 57.4
+      },
+      "evidence_lenient": {
+        "k": 302,
+        "n": 413,
+        "pct": 73.1
+      },
+      "evidence_strict": {
+        "k": 280,
+        "n": 413,
+        "pct": 67.8
+      },
+      "fabricated_citations": 0,
+      "investigated": {
+        "a_valid_report": {
+          "k": 56,
+          "n": 60,
+          "wilson_95": [
+            0.8407,
+            0.9738
+          ]
+        },
+        "b_gather_evidence_calls": {
+          "k": 60,
+          "n": 60,
+          "wilson_95": [
+            0.9398,
+            1.0
+          ]
+        },
+        "c_data_kinds": {
+          "k": 59,
+          "n": 60,
+          "wilson_95": [
+            0.9114,
+            0.9971
+          ]
+        },
+        "d_top_supported": {
+          "k": 56,
+          "n": 60,
+          "wilson_95": [
+            0.8407,
+            0.9738
+          ]
+        },
+        "e_verified": {
+          "k": 59,
+          "n": 60,
+          "wilson_95": [
+            0.9114,
+            0.9971
+          ]
+        },
+        "f_no_overflow": {
+          "k": 60,
+          "n": 60,
+          "wilson_95": [
+            0.9398,
+            1.0
+          ]
+        },
+        "investigated": {
+          "k": 55,
+          "n": 60,
+          "wilson_95": [
+            0.8193,
+            0.9639
+          ]
+        }
+      },
+      "runs": 60,
+      "tool_calls": {
+        "max": 27,
+        "median": 22.0,
+        "min": 17,
+        "n": 60
+      },
+      "trigger_seen": {
+        "k": 1,
+        "n": 24,
+        "wilson_95": [
+          0.0074,
+          0.2024
+        ]
+      },
+      "unsupported_hypotheses": {
+        "k": 20,
+        "n": 192
+      },
+      "valid_change_call": {
+        "k": 0,
+        "n": 60,
+        "wilson_95": [
+          0.0,
+          0.0602
+        ]
+      },
+      "wall_s": {
+        "max": 157.16480704100104,
+        "median": 72.72944550000102,
+        "min": 43.96024241601117,
+        "n": 60
+      }
+    },
+    "alert_service": {
+      "active_s": {
+        "max": 8.21249996079132e-05,
+        "median": 2.8312497306615114e-05,
+        "min": 2.2042004275135696e-05,
+        "n": 60
+      },
+      "evidence_headline": {
+        "k": 0,
+        "n": 60,
+        "pct": 0.0
+      },
+      "evidence_lenient": {
+        "k": 60,
+        "n": 60,
+        "pct": 100.0
+      },
+      "evidence_strict": {
+        "k": 60,
+        "n": 60,
+        "pct": 100.0
+      },
+      "fabricated_citations": 0,
+      "investigated": null,
+      "runs": 60,
+      "tool_calls": {
+        "max": 1,
+        "median": 1.0,
+        "min": 1,
+        "n": 60
+      },
+      "trigger_seen": null,
+      "unsupported_hypotheses": {
+        "k": 0,
+        "n": 180
+      },
+      "valid_change_call": null,
+      "wall_s": {
+        "max": 8.21249996079132e-05,
+        "median": 2.8312497306615114e-05,
+        "min": 2.2042004275135696e-05,
+        "n": 60
+      }
+    },
+    "keyword_only": {
+      "active_s": {
+        "max": 0.05112179199932143,
+        "median": 0.030618041491834447,
+        "min": 0.02039720800530631,
+        "n": 60
+      },
+      "evidence_headline": {
+        "k": 106,
+        "n": 153,
+        "pct": 69.3
+      },
+      "evidence_lenient": {
+        "k": 106,
+        "n": 153,
+        "pct": 69.3
+      },
+      "evidence_strict": {
+        "k": 106,
+        "n": 153,
+        "pct": 69.3
+      },
+      "fabricated_citations": 0,
+      "investigated": null,
+      "runs": 60,
+      "tool_calls": {
+        "max": 38,
+        "median": 38.0,
+        "min": 38,
+        "n": 60
+      },
+      "trigger_seen": null,
+      "unsupported_hypotheses": {
+        "k": 0,
+        "n": 178
+      },
+      "valid_change_call": null,
+      "wall_s": {
+        "max": 0.05112179199932143,
+        "median": 0.030618041491834447,
+        "min": 0.02039720800530631,
+        "n": 60
+      }
+    },
+    "latest_change": {
+      "active_s": {
+        "max": 0.00026191600773017853,
+        "median": 0.00017533350182930008,
+        "min": 0.00011287500092294067,
+        "n": 60
+      },
+      "evidence_headline": {
+        "k": 11,
+        "n": 60,
+        "pct": 18.3
+      },
+      "evidence_lenient": {
+        "k": 12,
+        "n": 60,
+        "pct": 20.0
+      },
+      "evidence_strict": {
+        "k": 12,
+        "n": 60,
+        "pct": 20.0
+      },
+      "fabricated_citations": 0,
+      "investigated": null,
+      "runs": 60,
+      "tool_calls": {
+        "max": 4,
+        "median": 4.0,
+        "min": 4,
+        "n": 60
+      },
+      "trigger_seen": null,
+      "unsupported_hypotheses": {
+        "k": 0,
+        "n": 149
+      },
+      "valid_change_call": null,
+      "wall_s": {
+        "max": 0.00026191600773017853,
+        "median": 0.00017533350182930008,
+        "min": 0.00011287500092294067,
+        "n": 60
+      }
+    },
+    "rule_based": {
+      "active_s": {
+        "max": 0.05666087499412242,
+        "median": 0.034602249492309056,
+        "min": 0.02301525000075344,
+        "n": 60
+      },
+      "evidence_headline": {
+        "k": 128,
+        "n": 187,
+        "pct": 68.4
+      },
+      "evidence_lenient": {
+        "k": 147,
+        "n": 187,
+        "pct": 78.6
+      },
+      "evidence_strict": {
+        "k": 128,
+        "n": 187,
+        "pct": 68.4
+      },
+      "fabricated_citations": 0,
+      "investigated": null,
+      "runs": 60,
+      "tool_calls": {
+        "max": 52,
+        "median": 52.0,
+        "min": 52,
+        "n": 60
+      },
+      "trigger_seen": null,
+      "unsupported_hypotheses": {
+        "k": 0,
+        "n": 180
+      },
+      "valid_change_call": null,
+      "wall_s": {
+        "max": 0.05666087499412242,
+        "median": 0.034602249492309056,
+        "min": 0.02301525000075344,
+        "n": 60
+      }
+    },
+    "single_pass_full": {
+      "active_s": {
+        "max": 73.65323029200954,
+        "median": 24.34713477150217,
+        "min": 15.739369041009923,
+        "n": 60
+      },
+      "evidence_headline": {
+        "k": 171,
+        "n": 315,
+        "pct": 54.3
+      },
+      "evidence_lenient": {
+        "k": 201,
+        "n": 315,
+        "pct": 63.8
+      },
+      "evidence_strict": {
+        "k": 193,
+        "n": 315,
+        "pct": 61.3
+      },
+      "fabricated_citations": 0,
+      "investigated": null,
+      "runs": 60,
+      "tool_calls": null,
+      "trigger_seen": {
+        "k": 24,
+        "n": 24,
+        "wilson_95": [
+          0.862,
+          1.0
+        ]
+      },
+      "unsupported_hypotheses": {
+        "k": 5,
+        "n": 275
+      },
+      "valid_change_call": null,
+      "wall_s": {
+        "max": 73.65323029200954,
+        "median": 25.067255146503157,
+        "min": 15.739369041009923,
+        "n": 60
+      }
+    },
+    "single_pass_no_timeline": {
+      "active_s": {
+        "max": 60.02992825000547,
+        "median": 24.56568352049362,
+        "min": 14.58638870800496,
+        "n": 60
+      },
+      "evidence_headline": {
+        "k": 159,
+        "n": 274,
+        "pct": 58.0
+      },
+      "evidence_lenient": {
+        "k": 189,
+        "n": 274,
+        "pct": 69.0
+      },
+      "evidence_strict": {
+        "k": 175,
+        "n": 274,
+        "pct": 63.9
+      },
+      "fabricated_citations": 0,
+      "investigated": null,
+      "runs": 60,
+      "tool_calls": null,
+      "trigger_seen": {
+        "k": 0,
+        "n": 24,
+        "wilson_95": [
+          0.0,
+          0.138
+        ]
+      },
+      "unsupported_hypotheses": {
+        "k": 23,
+        "n": 270
+      },
+      "valid_change_call": null,
+      "wall_s": {
+        "max": 60.02992825000547,
+        "median": 24.56568352049362,
+        "min": 14.58638870800496,
+        "n": 60
+      }
+    }
+  },
+  "slices": {
+    "agent_v1": [
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-mistral-ministral-14b-2512-prompt-v1-slice1",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 1
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-mistral-ministral-14b-2512-prompt-v1-slice2",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 2
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-mistral-ministral-14b-2512-prompt-v1-slice3",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 3
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-mistral-ministral-14b-2512-prompt-v1-slice4",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 4
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-mistral-ministral-14b-2512-prompt-v1-slice5",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 5
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-mistral-ministral-14b-2512-prompt-v1-slice6",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 6
+      }
+    ],
+    "single_pass_full": [
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-single-pass-full-mistral-ministral-14b-2512-slice1",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 1
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-single-pass-full-mistral-ministral-14b-2512-slice2",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 2
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-single-pass-full-mistral-ministral-14b-2512-slice3",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 3
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-single-pass-full-mistral-ministral-14b-2512-slice4",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 4
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-single-pass-full-mistral-ministral-14b-2512-slice5",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 5
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-single-pass-full-mistral-ministral-14b-2512-slice6",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 6
+      }
+    ],
+    "single_pass_no_timeline": [
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-single-pass-no-timeline-mistral-ministral-14b-2512-slice1",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 1
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-single-pass-no-timeline-mistral-ministral-14b-2512-slice2",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 2
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-single-pass-no-timeline-mistral-ministral-14b-2512-slice3",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 3
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-single-pass-no-timeline-mistral-ministral-14b-2512-slice4",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 4
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-single-pass-no-timeline-mistral-ministral-14b-2512-slice5",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 5
+      },
+      {
+        "attempt": 1,
+        "complete": true,
+        "directory": "m5-fresh-single-pass-no-timeline-mistral-ministral-14b-2512-slice6",
+        "git_commit": "cdc6ea2",
+        "runs": 10,
+        "slice": 6
+      }
+    ]
+  }
+}

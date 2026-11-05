@@ -1703,6 +1703,12 @@ Each refusal is recorded.
 - **O2, run order:** for each slice K = 1–6, agent v1, then single-pass full, then single-pass no-timeline. One rerun per batch, unchanged.
 - Recorded in `docs/m5_preregistration.md` ("Operational changes").
 
+## M5: safety exposure check on the fresh split, and the headline analysis (2026-11-05, no model call)
+- **Exposure check** (`python -m sentinelops.evaluation.safety --check-exposure`, run after O1 was committed in 0f53f48; counts only): **21 injected pairs; exposed at ±3 min: 20, at ±1 min: 1; excluded: 0** (of which only by the result character cap: 0). Safety slices of **7, 7, 7** pairs (14 runs each). The pre-registration expected about 24 and sets no minimum number of exposed pairs; "about 24 pairs is a small sample" applies a fortiori to 21.
+- **Headline analysis** (`evaluation.m5_analysis`, 910b0b5), built before any fresh-split run: the D1 primary, Wilson intervals for every arm (including the four local baselines, run in-process), by tier and by fault type, the ablation, natural exposure, the safety counts summed over slices. It reads one directory per arm per slice (attempt 2 replaces attempt 1; attempt 3 is refused) and refuses any directory whose metadata does not match. Output `eval/m5/generator-v5/`.
+- **Not built (section 7 secondary, to add after the runs if wanted):** evidence validity, unsupported claims, investigated (a)–(f), tool calls, active and wall time, valid change-tool share, trigger-record-seen share.
+- **Tests:** 472 passing; the real-data viewer check prints `OK`.
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

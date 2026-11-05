@@ -122,3 +122,47 @@ def test_the_replicate_cli_names_its_own_directory_and_the_report_makes_no_model
     assert safety.main(["--e1-report", "--out-root", str(tmp_path)]) == 0  # nothing run yet: every slice incomplete
     assert "INCOMPLETE" in capsys.readouterr().out
     assert (tmp_path / "generator-v5" / "m5-safety-e1-report" / "e1.json").is_file()
+
+
+def _write_slice(root: Path, name: str, k: int, runs: list[dict], pairs: list[dict] | None, replicate: bool) -> None:
+    """A hand-built safety or replicate slice directory: summary plus one trace per run with its forced query."""
+    (root / name / "traces").mkdir(parents=True)
+    for r in runs:
+        query = json.dumps({"service": "orders", "start": f"q-{r['scenario_id']}"}, sort_keys=True)
+        (root / name / "traces" / r["trace"]).write_text(json.dumps(
+            {"event": "tool", "by_loop": True, "call_id": "safety001", "arguments": query}) + "\n")
+    metadata = {"model": "scripted", "manifest_sha256": "m", "prompt_sha256": "p", "slice": k, "attempt": 1,
+                "scenarios": sorted({r["scenario_id"] for r in runs}), "query": {"limit": 200}}
+    summary = {"metadata": {**metadata, "replicate": True} if replicate else metadata, "runs": runs,
+               "counts": {"complete": True}}
+    if pairs is not None:
+        summary["pairs"] = pairs
+    (root / name / "summary.json").write_text(json.dumps(summary))
+
+
+def test_e1_restricts_to_pairs_whose_twin_has_a_report_at_n_above_zero(tmp_path: Path) -> None:
+    """Twins with reports. A: twin changed, replicate agrees. B: twin unchanged, replicate disagrees. C: twin has no
+    report, replicate disagrees. D: twin changed, replicate disagrees. E: original has no report (only the twin
+    does). Expected: both reports 4 (A-D), disagree 3 (B, C, D); twin pairs n = 3 (A, B, D), disagree 2, changed 2."""
+    X, Y, Z = ["orders", "memory_leak"], ["auth", "config_error"], ["payments", "bad_deployment"]
+    cases = {1: [("sc-a", X, Y, X), ("sc-b", X, X, Z)], 2: [("sc-c", X, None, Z), ("sc-d", X, Y, Y)],
+             3: [("sc-e", None, X, X)]}
+    stem, rep_stem = safety_stems("fake", "scripted")
+    for k, rows in cases.items():
+        runs, pairs, reps = [], [], []
+        for sid, orig, twin, rep in rows:
+            runs += [{"scenario_id": sid, "variant": "original", "top": orig, "trace": f"{sid}-o.jsonl"},
+                     {"scenario_id": sid, "variant": "twin", "top": twin, "trace": f"{sid}-t.jsonl"}]
+            both = orig is not None and twin is not None
+            pairs.append({"scenario_id": sid, "both_reports": both, "top1_changed": both and orig != twin})
+            reps.append({"scenario_id": sid, "variant": "original", "top": rep, "trace": f"{sid}-r.jsonl"})
+        _write_slice(tmp_path, stem.format(k=k), k, runs, pairs, replicate=False)
+        _write_slice(tmp_path, rep_stem.format(k=k), k, reps, None, replicate=True)
+    e = e1_compare(tmp_path, "fake", "scripted")
+    c = e["counts"]
+    assert e["complete"] and (c["replicates"], c["both_reports"], c["disagree"], c["queries_identical"]) == (5, 4, 3, 5)
+    assert c["among_twin_pairs"] == {"n": 3, "disagree": 2, "twin_changed": 2}
+    by_id = {r["scenario_id"]: r for r in e["rows"]}
+    assert not by_id["sc-c"]["twin_pair_both_reports"] and by_id["sc-c"]["disagree"]
+    assert not by_id["sc-e"]["both_reports"] and not by_id["sc-e"]["disagree"]
+    assert "(n = 3): original against replicate disagree 2; original against twin changed 2" in e1_markdown(e)

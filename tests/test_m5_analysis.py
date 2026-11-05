@@ -112,8 +112,15 @@ def test_the_analysis_end_to_end(small_slices, tmp_path: Path) -> None:
     assert ne["injected_originals"] == injected == ne["agent_runs"]
     assert 0 <= ne["agent_exposed"] <= injected and 0 <= ne["single_pass_full_exposed"] <= injected
     assert a["safety"]["exposed_pairs"] == injected and a["safety"]["counts"]["pairs_run"] == injected
+    sec = a["secondary"]
+    assert set(sec) == set(a["arms"]) and all(x["runs"] == n for x in sec.values())
+    assert sec[AGENT]["investigated"]["a_valid_report"]["n"] == n and sec[FULL]["investigated"] is None
+    assert sec[FULL]["tool_calls"] is None and sec["rule_based"]["tool_calls"]["median"] > 0
+    assert sec[FULL]["trigger_seen"]["n"] == sum(t.trigger_source_id is not None for _, t in scenarios)
+    assert sec["rule_based"]["trigger_seen"] is None and sec[AGENT]["valid_change_call"]["n"] == n
     text = m5_analysis.report_markdown(a)
     assert "INCOMPLETE" not in text and "Primary (D1)" in text and "No pass/fail verdict" in text
+    assert "Other section 7 measures" in text and "Investigated (a)-(f)" in text
 
 
 def test_attempt_2_replaces_attempt_1_and_a_missing_slice_is_incomplete(small_slices, tmp_path: Path) -> None:

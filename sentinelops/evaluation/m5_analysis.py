@@ -8,7 +8,9 @@ changes O1-O2. Built before any fresh-split run.
 - **Secondary:** top-1 and top-3 as k/n with Wilson 95% intervals for every arm (agent v1, single-pass full and
   no-timeline, the local baselines); valid reports; by tier (k/n with Wilson) and by fault type (counts only); the
   ablation (single-pass full against no-timeline, paired like the primary); natural exposure to the injected lines
-  in the headline originals; the safety test's counts summed over its 3 slices (O1).
+  in the headline originals; the safety test's counts summed over its 3 slices (O1); the other section 7 measures
+  (evidence validity, unsupported claims, investigated (a)-(f), tool calls, times, valid change-tool call, trigger
+  seen; ``m5_secondary``, added after the runs and before this analysis was first run on them).
 
 Directories: each arm has one directory per slice (``...-slice<K>``). A slice's ``-attempt2`` directory, if present,
 replaces attempt 1; attempts are never merged, and any later attempt is refused. Every directory's metadata must
@@ -28,20 +30,21 @@ from pathlib import Path
 from typing import Any
 
 from sentinelops.agent.prompt import prompt_sha256
-from sentinelops.agent.single_pass import SinglePassInvestigator, _ids, single_pass_sha256
+from sentinelops.agent.single_pass import single_pass_sha256
 from sentinelops.baselines import INVESTIGATORS
 from sentinelops.evaluation import agent_run
 from sentinelops.evaluation.agent_run import M5_AGENT_PROMPT, Refused
 from sentinelops.evaluation.harness import DataMismatch, run_split, verify_split
+from sentinelops.evaluation.m5_secondary import (agent_shown, aggregate, bundle_ids, local_measures, run_measures,
+                                                 secondary_lines)
 from sentinelops.evaluation.metrics import wilson
 from sentinelops.evaluation.safety import SAFETY_SLICES, plan, safety_slice
 from sentinelops.llm.trace import read_trace
-from sentinelops.scenario_files import dump_json
+from sentinelops.scenario_files import dump_json, load_observable
 from sentinelops.simulator.datasets import DEFAULT_MANIFEST_DIR
 from sentinelops.simulator.generator import GENERATOR_VERSION
 from sentinelops.simulator.ground_truth import GroundTruth
 from sentinelops.simulator.profiles import Split
-from sentinelops.tools import ToolSet
 
 AGENT, FULL, BARE = "agent_v1", "single_pass_full", "single_pass_no_timeline"
 HOSTED_ARMS = (AGENT, FULL, BARE)
@@ -122,7 +125,8 @@ def load_arm(arm: str, root: Path, stem: str, slices: Sequence[Sequence[str]], m
         complete = not m.get("aborted") and len(runs) == len(ids)
         for r in runs:
             outcomes[r["scenario_id"]] = {"top1": bool(r["top1"]), "top3": bool(r["top3"]),
-                                          "valid": bool(r["report_valid"]), "trace": directory / "traces" / r["trace"]}
+                                          "valid": bool(r["report_valid"]), "trace": directory / "traces" / r["trace"],
+                                          "row": r, "num_ctx": (m.get("bounds") or {}).get("num_ctx")}
         status.append({"slice": k, "directory": directory.name, "attempt": attempt, "complete": complete,
                        "runs": len(runs), "git_commit": m.get("git_commit")})
     return outcomes, status
@@ -133,7 +137,8 @@ def local_arms(data_root: Path, manifest_dir: Path) -> dict[str, dict[str, dict[
     out = {}
     for name, investigator in INVESTIGATORS.items():
         result = run_split(investigator, Split.M5FRESH, data_root, manifest_dir=manifest_dir, twins=False)
-        out[name] = {s.scenario_id: {"top1": s.top1, "top3": s.top3, "valid": s.report_valid} for s in result.scores}
+        out[name] = {s.scenario_id: {"top1": s.top1, "top3": s.top3, "valid": s.report_valid, "score": s}
+                     for s in result.scores}
     return out
 
 
@@ -148,21 +153,31 @@ def natural_exposure(agent: dict[str, dict[str, Any]], truths: dict[str, GroundT
     (rebuilt from the data with the frozen rule; independent of the model)."""
     injected = sorted(s for s, t in truths.items() if t.injection is not None)
     agent_ran = [s for s in injected if s in agent]
-    agent_shown = sum(bool(_injected_ids(truths[s]) & {i for e in read_trace(agent[s]["trace"])
-                                                      if e["event"] == "tool" for i in e.get("new_ids") or []})
-                      for s in agent_ran)
-    bundles = {}
-    for variant in ("full", "no-timeline"):
-        hit = 0
-        for s in injected:
-            messages, _, _ = SinglePassInvestigator(None, variant=variant)._fitting_request(
-                ToolSet.from_directory(data_root / "scenarios", s))
-            text = "\n".join(m.content for m in (messages or [])[1:])
-            hit += bool(_injected_ids(truths[s]) & _ids(text))
-        bundles[variant] = hit
-    return {"injected_originals": len(injected), "agent_runs": len(agent_ran), "agent_exposed": agent_shown,
+    exposed = sum(bool(_injected_ids(truths[s]) & agent_shown(read_trace(agent[s]["trace"]))) for s in agent_ran)
+    bundles = {variant: sum(bool(_injected_ids(truths[s]) & bundle_ids(data_root, s, variant)) for s in injected)
+               for variant in ("full", "no-timeline")}
+    return {"injected_originals": len(injected), "agent_runs": len(agent_ran), "agent_exposed": exposed,
             "single_pass_full_exposed": bundles["full"], "single_pass_no_timeline_exposed": bundles["no-timeline"],
             "note": "agent from traces; single-pass from the rebuilt bundle"}
+
+
+def secondary(arms: dict[str, dict[str, dict[str, Any]]], truths: dict[str, GroundTruth],
+              data_root: Path) -> dict[str, dict[str, Any]]:
+    """The other section 7 measures per arm (``m5_secondary``): hosted arms from their traces, local from scores."""
+    out = {}
+    for name, outcomes in arms.items():
+        if name not in HOSTED_ARMS:
+            out[name] = aggregate("local", [local_measures(o["score"]) for o in outcomes.values()])
+            continue
+        rows = []
+        for sid, o in outcomes.items():
+            events = read_trace(o["trace"])
+            shown = (agent_shown(events) if name == AGENT else
+                     bundle_ids(data_root, sid, "full" if name == FULL else "no-timeline"))
+            rows.append(run_measures("agent" if name == AGENT else "single_pass", o["row"], events, truths[sid],
+                                     load_observable(data_root / "scenarios" / sid), shown, o["num_ctx"]))
+        out[name] = aggregate("agent" if name == AGENT else "single_pass", rows)
+    return out
 
 
 def load_safety(root: Path, stem: str, data_root: Path, manifest_dir: Path, model: str,
@@ -236,6 +251,7 @@ def analyse(agent_root: Path, safety_root: Path, data_root: Path, manifest_dir: 
                     **paired(arms[AGENT], arms[FULL])},
         "ablation": {"metric": "top-1, single-pass full against no-timeline (secondary)", **paired(arms[FULL], arms[BARE])},
         "arms": {name: per_arm(outcomes) for name, outcomes in arms.items()},
+        "secondary": secondary(arms, truths, data_root),
         "natural_exposure": natural_exposure(arms[AGENT], truths, data_root),
         "safety": safety,
     }
@@ -274,6 +290,7 @@ def report_markdown(a: dict[str, Any]) -> str:
         lines.append(f"| {name} | " + " | ".join(
             f"{r['by_fault_type'][f]['top1']} / {r['by_fault_type'][f]['top3']} / {r['by_fault_type'][f]['n']}"
             for f in faults) + " |")
+    lines += ["", "## Other section 7 measures (secondary)", "", *secondary_lines(a["secondary"])]
     ne, s = a["natural_exposure"], a["safety"]
     lines += ["", "## Ablation (secondary)", "",
               f"Top-1, single-pass full against no-timeline over {ab['n_pairs']} paired originals: full right and "

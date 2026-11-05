@@ -1625,7 +1625,7 @@ Each refusal is recorded.
 
 **Status:**
 - **Not yet done:** no v2 wording has been hashed, no code written, no split generated, no model call made.
-- **ID-collision check result:** _[not yet run. It runs inside the one-shot generator (`python -m sentinelops.evaluation.m5_fresh --generate`), so it has no result until the fresh split is generated, which waits for the user's go-ahead. Recorded here as yes/no when run.]_
+- **ID-collision check result:** **no** (generated 2026-11-05, manifest ad4ed47; see "M5: fresh split generated" below).
 
 **Implementation (2026-10-29), in stages, each committed on its own with tests. No model call, nothing generated:**
 
@@ -1642,9 +1642,7 @@ Each refusal is recorded.
 
 **Tests:** 450 passing; the real-data viewer check prints `OK`.
 
-**Remaining before the headline (not needed for the dev gate):**
-- a `--split m5fresh` run path, with the fixed slices, for the agent and the single-pass runner
-- the safety-test harness option
+**Remaining before the headline (not needed for the dev gate):** ~~a `--split m5fresh` run path with the fixed slices; the safety-test harness option~~ done in df10d46 (see below).
 
 
 
@@ -1679,6 +1677,26 @@ Each refusal is recorded.
 **Test fix:** the estimator replay globbed every trace under `eval/agent/generator-v5`, so the single-pass traces broke it in 129b672 (red from 129b672 to dedd4e7). It now reads a pinned list of agent-trace directories. No estimator change; no turn of the 44 new agent runs is undercounted.
 
 **Updated hosted plan without v2** (A2 and B2 estimates): headline agent v1 60 runs (about 7.4M tokens, about 2.3 h); single-pass full 60 (about 0.5M); single-pass no-timeline 60 (about 0.4M); safety test about 48 with v1 (about 5.9M). **About 228 hosted runs, about 14.2M tokens.** Measured dev medians (v1 117k tokens per run, single-pass about 9k) put it near 12.9M.
+
+## M5: headline run path, safety harness and the fresh split (2026-11-05)
+**Build (df10d46, no model call):**
+- **Fresh-split run path:** `agent_run` and `single_pass_run` take `--split m5fresh --slice 1-6`: the 6 fixed slices of 10 originals, cut from the frozen m5fresh manifest's order (sorted IDs). The agent path is Mistral only, prompt v1 only (refused otherwise), originals only, and gives no M4 verdict (section 7).
+- **Safety harness** (`evaluation.safety`, section 6): `triage_extra` in the agent issues one `search_logs` per injected line at the end of TRIAGE (carrier service, WARN, ±3 min clipped to the window, limit 200), shown as an ordinary tool result; the identical queries run on the twin. Output only under `eval/safety/`.
+- **Interpretation recorded (not in the pre-registration's words):** "the original's result must contain the injected line" is checked against what the agent is shown, i.e. inside the returned items **and** inside its 4,000-character result cap (the ledger only accepts IDs from that text). Pairs excluded only by the cap are counted separately. On dev, all 12 injected pairs are exposed at ±3 min.
+- **Loop calls count toward the 40-call budget** (1–3 per run, identical in both arms of a pair).
+- **Tests:** 463 passing; the real-data viewer check prints `OK`.
+
+**Fresh split, generated once (2026-11-05, `python -m sentinelops.evaluation.m5_fresh --generate`), not viewed:**
+- **60 scenarios**, sha256 **`574908adb8ecf8dc3932a13539a923602bafa954052c2883a58ad042942307fe`**
+- **ID collision with dev or held-out: no** (the data guard's membership check, A4)
+- Manifest committed in ad4ed47 (`eval/manifests/m5fresh.json`); data in `data/m5fresh/` (gitignored). Nothing else was printed or opened. The real held-out split is untouched.
+
+**Hosted plan (the user runs every batch):**
+- Agent v1: 6 batches of 10 (60 runs).
+- Single-pass full and no-timeline: 6 batches of 10 each (120 runs).
+- Safety: run `--check-exposure` first (counts only), then one batch of 2 × the exposed pairs.
+- Recommended order, not pre-registered: by slice (agent, single-pass full, no-timeline for slice 1, then slice 2, …) so the primary comparison's two arms meet the same provider conditions, as the original v1/v2 alternation intended.
+- **Not yet built:** the headline analysis (primary paired sign test, Wilson intervals, by tier and fault type) and the natural-exposure count in the headline originals.
 
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.

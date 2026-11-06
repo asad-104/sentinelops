@@ -69,7 +69,7 @@ M5_DEV_SCENARIOS = ("sc-47610c9e02", "sc-694130798c", "sc-6d023322e9", "sc-8e6db
                     "sc-f7e6249083", "sc-fada5df47f", "sc-fb1c777397", "sc-ff655f01df")
 # M5 headline slices (pre-registered 2026-10-29 section 5): the frozen m5fresh manifest's order, cut into 6 slices of 10.
 FRESH_SLICES, FRESH_SLICE_SIZE = 6, 10
-# The dev gate failed (2026-11-02, report 52daa08): every M5 fresh-split agent run uses v1 (d269d28d).
+# The dev gate failed (2026-11-02, report c1db227): every M5 fresh-split agent run uses v1 (d269d28d).
 M5_AGENT_PROMPT = "v1"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REAL_RESULTS = REPO_ROOT / "eval" / "agent"

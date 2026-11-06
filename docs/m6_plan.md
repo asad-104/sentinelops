@@ -77,7 +77,7 @@ The current README is stale: it says "Milestone 2 complete" and describes a 15-s
    - one `org_…` value in 3 commits, all in `tests/test_openai_compat.py`; it looks like a hand-written fixture and needs one look by eye to confirm
 2. **Amended commits:**
    - The reflog shows 8 amends. Rewritten-away commits are unreachable and are not pushed, but any that reached `origin` before being amended are public already.
-   - Check that `origin` holds only reachable history: `origin/main` is at `18f8733`, and `m4-stage-b` was never pushed.
+   - Check that `origin` holds only reachable history: `origin/main` is at `47affa6`, and `m4-stage-b` was never pushed.
    - Re-scan any amended commit that was pushed.
 3. **`.gitignore`:**
    - It ignores `data/`, `.env`, `.venv/`, caches and `.DS_Store`.

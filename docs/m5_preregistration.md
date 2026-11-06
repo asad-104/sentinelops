@@ -18,7 +18,7 @@ No v2 development, fresh-split generation or model call happens before approval.
 - the client (a)–(c) and the data guard
 - `ministral-14b-2512` at `--rpm 25 --tpm 750000`
 
-The M4 results stay as recorded and frozen: prompt `d269d28d`, core outputs 3d3fdca.
+The M4 results stay as recorded and frozen: prompt `d269d28d`, core outputs 8f327bc.
 
 ## 1. The exception for the v2 prompt
 
@@ -220,13 +220,13 @@ About 24 pairs is a small sample.
 | Date | Change |
 |---|---|
 | 2026-10-29 | Written and committed for review; not yet approved |
-| 2026-10-29 | **Approved by the user with amendments A1–A5** (section below). The text above is unchanged from 5a91582; where they differ, the amendments govern |
+| 2026-10-29 | **Approved by the user with amendments A1–A5** (section below). The text above is unchanged from 9daa58e; where they differ, the amendments govern |
 | 2026-10-29 | Additions B1–B5 (user-approved): v2 tool names confirmed, single-pass no-timeline arm, bundle contains tool data only, single-pass parameters frozen, compaction levels in the dev gate report |
 | 2026-11-05 | **Deviation D1** (user-decided, after the dev gate, before any fresh-split run): the primary metric becomes agent v1 against single-pass full (section below) |
 | 2026-11-05 | **Operational changes O1–O2** (user-approved, not design changes): safety-test slicing with one rerun per slice; the interleaved headline run order (section below) |
 | 2026-11-05 | **E1, exploratory and post hoc** (user-approved after the fresh runs): a replicate-noise control for the safety test, **decided after seeing the safety counts** (top-1 changed in 7 of 19 pairs). Not part of the pre-registered design (section below) |
 
-## Approval and amendments (user, 2026-10-29; the pre-registration as committed in 5a91582)
+## Approval and amendments (user, 2026-10-29; the pre-registration as committed in 9daa58e)
 **The pre-registration is approved with the five amendments below.** They govern wherever they differ from the text above. That text is left as committed, for the record.
 
 **A1. The dev gate is a development check, not a result.**
@@ -285,7 +285,7 @@ About 24 pairs is a small sample.
 **B5. The dev gate report includes the compaction levels.** For v1 and v2 on the 22 dev originals, the report gives the **distribution of compaction levels** over all requests, and at the HYPOTHESIZE and REPORT requests. This is reported, not gated.
 
 ## Deviation D1 (user, 2026-11-05): the primary metric after the failed dev gate
-**When:** decided on 2026-11-05, **after the dev gate results** (v2 failed G2 and G4; report committed in 52daa08) and **before any fresh-split run**. The fresh split had not been generated when D1 was decided.
+**When:** decided on 2026-11-05, **after the dev gate results** (v2 failed G2 and G4; report committed in c1db227) and **before any fresh-split run**. The fresh split had not been generated when D1 was decided.
 
 **Why:** A3 defined the primary metric as v2 against v1. Section 3 drops the v2 arm when the gate fails, and A3 had **no fallback** for that case, so the primary metric as written could not be computed.
 

@@ -262,7 +262,7 @@ A run without a valid report counts as wrong.
       - `config_error` in 1 (`orders`);
       - `certificate_expiry` in 1, on the wrong service (`api-gateway`).
     - **Only 1 of the 6 lists `certificate_expiry` anywhere** among its hypotheses.
-    - **The 3 `api-gateway/connection_pool_exhaustion` rankings name a pair the simulator never generates.** Pool exhaustion is generated only on services with a database pool, and the gateway has none.
+    - **The 3 `api-gateway/connection_pool_exhaustion` rankings name a pair the simulator never generates.** Pool exhaustion is generated only on services with a database pool, and the gateway has none. The agent proposed this impossible pair on the true service, which looks like a symptom confusion with certificate expiry on the gateway. That is an interpretation; it was not checked against the runs' evidence.
   - **Why the agent rarely considers certificate expiry is not established.** This part of the gap is unexplained.
 - **The other three fault types are tied** on top-1 (bad_deployment 7/7, pool exhaustion 10/10, memory leak 12/12).
 

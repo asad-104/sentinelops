@@ -334,3 +334,6 @@ A run without a valid report counts as wrong.
 21. **Provider settings.**
     - The "no data retention" setting is as stated by the user. Whether it is the training opt-out was not verified.
     - The free tier's 429s carry no rate-limit headers.
+
+## Future work
+- **Not run:** a replicate of the two primary arms (agent v1 and single-pass full) on the 60 fresh originals. It would measure how stable the D1 result is.

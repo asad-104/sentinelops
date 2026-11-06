@@ -254,7 +254,16 @@ A run without a valid report counts as wrong.
   - Single-pass full sees the trigger in 24/24 runs; the agent in 1/24.
 - **certificate_expiry accounts for the other 4** (agent 4/12, full 8/12; agent top-3 4/12).
   - It has no trigger record, so the change-tool diagnosis does not explain it.
-  - This gap is unexplained.
+  - **The agent's 8 misses there, read from the traces (facts only, no change made from them):**
+    - **The true pair is in none of the 8 top-3s.**
+    - **2 misses have no report:** they stopped `context_exhausted`, and they are 2 of the agent's 4 `context_exhausted` stops.
+    - **What the other 6 ranked first:**
+      - `connection_pool_exhaustion` in 4 runs: 3 on `api-gateway` (the true service), 1 on `auth`;
+      - `config_error` in 1 (`orders`);
+      - `certificate_expiry` in 1, on the wrong service (`api-gateway`).
+    - **Only 1 of the 6 lists `certificate_expiry` anywhere** among its hypotheses.
+    - **The 3 `api-gateway/connection_pool_exhaustion` rankings name a pair the simulator never generates.** Pool exhaustion is generated only on services with a database pool, and the gateway has none.
+  - **Why the agent rarely considers certificate expiry is not established.** This part of the gap is unexplained.
 - **The other three fault types are tied** on top-1 (bad_deployment 7/7, pool exhaustion 10/10, memory leak 12/12).
 
 **"Investigated" doesn't capture this:**

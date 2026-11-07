@@ -1,0 +1,61 @@
+# On demand only: generate one dev-profile scenario and run the rule baseline and the agent driven by a
+# SCRIPTED MOCK POLICY (not a model; mechanics only). No LLM, no network calls by the code, no secrets.
+name: On-demand run (scripted policy, no model)
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Scenario seed, a whole number from 0 to 2147483647 (held-out and fresh-split seeds are refused)"
+        required: true
+        default: "7"
+        type: string
+      tier:
+        description: "Difficulty tier"
+        required: true
+        default: standard
+        type: choice
+        options: [standard, ambiguous, missing_evidence]
+      fault:
+        description: "Fault type (any = chosen from the seed)"
+        required: true
+        default: any
+        type: choice
+        options: [any, bad_deployment, config_error, connection_pool_exhaustion, memory_leak, certificate_expiry]
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install (core pins only)
+        run: python -m pip install -r requirements.txt
+
+      - name: Run the rule baseline and the scripted agent
+        env:
+          SEED: ${{ inputs.seed }}
+          TIER: ${{ inputs.tier }}
+          FAULT: ${{ inputs.fault }}
+        run: python scripts/run_on_demand.py --seed "$SEED" --tier "$TIER" --fault "$FAULT" --out on-demand --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the reports and the agent trace
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: on-demand-run
+          path: on-demand/
+          retention-days: 7
+          if-no-files-found: ignore

@@ -65,6 +65,8 @@ Optional, the local viewer (dev data and committed outputs only; binds to 127.0.
 
 The viewer's pages: M1 scenario explorer, M2 tiers and dev results, M3 pilot traces, M4 agent runs (dev only), and **M5 headline comparison** (fresh-split aggregates only; no scenario content).
 
+**On-demand run, also offline:** `.venv/bin/python scripts/run_on_demand.py --seed 7 --tier ambiguous --fault config_error` generates one dev-profile scenario. It runs the rule baseline and the agent driven by a **scripted mock policy** (not a model; this checks the mechanics only), and scores both. The same run is available as a manual GitHub workflow ("On-demand run"), with the result in the job summary and an artifact. Seeds that would reproduce a held-out or fresh-split scenario are refused.
+
 ## Architecture
 
 ```mermaid

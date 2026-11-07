@@ -13,6 +13,7 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 ## Commands
 - Tests: `.venv/bin/python -m pytest` (full suite, the gate, ~3 min); fast subset `.venv/bin/python -m pytest -m "not slow"` (~35 s)
 - Lint: `.venv/bin/ruff check .` (ruff pinned in `requirements-dev.txt`; rules E9 and F). CI (`.github/workflows/ci.yml`) runs lint and the fast subset on Python 3.12
+- On-demand mechanics run (no model): `.venv/bin/python scripts/run_on_demand.py --seed N --tier T --fault F` (also `.github/workflows/run-agent.yml`, workflow_dispatch). Refuses seeds that reproduce a held-out or fresh-split scenario; prints yes/no, never IDs
 - Generate data: `.venv/bin/python -m sentinelops.simulator --split dev` (frozen dev split → `data/dev/`), or `--seed 1 --n 5` for ad-hoc scenarios. `data/` is gitignored
 - Never print, open or inspect held-out data (`data/heldout/`). Generating it prints only a count and hash
 - Evaluate on dev: `.venv/bin/python -m sentinelops.evaluation --split dev --investigator all` (writes `eval/results/`). Held-out needs `--final` and runs only at milestone comparisons

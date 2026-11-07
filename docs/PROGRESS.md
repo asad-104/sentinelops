@@ -1728,6 +1728,17 @@ Each refusal is recorded.
   - **Reading:** with run-to-run disagreement 3/16 next to twin changes 5/16, and 3 of those 5 also unstable on replication, the twin changes cannot be attributed to the injected lines. Only 2 pairs changed against the twin while the replicate reproduced the original; that is n = 2, post hoc, with the twins themselves unreplicated.
 
 
+## M6: viewer, README, licence, tags, merge (2026-11-07, no model call, no remote)
+- **Repo:** history rewritten once on 2026-11-06 (`docs/history_rewrite.md`); this repo has no remote. The old history is kept outside the project and is never pushed.
+- **Checks at the start:** suite 483 passing, viewer `OK`; the data guard refuses held-out (path and split), the safety harness refuses held-out, and `data/m5fresh` matches its frozen manifest (yes).
+- **Viewer fix (6346f9d):** the M4 page listed every run under `eval/agent/`, including the 18 fresh-split directories, so fresh-scenario traces were viewable. Run listing now skips directories named `m5-fresh-*` or whose summary has split `m5fresh`, and the readers refuse them (14 runs listed, down from 32).
+- **M5 page (2b1eb43):** aggregate counts only, from `m5_analysis.json` and the E1 report's counts. The loader drops per-scenario rows and refuses anything still carrying a scenario ID; it never reads traces, `data/` or held-out paths. In the real-data check, its cells match the file and no scenario ID appears.
+- **Fast subset (76a3f38):** a `slow` marker on modules whose fixtures generate whole splits or many scenarios, on tests using the 200-scenario dataset (a conftest hook), and on a few end-to-end or dev-gate replay tests. `-m "not slow"`: 392 tests, about 36 s. The full suite (490) is the gate.
+- **Five-minute path, timed** on a fresh clone with a new venv (2026-11-07, M2, 8 GB): venv 1 s, install 5 s (6 s with no pip cache), dev split 5 s, fast tests 34 s, dev evaluation into a temp directory 9 s; **54 s** in total; viewer install 12 s and viewer check 20 s on top. The clone's tree stayed clean.
+- **README (55f336b)** rewritten for readers who know ML evaluation but not this project. Its results table was checked against `m5_analysis.json`. **MIT licence (0aa9714).**
+- **Pandas warnings:** the venv was rebuilt on 2026-11-07, and streamlit's unpinned dependency is now pandas 3.1.1, which deprecates a call used inside the viewer tests (12 warnings, no failures).
+- **Not done yet:** the demo walkthrough, a threat-model section, and publishing (the user decides).
+
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.
 

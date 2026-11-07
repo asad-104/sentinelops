@@ -9,6 +9,14 @@
 
 Detailed records live in `docs/PROGRESS.md` and `docs/m5_preregistration.md`.
 
+## Summary
+
+- **Question:** does a tool-using, explicit-state LLM agent diagnose simulated incidents better than one LLM call over a fixed evidence bundle, a rule baseline and trivial floors?
+- **Answer on this benchmark: no.** On 60 fresh synthetic scenarios with one hosted model (`ministral-14b-2512`), single-pass full scored 44/60 top-1 and agent prompt v1 33/60. On the same scenarios, single-pass was right where the agent was wrong 16 times, and the reverse 5 times (exact sign test, n = 21, p = 0.0266). The rule baseline (38/60) was also ahead of the agent.
+- **Why:** the agent ranks hypotheses before it looks at what changed. Only 3 of 60 runs called a change tool, all after their first ranking, and the agent saw the trigger in 1 of 24 change-caused incidents. This accounts for config_error (agent 0/12, single-pass 7/12). A smaller gap on certificate_expiry (4/12 against 8/12) is unexplained.
+- **Injection:** in a paired test the agent's top-1 changed in 7 of 19 injected scenarios. An exploratory replicate control (E1) found 3 of 16 top-1 changes between identical reruns, so the 7 can't be separated from noise. No action was executed, because none is possible.
+- **Weight of the evidence:** one model, one prompt, one run per arm, on synthetic data written by the same author as the baselines and prompts. The primary comparison is a logged deviation (D1), chosen knowing the dev direction. Hosted runs are not repeatable at temperature 0. See section 6 for all 21 caveats.
+
 ## What this result is about, and what it is not
 
 **It is about:**

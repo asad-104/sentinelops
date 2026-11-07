@@ -87,7 +87,7 @@ flowchart LR
     guard["data guard: held-out never<br/>sent to a hosted model"] -.-> agent
 ```
 
-- **Trust boundaries:** tools can't reach ground truth (separate files; the tools package never imports the simulator, enforced by an AST test). Log text is untrusted and returned verbatim as data. Remediation is recommended, never executed: there are no action tools.
+- **Trust boundaries** (full version in the [threat model](docs/threat_model.md)): tools can't reach ground truth (separate files; the tools package never imports the simulator, enforced by an AST test). Log text is untrusted and returned verbatim as data. Remediation is recommended, never executed: there are no action tools.
 - **The agent** rebuilds every request from structured state (a pinned block, an evidence ledger of IDs it was shown, recent results and deterministic compaction), checks it against a client-side token budget, and stops with `context_exhausted` rather than send an over-budget request.
 
 ## Repository map
@@ -102,7 +102,7 @@ flowchart LR
 | `sentinelops/evaluation/` | harness, metrics, run CLIs, the M5 analysis, the safety test |
 | `app/` | the local Streamlit viewer |
 | `eval/` | frozen manifests and every committed run output |
-| `docs/` | the [M4 + M5 report](docs/m4_m5_report.md), the [M5 pre-registration](docs/m5_preregistration.md), the [progress log](docs/PROGRESS.md), the [history rewrite note](docs/history_rewrite.md) |
+| `docs/` | the [M4 + M5 report](docs/m4_m5_report.md), the [M5 pre-registration](docs/m5_preregistration.md), the [progress log](docs/PROGRESS.md), the [threat model](docs/threat_model.md), the [history rewrite note](docs/history_rewrite.md) |
 
 **Reproducing the hosted runs** needs a provider key in the shell environment (never in a file). The exact commands are in [CLAUDE.md](CLAUDE.md#commands). They refuse held-out data in code, and the M5 headline outputs are consumed: rerunning them would be a new, separately labelled experiment.
 

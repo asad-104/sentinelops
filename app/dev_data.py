@@ -235,3 +235,46 @@ def agent_root() -> Path:
     root = Path(os.environ.get(AGENT_ENV) or AGENT_ROOT).resolve()
     _refuse_heldout(root)
     return root
+
+
+M5_ANALYSIS = REPO_ROOT / "eval" / "m5" / "generator-v5" / "m5_analysis.json"
+E1_REPORT = REPO_ROOT / "eval" / "safety" / "generator-v5" / "m5-safety-e1-report" / "e1.json"
+M5_ENV, E1_ENV = "SENTINELOPS_VIEWER_M5", "SENTINELOPS_VIEWER_E1"
+_ANY_SCENARIO_ID = re.compile(SCENARIO_ID_PATTERN.strip("^$"))
+
+
+def _aggregate_file(env: str, default: Path) -> dict[str, Any] | None:
+    path = Path(os.environ.get(env) or default).resolve()
+    _refuse_heldout(path)
+    if "traces" in path.parts or path.is_relative_to(REPO_ROOT / "data"):
+        raise ViewerDataError(f"the M5 page reads aggregate files only: {path}")
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ViewerDataError(f"{path.name} is not valid JSON") from exc
+    if not isinstance(data, dict):
+        raise ViewerDataError(f"{path.name} is not an aggregate report")
+    return data
+
+
+def m5_aggregates() -> dict[str, Any] | None:
+    """The M5 headline as aggregate counts only: the analysis output and E1's counts. Per-scenario rows are
+    dropped, and nothing is returned if any scenario ID would remain. None when the analysis has not been run."""
+    analysis = _aggregate_file(M5_ENV, M5_ANALYSIS)
+    if analysis is None:
+        return None
+    if (analysis.get("metadata") or {}).get("split") != FRESH_SPLIT:
+        raise ViewerDataError("m5_analysis.json is not the fresh-split analysis")
+    keep = ("metadata", "primary", "ablation", "arms", "secondary", "natural_exposure")
+    out: dict[str, Any] = {k: analysis.get(k) for k in keep}
+    safety = analysis.get("safety") or {}
+    out["safety"] = {k: safety.get(k) for k in ("exposed_pairs", "counts", "complete")}
+    out["slices"] = {arm: [{k: s.get(k) for k in ("slice", "attempt", "complete", "runs")} for s in rows]
+                     for arm, rows in (analysis.get("slices") or {}).items()}
+    e1 = _aggregate_file(E1_ENV, E1_REPORT)
+    out["e1"] = None if e1 is None else {k: e1.get(k) for k in ("label", "complete", "counts")}
+    if _ANY_SCENARIO_ID.search(json.dumps(out)):
+        raise ViewerDataError("the M5 aggregates contain a scenario ID; the page shows counts only")
+    return out

@@ -13,4 +13,5 @@ st.navigation([
     st.Page("pages/m2_tiers_and_results.py", title="M2 · Tiers and dev results"),
     st.Page("pages/m3_pilot_traces.py", title="M3 · Pilot traces"),
     st.Page("pages/m4_agent_runs.py", title="M4 · Agent runs"),
+    st.Page("pages/m5_comparison.py", title="M5 · Headline comparison"),
 ]).run()

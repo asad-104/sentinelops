@@ -538,3 +538,86 @@ def test_m4_page_shows_untrusted_text_only_in_code_blocks(dev_root: tuple[Path, 
     assert not at.exception, [e.value for e in at.exception]
     assert any("**bold** <script>" in c.value for c in at.code)
     assert not any("bold" in m.value or "script" in m.value for m in at.markdown)
+
+
+# M5 page: aggregates only
+
+M5_PAGE = REPO_ROOT / "app" / "pages" / "m5_comparison.py"
+COMMITTED_M5 = REPO_ROOT / "eval" / "m5" / "generator-v5" / "m5_analysis.json"
+FAKE_ID = "sc-0123456789"
+
+
+def _m5_files(tmp_path: Path, plant: str | None = None) -> tuple[Path, Path]:
+    """A copy of the committed aggregates, plus an E1 report; ``plant`` puts a scenario ID in a dropped field
+    ("dropped") or in a field the page keeps ("kept")."""
+    analysis = json.loads(COMMITTED_M5.read_text())
+    analysis["slices"]["agent_v1"][0]["directory"] = f"run-{FAKE_ID}"  # dropped by the loader
+    if plant == "kept":
+        analysis["metadata"]["note"] = f"see {FAKE_ID}"
+    e1 = {"label": "E1: test", "complete": True, "rows": [{"scenario_id": FAKE_ID}],
+          "counts": {"replicates": 2, "both_reports": 2, "disagree": 1, "queries_identical": 2,
+                     "among_twin_pairs": {"n": 2, "disagree": 1, "twin_changed": 1}}}
+    (tmp_path / "m5").mkdir()
+    (tmp_path / "m5" / "m5_analysis.json").write_text(json.dumps(analysis))
+    (tmp_path / "m5" / "e1.json").write_text(json.dumps(e1))
+    return tmp_path / "m5" / "m5_analysis.json", tmp_path / "m5" / "e1.json"
+
+
+def _m5_page(monkeypatch: pytest.MonkeyPatch, analysis: Path, e1: Path):
+    from app.dev_data import E1_ENV, M5_ENV
+
+    monkeypatch.setenv(M5_ENV, str(analysis))
+    monkeypatch.setenv(E1_ENV, str(e1))
+    testing = pytest.importorskip("streamlit.testing.v1")
+    at = testing.AppTest.from_file(str(M5_PAGE), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    return at
+
+
+def _page_text(at) -> str:
+    return " ".join([*(str(df.value.to_dict()) for df in at.dataframe), *(m.value for m in at.markdown),
+                     *(c.value for c in at.caption), *(s.value for s in at.subheader), *(e.value for e in at.error)])
+
+
+@pytest.mark.skipif(not COMMITTED_M5.is_file(), reason="no committed M5 analysis")
+def test_m5_page_shows_aggregates_and_drops_per_scenario_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    at = _m5_page(monkeypatch, *_m5_files(tmp_path, "dropped"))
+    text = _page_text(at)
+    assert FAKE_ID not in text and "Primary (D1)" in text and "E1 (exploratory, post hoc)" in text
+    grid = at.dataframe[0].value
+    primary = json.loads(COMMITTED_M5.read_text())["primary"]
+    assert int(grid.values.sum()) == primary["n_pairs"]
+    assert grid.loc["agent wrong", "single-pass right"] == primary["b_right_a_wrong"]
+
+
+@pytest.mark.skipif(not COMMITTED_M5.is_file(), reason="no committed M5 analysis")
+def test_m5_page_refuses_aggregates_that_still_carry_a_scenario_id(tmp_path: Path,
+                                                                   monkeypatch: pytest.MonkeyPatch) -> None:
+    at = _m5_page(monkeypatch, *_m5_files(tmp_path, "kept"))
+    assert any("not available" in e.value for e in at.error) and FAKE_ID not in _page_text(at)
+    assert not at.dataframe
+
+
+def test_m5_loader_reads_aggregate_files_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.dev_data import M5_ENV, m5_aggregates
+
+    for bad in (REPO_ROOT / "data" / "m5fresh" / "x.json", tmp_path / "run" / "traces" / "x.json",
+                tmp_path / "heldout" / "m5_analysis.json"):
+        monkeypatch.setenv(M5_ENV, str(bad))
+        with pytest.raises(ViewerDataError):
+            m5_aggregates()
+    (tmp_path / "dev.json").write_text(json.dumps({"metadata": {"split": "dev"}}))
+    monkeypatch.setenv(M5_ENV, str(tmp_path / "dev.json"))
+    with pytest.raises(ViewerDataError, match="fresh-split analysis"):
+        m5_aggregates()
+
+
+def test_m5_page_empty_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    at = _m5_page(monkeypatch, tmp_path / "missing.json", tmp_path / "missing-e1.json")
+    assert any("No M5 analysis yet" in i.value for i in at.info)
+
+
+def test_m5_page_source_names_no_trace_or_data_path() -> None:
+    source = M5_PAGE.read_text()
+    assert "traces" not in source.split('"""', 2)[2] and "data/" not in source and "read_trace" not in source

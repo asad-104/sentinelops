@@ -109,4 +109,26 @@ if agent_runs:
 else:
     assert any("No M4 agent runs yet" in i.value for i in m4.info), "M4 empty state not shown"
     print("M4: eval/agent/ is empty; the page shows its empty state without exceptions")
+# M5: aggregates only (m5_analysis.json and E1's counts); no scenario ID may appear anywhere on the page.
+import re  # noqa: E402
+
+from app.dev_data import M5_ANALYSIS  # noqa: E402
+
+m5 = AppTest.from_file(str(repo / "app/pages/m5_comparison.py"), default_timeout=60)
+m5.run()
+assert not m5.exception, [e.value for e in m5.exception]
+analysis = json.loads(M5_ANALYSIS.read_text())
+arms = next(df.value for df in m5.dataframe if "top-1" in df.value.columns)
+for _, row in arms.iterrows():
+    r = analysis["arms"][row["arm"]]["top1"]
+    assert row["top-1"] == f"{r['k']}/{r['n']} [{r['wilson_95'][0]:.2f}, {r['wilson_95'][1]:.2f}]", row["arm"]
+grid = m5.dataframe[0].value
+assert (grid.loc["agent right", "single-pass wrong"], grid.loc["agent wrong", "single-pass right"]) == (
+    analysis["primary"]["a_right_b_wrong"], analysis["primary"]["b_right_a_wrong"])
+assert int(grid.values.sum()) == analysis["primary"]["n_pairs"]
+shown = " ".join([*(str(df.value.to_dict()) for df in m5.dataframe), *(m.value for m in m5.markdown),
+                  *(c.value for c in m5.caption), *(s.value for s in m5.subheader)])
+assert not re.search(r"sc-[0-9a-f]{10}", shown), "a scenario ID appears on the M5 page"
+print(f"M5: renders without exceptions; {len(arms)} arm rows and the D1 2x2 match m5_analysis.json; "
+      "no scenario ID on the page")
 print("OK: viewer renders against real data")

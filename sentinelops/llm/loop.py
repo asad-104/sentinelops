@@ -28,7 +28,7 @@ from sentinelops.llm.prompt import SYSTEM_PROMPT, prompt_sha256
 from sentinelops.llm.schemas import SUBMIT_REPORT, ReportDraft, tool_specs
 from sentinelops.llm.trace import RunTrace, TraceWriter
 from sentinelops.report import InvestigationFailed, InvestigationReport, StopReason, ToolCaller
-from sentinelops.tools import TOOL_INPUT_MODELS, ToolResult
+from sentinelops.tools import TOOL_INPUT_MODELS
 
 MALFORMED_CODES = frozenset({"invalid_json", "unknown_tool", "invalid_arguments"})
 TRACE_TEXT_CAP = 4000

@@ -7,7 +7,6 @@ import json
 import math
 import re
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -17,6 +16,7 @@ from sentinelops.agent.context import (
     CHARS_PER_TOKEN,
     ESTIMATE_MARGIN,
     ContextBuilder,
+    Exchange,
     Ledger,
     TokenEstimator,
     request_chars,
@@ -27,7 +27,7 @@ from sentinelops.agent.prompt import STATE_INSTRUCTIONS, SYSTEM_PROMPT
 from sentinelops.agent.schemas import agent_tool_specs
 from sentinelops.agent.states import AgentBounds, State
 from sentinelops.evaluation.harness import CountingToolSet
-from sentinelops.llm.client import LLMResponse, Usage
+from sentinelops.llm.client import Usage
 from sentinelops.llm.trace import RunTrace, read_trace
 from sentinelops.report import InvestigationFailed
 
@@ -271,8 +271,7 @@ def test_estimator_never_undercounts_any_turn_of_the_m4_smoke_runs() -> None:
     assert checked >= 30
 
 
-def _exchange(i: int, tool: str = "search_logs", ok: bool = True, ranking: str = "") -> "Exchange":
-    from sentinelops.agent.context import Exchange
+def _exchange(i: int, tool: str = "search_logs", ok: bool = True, ranking: str = "") -> Exchange:
     from sentinelops.llm.client import ToolCallRequest
 
     arguments = {"hypotheses": [{"rank": 1, "service": ranking}]} if tool == "submit_hypotheses" else {"limit": i}

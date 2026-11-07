@@ -22,7 +22,7 @@ from sentinelops.evaluation.agent_run import (
 )
 from sentinelops.evaluation.harness import HarnessAbort
 from sentinelops.evaluation.pilot import PILOT_SCENARIOS, OutputExists
-from sentinelops.simulator.datasets import build_split, manifest_path
+from sentinelops.simulator.datasets import build_split
 from sentinelops.simulator.profiles import Split
 
 PREREGISTERED_CORE = ("sc-30385ffc64", "sc-3836c69ef7", "sc-3e3ceb314e", "sc-4001bf784c", "sc-408b514aeb",

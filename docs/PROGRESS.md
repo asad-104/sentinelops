@@ -1737,7 +1737,12 @@ Each refusal is recorded.
 - **Five-minute path, timed** on a fresh clone with a new venv (2026-11-07, M2, 8 GB): venv 1 s, install 5 s (6 s with no pip cache), dev split 5 s, fast tests 34 s, dev evaluation into a temp directory 9 s; **54 s** in total; viewer install 12 s and viewer check 20 s on top. The clone's tree stayed clean.
 - **README (55f336b)** rewritten for readers who know ML evaluation but not this project. Its results table was checked against `m5_analysis.json`. **MIT licence (0aa9714).**
 - **Pandas warnings:** the venv was rebuilt on 2026-11-07, and streamlit's unpinned dependency is now pandas 3.1.1, which deprecates a call used inside the viewer tests (12 warnings, no failures).
-- **Not done yet:** the demo walkthrough, a threat-model section, and publishing (the user decides).
+- **Addendum (2026-11-07):**
+  - **Viewer dependencies** fully pinned (2bf236f). pandas is held at 3.0.6, because 3.1.x made Streamlit 1.65 raise a Pandas4Warning; the pinned set installs cleanly into a fresh venv.
+  - **Results-at-a-glance figure** in the README (b5fc284): generated from `m5_analysis.json`, light and dark, and tested against staleness.
+  - **Report summary and `docs/threat_model.md`** (f87ac4a).
+  - **`docs/demo_script.md`:** about 60–90 s, using dev runs 3 (correct) and 12 (config_error ranked as pool exhaustion) and the M5 page.
+- **Not done yet:** publishing. The deployment details haven't been received; the repo is to be created private first, then switched to public after a render check. The user records the demo.
 
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.

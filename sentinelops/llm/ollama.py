@@ -28,18 +28,19 @@ class NonLocalEndpoint(ValueError):
 class OllamaClient:
     def __init__(self, model: str, *, base_url: str = DEFAULT_BASE_URL, timeout_s: float = 180.0,
                  num_ctx: int = 8192, seed: int = 0, think: bool | None = None, keep_alive: str = "5m",
-                 transport: httpx.BaseTransport | None = None) -> None:
+                 num_predict: int | None = None, transport: httpx.BaseTransport | None = None) -> None:
         host = urlparse(base_url).hostname
         if host not in LOOPBACK_HOSTS:
             raise NonLocalEndpoint(f"Ollama client is local only; refusing host {host!r}")
         self.model, self.base_url, self.timeout_s = model, base_url, timeout_s
         self.num_ctx, self.seed, self.think, self.keep_alive = num_ctx, seed, think, keep_alive
+        self.num_predict = num_predict  # None: not sent (M3 pilot); M4 caps generation at 2,048
         self._http = httpx.Client(base_url=base_url, timeout=httpx.Timeout(timeout_s), transport=transport)
 
     def describe(self) -> dict[str, Any]:
         return {"backend": "ollama", "model": self.model, "base_url": self.base_url, "timeout_s": self.timeout_s,
                 "num_ctx": self.num_ctx, "seed": self.seed, "temperature": 0, "think": self.think,
-                "keep_alive": self.keep_alive}
+                "keep_alive": self.keep_alive, "num_predict": self.num_predict}
 
     def request_body(self, messages: list[ChatMessage], tools: list[ToolSpec]) -> dict[str, Any]:
         body: dict[str, Any] = {
@@ -53,6 +54,8 @@ class OllamaClient:
         }
         if self.think is not None:
             body["think"] = self.think
+        if self.num_predict is not None:
+            body["options"]["num_predict"] = self.num_predict
         return body
 
     def unload(self) -> LLMError | None:
@@ -112,8 +115,12 @@ def _parse(data: dict[str, Any], latency: float) -> LLMResponse:
         arguments = fn.get("arguments", {})
         raw = arguments if isinstance(arguments, str) else json.dumps(arguments)
         calls.append(ToolCallRequest(tc.get("id") or f"call-{i}", str(fn["name"]), raw))
-    load = data.get("load_duration")  # nanoseconds
+    def seconds(key: str) -> float | None:  # Ollama reports durations in nanoseconds
+        value = data.get(key)
+        return value / 1e9 if isinstance(value, (int, float)) else None
+
     return LLMResponse(text=message.get("content") or "", tool_calls=tuple(calls),
                        usage=Usage(data.get("prompt_eval_count"), data.get("eval_count")), latency_s=latency,
-                       thinking_chars=len(message.get("thinking") or ""),
-                       load_s=load / 1e9 if isinstance(load, (int, float)) else None)
+                       thinking_chars=len(message.get("thinking") or ""), load_s=seconds("load_duration"),
+                       prompt_eval_s=seconds("prompt_eval_duration"), total_s=seconds("total_duration"),
+                       truncated=data.get("done_reason") == "length")

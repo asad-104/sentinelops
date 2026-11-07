@@ -1,0 +1,92 @@
+1:time=2026-10-28T19:20:40.963+08:00 level=INFO source=routes.go:2450 msg="server config" env="map[HTTPS_PROXY: HTTP_PROXY: LLAMA_ARG_FIT: LLAMA_ARG_FIT_TARGET: NO_PROXY: OLLAMA_CONTEXT_LENGTH:0 OLLAMA_CREATE_REMOTE:false OLLAMA_DEBUG:INFO OLLAMA_DEBUG_LOG_REQUESTS:false OLLAMA_EDITOR: OLLAMA_FLASH_ATTENTION:false OLLAMA_GO_TEMPLATE:true OLLAMA_GPU_OVERHEAD:0 OLLAMA_HOST:http://127.0.0.1:11434 OLLAMA_IGPU_ENABLE: OLLAMA_KEEP_ALIVE:5m0s OLLAMA_KV_CACHE_TYPE: OLLAMA_LLM_LIBRARY: OLLAMA_LOAD_TIMEOUT:5m0s OLLAMA_MAX_LOADED_MODELS:1 OLLAMA_MAX_QUEUE:512 OLLAMA_MAX_TRANSFER_STREAMS:4 OLLAMA_MODELS:~/.ollama/models OLLAMA_NOHISTORY:false OLLAMA_NOPRUNE:false OLLAMA_NO_CLOUD:false OLLAMA_NUM_PARALLEL:1 OLLAMA_ORIGINS:[http://localhost https://localhost http://localhost:* https://localhost:* http://127.0.0.1 https://127.0.0.1 http://127.0.0.1:* https://127.0.0.1:* http://0.0.0.0 https://0.0.0.0 http://0.0.0.0:* https://0.0.0.0:* app://* file://* tauri://* vscode-webview://* vscode-file://*] OLLAMA_REMOTES:[ollama.com] OLLAMA_SCHED_SPREAD:false http_proxy: https_proxy: no_proxy:]"
+8:time=2026-10-28T19:20:41.172+08:00 level=INFO source=routes.go:2562 msg="vram-based default context" total_vram="5.3 GiB" default_num_ctx=4096
+20:time=2026-10-28T19:24:35.394+08:00 level=INFO source=llama_server.go:457 msg="starting llama-server" cmd="/opt/homebrew/Cellar/ollama/0.40.8/libexec/lib/ollama/llama-server --model ~/.ollama/models/blobs/sha256-85e4a5b7b8ef0e48af0e8658f5aaab9c2324c76c1641493f4d1e25fce54b18b9 --port 49187 --host 127.0.0.1 --no-webui --offline -c 8192 -np 1 --log-verbosity 4 --no-log-prefix --no-log-timestamps --flash-attn auto -b 512 -ub 512 --context-shift --keep 4"
+59:common_memory_breakdown_print: | memory breakdown [MiB] | total   free    self   model   context   compute    unaccounted |
+87:llama_model_loader: - kv  19:                       qwen3.context_length u32              = 262144
+122:print_info: n_ctx_train           = 262144
+157:print_info: n_ctx_orig_yarn       = 262144
+196:llama_context: constructing llama_context
+197:llama_context: n_seq_max             = 1
+198:llama_context: n_ctx                 = 8192
+199:llama_context: n_ctx_seq             = 8192
+200:llama_context: n_batch               = 512
+201:llama_context: n_ubatch              = 512
+202:llama_context: causal_attn           = 1
+203:llama_context: flash_attn            = auto
+204:llama_context: kv_unified            = false
+205:llama_context: freq_base             = 5000000.0
+206:llama_context: freq_scale            = 1
+207:llama_context: n_rs_seq              = 0
+208:llama_context: n_outputs_max         = 1
+209:llama_context: n_outputs_max_per_seq = 1
+210:llama_context: n_ctx_seq (8192) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+217:llama_context:        CPU  output buffer size =     0.58 MiB
+234:srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+236:slot   load_model: id  0 | task -1 | new slot, n_ctx = 8192
+240:srv    load_model: context checkpoints enabled, max = 32, min spacing = 8192
+278:slot   operator(): id  0 | task 0 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 3331
+296:slot      release: id  0 | task 0 | stop processing: n_tokens = 3370, truncated = 0
+311:slot   operator(): id  0 | task 47 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4435
+321:slot      release: id  0 | task 47 | stop processing: n_tokens = 4518, truncated = 0
+336:slot   operator(): id  0 | task 134 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 5303
+348:slot      release: id  0 | task 134 | stop processing: n_tokens = 5342, truncated = 0
+363:slot   operator(): id  0 | task 178 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4765
+373:slot      release: id  0 | task 178 | stop processing: n_tokens = 4804, truncated = 0
+388:slot   operator(): id  0 | task 221 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4884
+398:slot      release: id  0 | task 221 | stop processing: n_tokens = 4923, truncated = 0
+413:slot   operator(): id  0 | task 264 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4968
+422:slot      release: id  0 | task 264 | stop processing: n_tokens = 5007, truncated = 0
+437:slot   operator(): id  0 | task 306 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4833
+445:slot      release: id  0 | task 306 | stop processing: n_tokens = 4872, truncated = 0
+460:slot   operator(): id  0 | task 347 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4992
+474:slot      release: id  0 | task 347 | stop processing: n_tokens = 5031, truncated = 0
+489:slot   operator(): id  0 | task 392 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4902
+501:slot      release: id  0 | task 392 | stop processing: n_tokens = 4972, truncated = 0
+516:slot   operator(): id  0 | task 467 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4820
+528:slot      release: id  0 | task 467 | stop processing: n_tokens = 4852, truncated = 0
+543:slot   operator(): id  0 | task 504 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4264
+552:slot      release: id  0 | task 504 | stop processing: n_tokens = 4296, truncated = 0
+567:slot   operator(): id  0 | task 539 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4231
+576:slot      release: id  0 | task 539 | stop processing: n_tokens = 4263, truncated = 0
+581:time=2026-10-28T19:26:34.277+08:00 level=INFO source=llama_server.go:457 msg="starting llama-server" cmd="/opt/homebrew/Cellar/ollama/0.40.8/libexec/lib/ollama/llama-server --model ~/.ollama/models/blobs/sha256-85e4a5b7b8ef0e48af0e8658f5aaab9c2324c76c1641493f4d1e25fce54b18b9 --port 49263 --host 127.0.0.1 --no-webui --offline -c 8192 -np 1 --log-verbosity 4 --no-log-prefix --no-log-timestamps --flash-attn auto -b 1024 -ub 1024 --context-shift --keep 4"
+620:common_memory_breakdown_print: | memory breakdown [MiB] | total   free    self   model   context   compute    unaccounted |
+648:llama_model_loader: - kv  19:                       qwen3.context_length u32              = 262144
+683:print_info: n_ctx_train           = 262144
+718:print_info: n_ctx_orig_yarn       = 262144
+757:llama_context: constructing llama_context
+758:llama_context: n_seq_max             = 1
+759:llama_context: n_ctx                 = 8192
+760:llama_context: n_ctx_seq             = 8192
+761:llama_context: n_batch               = 1024
+762:llama_context: n_ubatch              = 1024
+763:llama_context: causal_attn           = 1
+764:llama_context: flash_attn            = auto
+765:llama_context: kv_unified            = false
+766:llama_context: freq_base             = 5000000.0
+767:llama_context: freq_scale            = 1
+768:llama_context: n_rs_seq              = 0
+769:llama_context: n_outputs_max         = 1
+770:llama_context: n_outputs_max_per_seq = 1
+771:llama_context: n_ctx_seq (8192) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+778:llama_context:        CPU  output buffer size =     0.58 MiB
+795:srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+797:slot   load_model: id  0 | task -1 | new slot, n_ctx = 8192
+801:srv    load_model: context checkpoints enabled, max = 32, min spacing = 8192
+839:slot   operator(): id  0 | task 0 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 3331
+852:slot      release: id  0 | task 0 | stop processing: n_tokens = 3370, truncated = 0
+867:slot   operator(): id  0 | task 44 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4435
+876:slot      release: id  0 | task 44 | stop processing: n_tokens = 4519, truncated = 0
+891:slot   operator(): id  0 | task 131 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4238
+900:slot      release: id  0 | task 131 | stop processing: n_tokens = 4270, truncated = 0
+915:slot   operator(): id  0 | task 166 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4217
+924:slot      release: id  0 | task 166 | stop processing: n_tokens = 4249, truncated = 0
+939:slot   operator(): id  0 | task 201 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4417
+948:slot      release: id  0 | task 201 | stop processing: n_tokens = 4449, truncated = 0
+963:slot   operator(): id  0 | task 236 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 5238
+974:slot      release: id  0 | task 236 | stop processing: n_tokens = 5241, truncated = 0
+989:slot   operator(): id  0 | task 243 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4944
+998:slot      release: id  0 | task 243 | stop processing: n_tokens = 4976, truncated = 0
+1013:slot   operator(): id  0 | task 278 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 4670
+1022:slot      release: id  0 | task 278 | stop processing: n_tokens = 4702, truncated = 0
+1037:slot   operator(): id  0 | task 313 | new prompt, n_ctx_slot = 8192, n_keep = 4, task.n_tokens = 5138
+1048:slot      release: id  0 | task 313 | stop processing: n_tokens = 5170, truncated = 0

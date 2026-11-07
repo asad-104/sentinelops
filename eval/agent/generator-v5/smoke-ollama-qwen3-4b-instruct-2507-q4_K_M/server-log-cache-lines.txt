@@ -1,0 +1,97 @@
+237:srv    load_model: prompt cache is enabled, size limit: 8192 MiB
+238:srv    load_model: use `--cache-ram 0` to disable the prompt cache
+240:srv    load_model: context checkpoints enabled, max = 32, min spacing = 8192
+241:srv          init: idle slots will be saved to prompt cache upon starting a new task
+267:srv  get_availabl: updating prompt cache
+268:srv          load:  - looking for better prompt, base f_keep = -1.000, f_sim = 0.000
+269:srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 8192.000 MiB, 8192 tokens, 8589934592 est)
+270:srv  get_availabl: prompt cache update took 0.00 ms
+279:slot   operator(): id  0 | task 0 | cached n_tokens = 0, memory_seq_rm [0, end)
+280:slot   operator(): id  0 | task 0 | cached n_tokens = 512, memory_seq_rm [512, end)
+281:slot   operator(): id  0 | task 0 | cached n_tokens = 1024, memory_seq_rm [1024, end)
+283:slot   operator(): id  0 | task 0 | cached n_tokens = 1536, memory_seq_rm [1536, end)
+285:slot   operator(): id  0 | task 0 | cached n_tokens = 2048, memory_seq_rm [2048, end)
+287:slot   operator(): id  0 | task 0 | cached n_tokens = 2560, memory_seq_rm [2560, end)
+289:slot   operator(): id  0 | task 0 | cached n_tokens = 3072, memory_seq_rm [3072, end)
+303:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.727 (> 0.100 thold), f_keep = 0.957
+312:slot   operator(): id  0 | task 47 | cached n_tokens = 3225, memory_seq_rm [3225, end)
+313:slot   operator(): id  0 | task 47 | cached n_tokens = 3737, memory_seq_rm [3737, end)
+314:slot   operator(): id  0 | task 47 | cached n_tokens = 4249, memory_seq_rm [4249, end)
+328:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.667 (> 0.100 thold), f_keep = 0.783
+337:slot   operator(): id  0 | task 134 | cached n_tokens = 3539, memory_seq_rm [3539, end)
+338:slot   operator(): id  0 | task 134 | cached n_tokens = 4051, memory_seq_rm [4051, end)
+339:slot   operator(): id  0 | task 134 | cached n_tokens = 4563, memory_seq_rm [4563, end)
+341:slot   operator(): id  0 | task 134 | cached n_tokens = 5075, memory_seq_rm [5075, end)
+355:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.769 (> 0.100 thold), f_keep = 0.686
+364:slot   operator(): id  0 | task 178 | cached n_tokens = 3662, memory_seq_rm [3662, end)
+365:slot   operator(): id  0 | task 178 | cached n_tokens = 4174, memory_seq_rm [4174, end)
+366:slot   operator(): id  0 | task 178 | cached n_tokens = 4686, memory_seq_rm [4686, end)
+380:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.725 (> 0.100 thold), f_keep = 0.737
+389:slot   operator(): id  0 | task 221 | cached n_tokens = 3542, memory_seq_rm [3542, end)
+390:slot   operator(): id  0 | task 221 | cached n_tokens = 4054, memory_seq_rm [4054, end)
+391:slot   operator(): id  0 | task 221 | cached n_tokens = 4566, memory_seq_rm [4566, end)
+405:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.871 (> 0.100 thold), f_keep = 0.879
+414:slot   operator(): id  0 | task 264 | cached n_tokens = 4326, memory_seq_rm [4326, end)
+415:slot   operator(): id  0 | task 264 | cached n_tokens = 4838, memory_seq_rm [4838, end)
+429:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.912 (> 0.100 thold), f_keep = 0.881
+438:slot   operator(): id  0 | task 306 | cached n_tokens = 4410, memory_seq_rm [4410, end)
+452:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.588 (> 0.100 thold), f_keep = 0.602
+461:slot   operator(): id  0 | task 347 | cached n_tokens = 2935, memory_seq_rm [2935, end)
+462:slot   operator(): id  0 | task 347 | cached n_tokens = 3447, memory_seq_rm [3447, end)
+463:slot   operator(): id  0 | task 347 | cached n_tokens = 3959, memory_seq_rm [3959, end)
+465:slot   operator(): id  0 | task 347 | cached n_tokens = 4471, memory_seq_rm [4471, end)
+467:slot   operator(): id  0 | task 347 | cached n_tokens = 4983, memory_seq_rm [4983, end)
+481:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.599 (> 0.100 thold), f_keep = 0.583
+490:slot   operator(): id  0 | task 392 | cached n_tokens = 2935, memory_seq_rm [2935, end)
+491:slot   operator(): id  0 | task 392 | cached n_tokens = 3447, memory_seq_rm [3447, end)
+492:slot   operator(): id  0 | task 392 | cached n_tokens = 3959, memory_seq_rm [3959, end)
+494:slot   operator(): id  0 | task 392 | cached n_tokens = 4471, memory_seq_rm [4471, end)
+508:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.605 (> 0.100 thold), f_keep = 0.587
+517:slot   operator(): id  0 | task 467 | cached n_tokens = 2918, memory_seq_rm [2918, end)
+518:slot   operator(): id  0 | task 467 | cached n_tokens = 3430, memory_seq_rm [3430, end)
+519:slot   operator(): id  0 | task 467 | cached n_tokens = 3942, memory_seq_rm [3942, end)
+521:slot   operator(): id  0 | task 467 | cached n_tokens = 4454, memory_seq_rm [4454, end)
+535:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.824 (> 0.100 thold), f_keep = 0.724
+544:slot   operator(): id  0 | task 504 | cached n_tokens = 3513, memory_seq_rm [3513, end)
+545:slot   operator(): id  0 | task 504 | cached n_tokens = 4025, memory_seq_rm [4025, end)
+559:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.830 (> 0.100 thold), f_keep = 0.818
+568:slot   operator(): id  0 | task 539 | cached n_tokens = 3513, memory_seq_rm [3513, end)
+569:slot   operator(): id  0 | task 539 | cached n_tokens = 4025, memory_seq_rm [4025, end)
+798:srv    load_model: prompt cache is enabled, size limit: 8192 MiB
+799:srv    load_model: use `--cache-ram 0` to disable the prompt cache
+801:srv    load_model: context checkpoints enabled, max = 32, min spacing = 8192
+802:srv          init: idle slots will be saved to prompt cache upon starting a new task
+828:srv  get_availabl: updating prompt cache
+829:srv          load:  - looking for better prompt, base f_keep = -1.000, f_sim = 0.000
+830:srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 8192.000 MiB, 8192 tokens, 8589934592 est)
+831:srv  get_availabl: prompt cache update took 0.00 ms
+840:slot   operator(): id  0 | task 0 | cached n_tokens = 0, memory_seq_rm [0, end)
+841:slot   operator(): id  0 | task 0 | cached n_tokens = 1024, memory_seq_rm [1024, end)
+843:slot   operator(): id  0 | task 0 | cached n_tokens = 2048, memory_seq_rm [2048, end)
+845:slot   operator(): id  0 | task 0 | cached n_tokens = 3072, memory_seq_rm [3072, end)
+859:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.727 (> 0.100 thold), f_keep = 0.957
+868:slot   operator(): id  0 | task 44 | cached n_tokens = 3225, memory_seq_rm [3225, end)
+869:slot   operator(): id  0 | task 44 | cached n_tokens = 4249, memory_seq_rm [4249, end)
+883:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.689 (> 0.100 thold), f_keep = 0.646
+892:slot   operator(): id  0 | task 131 | cached n_tokens = 2918, memory_seq_rm [2918, end)
+893:slot   operator(): id  0 | task 131 | cached n_tokens = 3942, memory_seq_rm [3942, end)
+907:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.732 (> 0.100 thold), f_keep = 0.723
+916:slot   operator(): id  0 | task 166 | cached n_tokens = 3087, memory_seq_rm [3087, end)
+917:slot   operator(): id  0 | task 166 | cached n_tokens = 4111, memory_seq_rm [4111, end)
+931:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.707 (> 0.100 thold), f_keep = 0.735
+940:slot   operator(): id  0 | task 201 | cached n_tokens = 3123, memory_seq_rm [3123, end)
+941:slot   operator(): id  0 | task 201 | cached n_tokens = 4147, memory_seq_rm [4147, end)
+955:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.557 (> 0.100 thold), f_keep = 0.656
+964:slot   operator(): id  0 | task 236 | cached n_tokens = 2918, memory_seq_rm [2918, end)
+965:slot   operator(): id  0 | task 236 | cached n_tokens = 3942, memory_seq_rm [3942, end)
+967:slot   operator(): id  0 | task 236 | cached n_tokens = 4966, memory_seq_rm [4966, end)
+981:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.594 (> 0.100 thold), f_keep = 0.560
+990:slot   operator(): id  0 | task 243 | cached n_tokens = 2935, memory_seq_rm [2935, end)
+991:slot   operator(): id  0 | task 243 | cached n_tokens = 3959, memory_seq_rm [3959, end)
+1005:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.625 (> 0.100 thold), f_keep = 0.586
+1014:slot   operator(): id  0 | task 278 | cached n_tokens = 2918, memory_seq_rm [2918, end)
+1015:slot   operator(): id  0 | task 278 | cached n_tokens = 3942, memory_seq_rm [3942, end)
+1029:slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.568 (> 0.100 thold), f_keep = 0.621
+1038:slot   operator(): id  0 | task 313 | cached n_tokens = 2918, memory_seq_rm [2918, end)
+1039:slot   operator(): id  0 | task 313 | cached n_tokens = 3942, memory_seq_rm [3942, end)
+1041:slot   operator(): id  0 | task 313 | cached n_tokens = 4966, memory_seq_rm [4966, end)

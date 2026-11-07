@@ -11,6 +11,9 @@ from sentinelops.models import ConfigChange, Deployment
 from sentinelops.simulator import Scenario
 from sentinelops.simulator.changes import AUTHORS, CONFIG_KEYS, DEPLOY_SUMMARIES
 from sentinelops.simulator.profiles import Tier
+import pytest
+
+pytestmark = pytest.mark.slow  # whole-split generation or end-to-end runs; run in the full suite
 
 VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 

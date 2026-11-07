@@ -1,0 +1,139 @@
+{
+  "metadata": {
+    "aborted": "provider-caused stop in sc-45fa1390ea: provider-caused: http_status: HTTP 429 after 4 retries: {\"object\":\"error\",\"message\":\"Rate limit exceeded\",\"type\":\"rate_limited\",\"param\":null,\"code\":\"1300\",\"raw_status_code\":429}",
+    "attempt": 1,
+    "backend": "mistral",
+    "bounds": {
+      "call_timeout_s": 180.0,
+      "gather_first_pass_cap": 16,
+      "max_consecutive_client_errors": 2,
+      "max_consecutive_malformed": 3,
+      "max_consecutive_timeouts": 2,
+      "max_identical_calls": 3,
+      "max_no_new_evidence": 3,
+      "max_report_repairs": 1,
+      "max_returns_to_gather": 1,
+      "max_tool_calls": 40,
+      "max_turns": 60,
+      "min_gather_evidence": 4,
+      "min_verify_reads": 1,
+      "num_ctx": 8192,
+      "num_predict": 2048,
+      "prompt_budget": 6144,
+      "result_char_cap": 4000,
+      "server_guard_fraction": 0.9,
+      "total_timeout_s": 1800.0,
+      "verify_cap": 8
+    },
+    "budgets_note": "M4 agent budget 40 read-tool calls; rule baseline uses ~52",
+    "client": {
+      "api": "openai-compatible",
+      "backend": "mistral",
+      "date_utc": "2026-10-29",
+      "extra": {
+        "reasoning_effort": "none"
+      },
+      "host": "api.mistral.ai",
+      "key_env": "MISTRAL_API_KEY",
+      "max_completion_tokens": 2048,
+      "max_retries": 4,
+      "max_tokens_field": "max_tokens",
+      "max_wait_s": 120.0,
+      "model": "mistral-small-2603",
+      "provider_defaults": {
+        "parallel_tool_calls": false,
+        "random_seed": 0
+      },
+      "rate_limits": {
+        "requests_per_minute": 50,
+        "tokens_per_minute": 16000
+      },
+      "temperature": 0,
+      "timeout_s": 180.0,
+      "tool_message_name": true
+    },
+    "generator_version": "5",
+    "git_commit": "8ad0147",
+    "manifest_sha256": "5a35c45a7e8fdcee94b4be82c000a0d62de04d56b25404d5c647d51bd1eb0397",
+    "model": "mistral-small-2603",
+    "prompt_sha256": "d269d28d9581a9d931c936c333259de648526a3970de99b952e0011fe2b2e9eb",
+    "scenarios": [
+      "sc-45fa1390ea"
+    ],
+    "smoke": true,
+    "unload_between_runs": true
+  },
+  "rule": {
+    "budgets": {
+      "agent": 40,
+      "rule_baseline": 52
+    },
+    "complete": false,
+    "investigated": 0,
+    "max_wall_s": 32.97127716599971,
+    "mechanics_check_only": "propose_hosted",
+    "median_wall_s": 32.97127716599971,
+    "n": 1,
+    "trace_overflow_runs": 0,
+    "valid_reports": 0,
+    "verdict": "not applicable (smoke run)"
+  },
+  "runs": [
+    {
+      "cited": 0,
+      "cited_existing": 0,
+      "completion_tokens": 0,
+      "data_kinds": [],
+      "distinct_tools": 0,
+      "elapsed_ex_wait_s": 2.971277165999709,
+      "elapsed_s": 32.97127716599971,
+      "estimate_discrepancies_over_15pct": 0,
+      "evidence_calls": 0,
+      "final_state": "GATHER",
+      "guard_fired": 0,
+      "injected": true,
+      "investigated": false,
+      "investigated_a_valid_report": false,
+      "investigated_b_gather_evidence_calls": false,
+      "investigated_c_data_kinds": false,
+      "investigated_d_top_supported": false,
+      "investigated_e_verified": false,
+      "investigated_evidence_kinds": [],
+      "investigated_f_no_overflow": true,
+      "investigated_gather_evidence_calls": 0,
+      "investigated_reported_at_num_ctx": 0,
+      "investigated_requests_over_budget": 0,
+      "investigated_top_cited_existing": 0,
+      "max_compaction_level": 0,
+      "max_estimated_tokens": 4455,
+      "max_reported_prompt_tokens": null,
+      "model_calls": 0,
+      "model_read_calls": 0,
+      "prompt_eval_s": [],
+      "prompt_tokens": 0,
+      "read_calls": 3,
+      "repaired": false,
+      "report_valid": false,
+      "retries": 4,
+      "run": 1,
+      "scenario_id": "sc-45fa1390ea",
+      "services_examined": [],
+      "states_visited": [
+        "TRIAGE",
+        "GATHER"
+      ],
+      "stop_reason": "error",
+      "tier": "standard",
+      "timeouts": 0,
+      "tool_calls": 3,
+      "top": null,
+      "top1": false,
+      "top3": false,
+      "trace": "01-sc-45fa1390ea.jsonl",
+      "turns": 1,
+      "valid_calls": 0,
+      "variant": "original",
+      "wait_s": 30.0
+    }
+  ]
+}

@@ -11,12 +11,16 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 - Keep this file updated: when a milestone or significant step finishes, update "Milestone status" and "Next" before stopping
 
 ## Commands
-- Tests: `.venv/bin/python -m pytest`
+- Tests: `.venv/bin/python -m pytest` (full suite, the gate, ~3 min); fast subset `.venv/bin/python -m pytest -m "not slow"` (~35 s)
 - Generate data: `.venv/bin/python -m sentinelops.simulator --split dev` (frozen dev split → `data/dev/`), or `--seed 1 --n 5` for ad-hoc scenarios. `data/` is gitignored
 - Never print, open or inspect held-out data (`data/heldout/`). Generating it prints only a count and hash
 - Evaluate on dev: `.venv/bin/python -m sentinelops.evaluation --split dev --investigator all` (writes `eval/results/`). Held-out needs `--final` and runs only at milestone comparisons
 - Paired tier ablation (dev only): `.venv/bin/python -m sentinelops.evaluation.ablation`
 - M3 pilot (dev only): `.venv/bin/python -m sentinelops.evaluation.pilot --backend mock` (writes `eval/pilot/`). `--backend ollama` only after stage B approval, with Streamlit stopped
+- M4 agent (dev only): `.venv/bin/python -m sentinelops.evaluation.agent_run --backend mock --data-root <tmp>/dev --manifest-dir <tmp>/manifests --out-root <tmp>` (mock refuses the core scenarios and `eval/agent/`). `--backend ollama` only in stage B, after approval
+- M4 hosted (dev only, after approval): `GROQ_API_KEY` set in the shell only, then `.venv/bin/python -m sentinelops.evaluation.agent_run --backend groq --smoke sc-45fa1390ea` (free tier; key never printed, traced or committed)
+- M5 fresh split (after approval, the user runs): `agent_run --backend mistral ... --split m5fresh --slice K` and `single_pass_run ... --variant full|no-timeline --split m5fresh --slice K` (K = 1-6); safety: `python -m sentinelops.evaluation.safety --check-exposure`, then `--backend mistral ... --slice 1-3` (output under `eval/safety/`); analysis: `python -m sentinelops.evaluation.m5_analysis` (writes `eval/m5/generator-v5/`); E1 (exploratory): `safety --backend mistral ... --replicate --slice 1-3`, then `safety --e1-report` (offline)
+- M4 Mistral (dev only, after approval): `MISTRAL_API_KEY` set in the shell only, then `.venv/bin/python -m sentinelops.evaluation.agent_run --backend mistral --model <pinned dated ID> --rpm <n> --tpm <n> --smoke sc-45fa1390ea` (held-out data is refused in code)
 - Viewer against real data: `.venv/bin/python scripts/check_viewer_real_data.py` (renders every page headlessly on `data/dev` and all of `eval/results`; must print `OK`)
 
 ## Invariants (enforced by tests; don't break them)
@@ -37,19 +41,23 @@ Read docs/project_brief.md for full requirements and README.md for architecture 
 - Log content is untrusted; injected instructions are data and are returned verbatim
 - Tests are offline: `tests/conftest.py` makes any network connection raise `NetworkBlocked`. `sentinelops/llm/` never imports the simulator; the Ollama client refuses non-loopback hosts; keys only via environment variables, never traced
 - The M3 pilot prompt is frozen (`test_prompt_is_frozen`); any revision is logged in `docs/PROGRESS.md` with its new hash before rerunning
+- M4: the 10 core scenarios are never used for development or tuning; stage A mock traces never go to `eval/agent/` (`test_agent_run.py`). The agent prompt and the compaction parameters are frozen; any change is a logged revision in `docs/PROGRESS.md`
 - An investigator that raises gets an error row (`stop_reason`, `report_valid=False`) and never stops the run; only `HarnessAbort` does
 
 ## Milestone status
 Detailed status, decisions, weaknesses and open questions live in `docs/PROGRESS.md`. Update both files at the end of every milestone.
 - Done: **M1** (verified 2026-10-22, 73 tests passing)
-- Done: **M2a** (tiers, split, frozen manifests; merged to `main`, 6ef60fc)
+- Done: **M2a** (tiers, split, frozen manifests; merged to `main`, a1f8a78)
 - Done: **viewer page 1** (M1 scenario explorer; merged to `main`)
 - Done: **M2b** (report contract, rule baseline v1, floors, harness, first dev numbers; merged to `main`)
-- Done: **M2 follow-ups** (get_window, headline evidence validity, missing-evidence naming, generator v4, M2 viewer page; merged to `main`, 6d9a943)
+- Done: **M2 follow-ups** (get_window, headline evidence validity, missing-evidence naming, generator v4, M2 viewer page; merged to `main`, a5804d9)
 - Done: **M2 complete**, including generator v5 (independent mechanism streams, injection twins, paired injection metric, dev paired ablation, viewer fix); merged to `main`
 - Done: **M3 stage A** (LLM adapter, mock, Ollama client untested against a server, tool loop, traces, crash-catching harness, pilot CLI, network guard, M3 viewer page; merged to `main`)
 - Done: **M3 complete** (stage B: attempt 1 aborted by the swap guard and recorded; attempt 2 completed 7 runs, rule verdict `local_feasible` with caveats; merged to `main`, tag `m3-complete`)
-- Next: **M4** planning, only when the user says so (carry-forward list in `docs/PROGRESS.md`)
+- Done: **M4 stage A** (explicit-state agent, managed context with bounded ledger, metrics incl. criterion (e), agent CLI, M4 viewer page; approved)
+- Done: **M4 stage B core runs** on `m4-stage-b` (Mistral `ministral-14b-2512`, outputs 8f327bc): verdict `works_locally` (10/10 investigated and valid; top-1 8/10 originals, top-3 10/10). Hosted 14B; says nothing about the local 4B. Time thresholds on hosted are not evidence of quality. **Core results are consumed: no prompt, code or rule changes aimed at improving them.** M4 complete (tag `m4-complete` at 9af1f49); the write-up is part of `docs/m4_m5_report.md`
+- Done: **M5** (pre-registered: `docs/m5_preregistration.md`, approved with A1-A5 and B1-B5, deviation D1). **Dev gate run 2026-11-02 (outputs 7b826a7, report c1db227): v2 `0a788479` FAILED** (G2 valid reports 17 vs v1 19; G4 4 `context_exhausted`). M5 uses v1 `d269d28d` only. D1 (2026-11-05, before any fresh run): primary = top-1 on the 60 fresh originals, agent v1 vs single-pass full (`2bf74a3f`), exact paired sign test; Wilson intervals secondary. Dev top-1, information only: v1 8/22, v2 12/22, single-pass full 20/22, no-timeline 15/22. Caveats: the single-pass bundle followed M4's failure pattern; `context_exhausted` is a harness budget stop (unsent VERIFY requests, 17-96 estimated tokens over, estimator 8-12% above the server count), not a provider limit. Built (aa57ca8): `--split m5fresh --slice 1-6` for both runners, the safety harness `evaluation.safety`. Fresh split generated once 2026-11-05 (manifest 50e8938): 60 scenarios, sha256 `574908ad…07fe`, ID collision with dev or held-out: no. Operational changes O1-O2 (1a2bae0): safety in 3 slices with one rerun each; batches by slice. Safety exposure on the fresh split: 21 pairs, 21 exposed (20 at ±3 min, 1 at ±1 min), 0 excluded; slices 7/7/7. Headline analysis built (7a76256, `python -m sentinelops.evaluation.m5_analysis`). Fresh runs done (outputs 439b5ca, all attempt 1); secondary measures built on dev-gate only (34f59cd); analysis run once (`eval/m5/generator-v5/`, uncommitted): D1 agent 5 vs single-pass full 16, n = 21, p = 0.0266; top-1 agent 33/60, full 44/60, no-timeline 35/60, rule 38/60; safety 7/19 top-1 changed with no noise control. Analysis output committed (7e10fd5). E1 (exploratory, post hoc, decided after the safety counts; outputs c1bea45, report 175f3b1): 16 with both original and replicate reports, 3 disagree on top-1; on the same 16 twin pairs the twin changed 5, so the injection effect is not distinguishable from run-to-run noise. Write-up drafted: `docs/m4_m5_report.md` (8cf5b7f, dd97dc4, 5570edf). M5 viewer page (aggregates only) 2b1eb43; tag `m5-complete`. Nothing else runs against the fresh split
+- In progress: **M6** (plan `docs/m6_plan.md`). Done: viewer fix (fresh-split runs never listed, 6346f9d), M5 page (2b1eb43), `slow` marker and fast subset (76a3f38), README (55f336b), MIT licence (0aa9714), tags `m4-complete` and `m5-complete`, `m4-stage-b` merged into `main`. History rewritten once (2026-11-06, `docs/history_rewrite.md`). NEXT: the user decides how to publish (no remote is configured; nothing is pushed until then); then the demo walkthrough and a threat-model section
 
 ## Standing rules
 

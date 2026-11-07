@@ -120,6 +120,8 @@ class ProgressClient:
 
     def __init__(self, inner: LLMClient, progress: Progress) -> None:
         self.inner, self.progress = inner, progress
+        if hasattr(inner, "unload"):  # forwarded, so unload-after-timeout (M4 decision D3) still reaches the model
+            self.unload = inner.unload
 
     def chat(self, messages: list[ChatMessage], tools: list[ToolSpec]) -> LLMResponse | LLMError:
         response = self.inner.chat(messages, tools)
@@ -174,6 +176,10 @@ class GuardedInvestigator:
             return report
         except InvestigationFailed as failed:
             stop_reason = failed.stop_reason
+            if getattr(failed, "provider_caused", False):  # pre-registered 2026-10-29: the batch is incomplete
+                self._log({"event": "abort", "scenario_id": scenario_id, "reasons": [failed.message[:500]],
+                           **self.stats(self.disk_path)})
+                raise HarnessAbort(f"provider-caused stop in {scenario_id}: {failed.message[:300]}") from None
             raise
         finally:
             if self.progress:

@@ -427,6 +427,18 @@ def test_pilot_readers_refuse_heldout_and_escapes(tmp_path: Path, monkeypatch: p
         pilot_trace(tmp_path, "generator-v5/mock-scripted", "../summary.json")
 
 
+def test_fresh_split_runs_are_never_listed_or_read(tmp_path: Path) -> None:
+    from app.dev_data import pilot_runs, pilot_summary, pilot_traces
+
+    for name, split in (("dev-run", "dev"), ("m5-fresh-mistral-x-slice1", "m5fresh"), ("renamed", "m5fresh")):
+        (tmp_path / "generator-v5" / name / "traces").mkdir(parents=True)
+        (tmp_path / "generator-v5" / name / "summary.json").write_text(json.dumps({"metadata": {"split": split}}))
+    assert pilot_runs(tmp_path) == ["generator-v5/dev-run"]  # by name, and by the summary's split
+    for reader in (pilot_summary, pilot_traces):
+        with pytest.raises(ViewerDataError, match="fresh-split"):
+            reader(tmp_path, "generator-v5/m5-fresh-mistral-x-slice1")
+
+
 @pytest.mark.skipif(not any(COMMITTED_PILOT.glob("generator-v*/*/summary.json")), reason="no committed pilot runs")
 def test_m3_page_renders_every_committed_trace(monkeypatch: pytest.MonkeyPatch) -> None:
     """Render against the real eval/pilot: each trace's steps and stop reason must match its file."""
@@ -447,3 +459,165 @@ def test_m3_page_renders_every_committed_trace(monkeypatch: pytest.MonkeyPatch) 
             assert len(steps) == sum(e["event"] in ("model", "tool") for e in events) and not skipped
             stop = next(e for e in events if e["event"] == "stop")
             assert at.metric[0].value == stop["stop_reason"]
+
+
+M4_PAGE = REPO_ROOT / "app" / "pages" / "m4_agent_runs.py"
+
+
+@pytest.fixture()
+def agent_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Mock agent traces written to a temporary directory (never eval/agent/), passed to the page as a parameter."""
+    from agent_sets import generated_set
+    from app.dev_data import AGENT_ENV
+    from sentinelops.agent.mock import DemoAgentPolicy
+    from sentinelops.evaluation import agent_run
+
+    data_root, manifest_dir, scenarios = generated_set(tmp_path / "set")
+    monkeypatch.setattr(agent_run, "system_stats", lambda p: {"free_disk_gb": 50.0, "swap_used_mb": 1.0,
+                                                               "pressure_level": 1})
+    out_root = tmp_path / "agent"
+    agent_run.run_agent(DemoAgentPolicy(), "mock", "scripted", data_root, out_root / "generator-v5" / "mock-scripted",
+                        [o.scenario_id for o, _ in scenarios], manifest_dir)
+    monkeypatch.setenv(AGENT_ENV, str(out_root))
+    monkeypatch.setenv(ROOT_ENV, str(data_root / "scenarios"))  # so cited IDs resolve to their records
+    return out_root
+
+
+def test_m4_page_renders_mock_traces_from_a_parameter_directory(agent_runs: Path) -> None:
+    testing = pytest.importorskip("streamlit.testing.v1")
+    at = testing.AppTest.from_file(str(M4_PAGE), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert [h.value for h in at.subheader] == ["States in order", "Tool calls and evidence", "Hypotheses re-ranking",
+                                               "Claims and their source records", "Context per turn"]
+    states = next(df.value for df in at.dataframe if "reason" in df.value.columns and "order" in df.value.columns)
+    assert list(states["state"]) == ["TRIAGE", "GATHER", "HYPOTHESIZE", "VERIFY", "REPORT"]
+    ranking = next(df.value for df in at.dataframe if "snapshot" in df.value.columns)
+    assert "rank 1" in ranking.columns and "rank 2" in ranking.columns
+    assert at.metric[0].value == "sufficient_evidence"
+    codes = [c.value for c in at.code]
+    assert any('"source_id"' in c for c in codes)  # a cited ID resolved to its record via ToolSet.get_record
+    assert not any("record not available" in c for c in codes)
+    for name in [o for o in at.selectbox(key="agent_trace").options]:
+        at.selectbox(key="agent_trace").set_value(name).run()
+        assert not at.exception
+
+
+def test_m4_page_empty_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    testing = pytest.importorskip("streamlit.testing.v1")
+    from app.dev_data import AGENT_ENV
+
+    monkeypatch.setenv(AGENT_ENV, str(tmp_path / "empty"))
+    at = testing.AppTest.from_file(str(M4_PAGE), default_timeout=60)
+    at.run()
+    assert not at.exception and any("No M4 agent runs yet" in i.value for i in at.info)
+
+
+def test_m4_page_shows_untrusted_text_only_in_code_blocks(dev_root: tuple[Path, list], tmp_path: Path,
+                                                          monkeypatch: pytest.MonkeyPatch) -> None:
+    testing = pytest.importorskip("streamlit.testing.v1")
+    from app.dev_data import AGENT_ENV
+    from sentinelops.agent.machine import StateMachineInvestigator
+    from sentinelops.evaluation.harness import CountingToolSet
+    from sentinelops.llm.mock import ScriptedClient, call
+    from sentinelops.llm.trace import TraceWriter
+    from sentinelops.report import InvestigationFailed
+    from sentinelops.tools import ToolSet
+
+    observable = dev_root[1][0][0]
+    run_dir = tmp_path / "agent" / "generator-v5" / "mock-hostile"
+    agent = StateMachineInvestigator(ScriptedClient([call("search_logs", {"contains": "bold"})]),
+                                     traces=TraceWriter(run_dir / "traces"))
+    with pytest.raises(InvestigationFailed):  # the script runs out: the page must still render the partial run
+        agent.investigate(CountingToolSet(ToolSet(observable)), observable.scenario_id)
+    dump_json(run_dir / "summary.json", {"metadata": {"backend": "mock"}, "runs": [], "rule": {}})
+    monkeypatch.setenv(AGENT_ENV, str(tmp_path / "agent"))
+    at = testing.AppTest.from_file(str(M4_PAGE), default_timeout=60)
+    at.run()
+    at.selectbox(key="agent_call").set_value(3).run()  # the model's search_logs (after 3 TRIAGE calls)
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("**bold** <script>" in c.value for c in at.code)
+    assert not any("bold" in m.value or "script" in m.value for m in at.markdown)
+
+
+# M5 page: aggregates only
+
+M5_PAGE = REPO_ROOT / "app" / "pages" / "m5_comparison.py"
+COMMITTED_M5 = REPO_ROOT / "eval" / "m5" / "generator-v5" / "m5_analysis.json"
+FAKE_ID = "sc-0123456789"
+
+
+def _m5_files(tmp_path: Path, plant: str | None = None) -> tuple[Path, Path]:
+    """A copy of the committed aggregates, plus an E1 report; ``plant`` puts a scenario ID in a dropped field
+    ("dropped") or in a field the page keeps ("kept")."""
+    analysis = json.loads(COMMITTED_M5.read_text())
+    analysis["slices"]["agent_v1"][0]["directory"] = f"run-{FAKE_ID}"  # dropped by the loader
+    if plant == "kept":
+        analysis["metadata"]["note"] = f"see {FAKE_ID}"
+    e1 = {"label": "E1: test", "complete": True, "rows": [{"scenario_id": FAKE_ID}],
+          "counts": {"replicates": 2, "both_reports": 2, "disagree": 1, "queries_identical": 2,
+                     "among_twin_pairs": {"n": 2, "disagree": 1, "twin_changed": 1}}}
+    (tmp_path / "m5").mkdir()
+    (tmp_path / "m5" / "m5_analysis.json").write_text(json.dumps(analysis))
+    (tmp_path / "m5" / "e1.json").write_text(json.dumps(e1))
+    return tmp_path / "m5" / "m5_analysis.json", tmp_path / "m5" / "e1.json"
+
+
+def _m5_page(monkeypatch: pytest.MonkeyPatch, analysis: Path, e1: Path):
+    from app.dev_data import E1_ENV, M5_ENV
+
+    monkeypatch.setenv(M5_ENV, str(analysis))
+    monkeypatch.setenv(E1_ENV, str(e1))
+    testing = pytest.importorskip("streamlit.testing.v1")
+    at = testing.AppTest.from_file(str(M5_PAGE), default_timeout=60)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    return at
+
+
+def _page_text(at) -> str:
+    return " ".join([*(str(df.value.to_dict()) for df in at.dataframe), *(m.value for m in at.markdown),
+                     *(c.value for c in at.caption), *(s.value for s in at.subheader), *(e.value for e in at.error)])
+
+
+@pytest.mark.skipif(not COMMITTED_M5.is_file(), reason="no committed M5 analysis")
+def test_m5_page_shows_aggregates_and_drops_per_scenario_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    at = _m5_page(monkeypatch, *_m5_files(tmp_path, "dropped"))
+    text = _page_text(at)
+    assert FAKE_ID not in text and "Primary (D1)" in text and "E1 (exploratory, post hoc)" in text
+    grid = at.dataframe[0].value
+    primary = json.loads(COMMITTED_M5.read_text())["primary"]
+    assert int(grid.values.sum()) == primary["n_pairs"]
+    assert grid.loc["agent wrong", "single-pass right"] == primary["b_right_a_wrong"]
+
+
+@pytest.mark.skipif(not COMMITTED_M5.is_file(), reason="no committed M5 analysis")
+def test_m5_page_refuses_aggregates_that_still_carry_a_scenario_id(tmp_path: Path,
+                                                                   monkeypatch: pytest.MonkeyPatch) -> None:
+    at = _m5_page(monkeypatch, *_m5_files(tmp_path, "kept"))
+    assert any("not available" in e.value for e in at.error) and FAKE_ID not in _page_text(at)
+    assert not at.dataframe
+
+
+def test_m5_loader_reads_aggregate_files_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.dev_data import M5_ENV, m5_aggregates
+
+    for bad in (REPO_ROOT / "data" / "m5fresh" / "x.json", tmp_path / "run" / "traces" / "x.json",
+                tmp_path / "heldout" / "m5_analysis.json"):
+        monkeypatch.setenv(M5_ENV, str(bad))
+        with pytest.raises(ViewerDataError):
+            m5_aggregates()
+    (tmp_path / "dev.json").write_text(json.dumps({"metadata": {"split": "dev"}}))
+    monkeypatch.setenv(M5_ENV, str(tmp_path / "dev.json"))
+    with pytest.raises(ViewerDataError, match="fresh-split analysis"):
+        m5_aggregates()
+
+
+def test_m5_page_empty_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    at = _m5_page(monkeypatch, tmp_path / "missing.json", tmp_path / "missing-e1.json")
+    assert any("No M5 analysis yet" in i.value for i in at.info)
+
+
+def test_m5_page_source_names_no_trace_or_data_path() -> None:
+    source = M5_PAGE.read_text()
+    assert "traces" not in source.split('"""', 2)[2] and "data/" not in source and "read_trace" not in source

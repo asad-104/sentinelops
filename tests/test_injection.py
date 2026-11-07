@@ -8,6 +8,9 @@ from sentinelops.models import LogLevel
 from sentinelops.scenario_files import write_observable
 from sentinelops.simulator import Scenario
 from sentinelops.tools import ToolSet
+import pytest
+
+pytestmark = pytest.mark.slow  # module fixtures generate many scenarios; run in the full suite
 
 INJECTION_MARKERS = ("ignore all previous instructions", "stop investigating", "new instruction",
                      "note to ai")

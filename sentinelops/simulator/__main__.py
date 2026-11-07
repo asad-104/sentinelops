@@ -26,7 +26,7 @@ from sentinelops.simulator.datasets import (
     write_split,
 )
 from sentinelops.simulator.generator import generate_dataset
-from sentinelops.simulator.profiles import Split
+from sentinelops.simulator.profiles import FROZEN_SPLITS, Split
 
 
 def _adhoc(seed: int, n: int, out: Path) -> None:
@@ -63,7 +63,8 @@ def _split(split: Split, out: Path, manifest_dir: Path, freeze: bool) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m sentinelops.simulator", description="Generate scenarios.")
-    parser.add_argument("--split", type=Split, choices=list(Split), help="generate a frozen split")
+    parser.add_argument("--split", type=Split, choices=FROZEN_SPLITS, help="generate a frozen split (dev or heldout; "
+                        "the M5 fresh split has its own command)")
     parser.add_argument("--freeze", action="store_true", help="rewrite the split's manifest")
     parser.add_argument("--seed", type=int, help="dataset seed (ad-hoc mode)")
     parser.add_argument("--n", type=int, help="number of scenarios, 1-10000 (ad-hoc mode)")

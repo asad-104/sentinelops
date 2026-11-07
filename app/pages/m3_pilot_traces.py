@@ -9,6 +9,7 @@ or code blocks, never as markdown or HTML. No scoring happens here.
 import json
 import sys
 from pathlib import Path
+from typing import get_args
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -17,7 +18,9 @@ import streamlit as st  # noqa: E402
 
 from app.dev_data import ViewerDataError, pilot_root, pilot_runs, pilot_summary, pilot_trace, pilot_traces  # noqa: E402
 
-STOP_REASONS = {"sufficient_evidence", "budget_exhausted", "timeout", "no_new_evidence", "error"}
+from sentinelops.report import StopReason  # noqa: E402
+
+STOP_REASONS = set(get_args(StopReason))
 RUN_COLUMNS = ["run", "scenario_id", "variant", "tier", "stop_reason", "report_valid", "repaired", "valid_calls",
                "model_calls", "turns", "elapsed_s", "prompt_tokens", "completion_tokens", "thinking_chars",
                "truncated_results", "cited_existing", "cited", "top1"]

@@ -1,0 +1,72 @@
+231:srv    load_model: prompt cache is enabled, size limit: 8192 MiB
+232:srv    load_model: use `--cache-ram 0` to disable the prompt cache
+235:srv          init: idle slots will be saved to prompt cache upon starting a new task
+259:srv  get_availabl: updating prompt cache
+261:srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 8192.000 MiB, 8192 tokens, 8589934592 est)
+262:srv  get_availabl: prompt cache update took 0.01 ms
+271:slot   operator(): id  0 | task 0 | cached n_tokens = 0, memory_seq_rm [0, end)
+272:slot   operator(): id  0 | task 0 | cached n_tokens = 512, memory_seq_rm [512, end)
+273:slot   operator(): id  0 | task 0 | cached n_tokens = 1024, memory_seq_rm [1024, end)
+275:slot   operator(): id  0 | task 0 | cached n_tokens = 1536, memory_seq_rm [1536, end)
+277:slot   operator(): id  0 | task 0 | cached n_tokens = 2048, memory_seq_rm [2048, end)
+279:slot   operator(): id  0 | task 0 | cached n_tokens = 2560, memory_seq_rm [2560, end)
+322:slot   operator(): id  0 | task 1673 | cached n_tokens = 2735, memory_seq_rm [2735, end)
+323:slot   operator(): id  0 | task 1673 | cached n_tokens = 3247, memory_seq_rm [3247, end)
+324:slot   operator(): id  0 | task 1673 | cached n_tokens = 3759, memory_seq_rm [3759, end)
+379:slot   operator(): id  0 | task 3724 | cached n_tokens = 3998, memory_seq_rm [3998, end)
+437:slot   operator(): id  0 | task 5272 | cached n_tokens = 3057, memory_seq_rm [3057, end)
+438:slot   operator(): id  0 | task 5272 | cached n_tokens = 3569, memory_seq_rm [3569, end)
+440:slot   operator(): id  0 | task 5272 | cached n_tokens = 4081, memory_seq_rm [4081, end)
+442:slot   operator(): id  0 | task 5272 | cached n_tokens = 4593, memory_seq_rm [4593, end)
+444:slot   operator(): id  0 | task 5272 | cached n_tokens = 5105, memory_seq_rm [5105, end)
+446:slot   operator(): id  0 | task 5272 | cached n_tokens = 5617, memory_seq_rm [5617, end)
+448:slot   operator(): id  0 | task 5272 | cached n_tokens = 6129, memory_seq_rm [6129, end)
+498:srv  get_availabl: updating prompt cache
+502:srv        update:  - cache state: 1 prompts, 1088.808 MiB (limits: 8192.000 MiB, 8192 tokens, 58249 est)
+504:srv  get_availabl: prompt cache update took 485.03 ms
+513:slot   operator(): id  0 | task 6846 | cached n_tokens = 3060, memory_seq_rm [3060, end)
+514:slot   operator(): id  0 | task 6846 | cached n_tokens = 3572, memory_seq_rm [3572, end)
+516:slot   operator(): id  0 | task 6846 | cached n_tokens = 4084, memory_seq_rm [4084, end)
+518:slot   operator(): id  0 | task 6846 | cached n_tokens = 4596, memory_seq_rm [4596, end)
+520:slot   operator(): id  0 | task 6846 | cached n_tokens = 5108, memory_seq_rm [5108, end)
+522:slot   operator(): id  0 | task 6846 | cached n_tokens = 5620, memory_seq_rm [5620, end)
+591:slot   operator(): id  0 | task 8818 | cached n_tokens = 5837, memory_seq_rm [5837, end)
+664:slot   operator(): id  0 | task 10867 | cached n_tokens = 5824, memory_seq_rm [5824, end)
+725:srv  get_availabl: updating prompt cache
+730:srv        update:  - cache state: 2 prompts, 2194.633 MiB (limits: 8192.000 MiB, 8192 tokens, 58249 est)
+733:srv  get_availabl: prompt cache update took 454.31 ms
+742:slot   operator(): id  0 | task 12868 | cached n_tokens = 3170, memory_seq_rm [3170, end)
+743:slot   operator(): id  0 | task 12868 | cached n_tokens = 3682, memory_seq_rm [3682, end)
+745:slot   operator(): id  0 | task 12868 | cached n_tokens = 4194, memory_seq_rm [4194, end)
+747:slot   operator(): id  0 | task 12868 | cached n_tokens = 4706, memory_seq_rm [4706, end)
+795:slot   operator(): id  0 | task 13900 | cached n_tokens = 3981, memory_seq_rm [3981, end)
+796:slot   operator(): id  0 | task 13900 | cached n_tokens = 4493, memory_seq_rm [4493, end)
+866:slot   operator(): id  0 | task 15950 | cached n_tokens = 4824, memory_seq_rm [4824, end)
+931:slot   operator(): id  0 | task 17999 | cached n_tokens = 4863, memory_seq_rm [4863, end)
+1205:srv    load_model: prompt cache is enabled, size limit: 8192 MiB
+1206:srv    load_model: use `--cache-ram 0` to disable the prompt cache
+1209:srv          init: idle slots will be saved to prompt cache upon starting a new task
+1233:srv  get_availabl: updating prompt cache
+1235:srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 8192.000 MiB, 8192 tokens, 8589934592 est)
+1236:srv  get_availabl: prompt cache update took 0.01 ms
+1245:slot   operator(): id  0 | task 0 | cached n_tokens = 0, memory_seq_rm [0, end)
+1246:slot   operator(): id  0 | task 0 | cached n_tokens = 1024, memory_seq_rm [1024, end)
+1248:slot   operator(): id  0 | task 0 | cached n_tokens = 2048, memory_seq_rm [2048, end)
+1302:slot   operator(): id  0 | task 1670 | cached n_tokens = 2735, memory_seq_rm [2735, end)
+1303:slot   operator(): id  0 | task 1670 | cached n_tokens = 3759, memory_seq_rm [3759, end)
+1363:slot   operator(): id  0 | task 3720 | cached n_tokens = 3998, memory_seq_rm [3998, end)
+1398:slot   operator(): id  0 | task 4563 | cached n_tokens = 3908, memory_seq_rm [3908, end)
+1444:slot   operator(): id  0 | task 5960 | cached n_tokens = 3057, memory_seq_rm [3057, end)
+1445:slot   operator(): id  0 | task 5960 | cached n_tokens = 4081, memory_seq_rm [4081, end)
+1447:slot   operator(): id  0 | task 5960 | cached n_tokens = 5105, memory_seq_rm [5105, end)
+1504:srv  get_availabl: updating prompt cache
+1508:srv        update:  - cache state: 1 prompts, 1037.195 MiB (limits: 8192.000 MiB, 8192 tokens, 58249 est)
+1510:srv  get_availabl: prompt cache update took 461.21 ms
+1519:slot   operator(): id  0 | task 7719 | cached n_tokens = 3060, memory_seq_rm [3060, end)
+1520:slot   operator(): id  0 | task 7719 | cached n_tokens = 4084, memory_seq_rm [4084, end)
+1522:slot   operator(): id  0 | task 7719 | cached n_tokens = 5108, memory_seq_rm [5108, end)
+1590:slot   operator(): id  0 | task 9770 | cached n_tokens = 5886, memory_seq_rm [5886, end)
+1641:srv  get_availabl: updating prompt cache
+1646:srv        update:  - cache state: 2 prompts, 2113.627 MiB (limits: 8192.000 MiB, 8192 tokens, 58249 est)
+1649:srv  get_availabl: prompt cache update took 479.57 ms
+1658:slot   operator(): id  0 | task 11500 | cached n_tokens = 3551, memory_seq_rm [3551, end)

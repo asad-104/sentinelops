@@ -14,6 +14,8 @@ from sentinelops.simulator.faults import FaultType
 from sentinelops.simulator.generator import Scenario, generate_scenario
 from sentinelops.simulator.profiles import DEV_PROFILE, HELDOUT_PROFILE, Mechanisms, Tier
 
+pytestmark = pytest.mark.slow  # whole-split generation or end-to-end runs; run in the full suite
+
 CASES = [(seed, index, fault) for seed in (5, 23) for index, fault in enumerate(FaultType)]
 PROFILES = (DEV_PROFILE, HELDOUT_PROFILE)
 

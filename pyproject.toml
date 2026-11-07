@@ -3,6 +3,8 @@ name = "sentinelops"
 version = "0.1.0"
 description = "Evidence-driven incident investigation agent over simulated e-commerce incidents"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = ["pydantic>=2.7,<3", "httpx==0.28.1"]
 
 [project.optional-dependencies]
@@ -11,3 +13,4 @@ dev = ["pytest>=8"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = ["slow: tests over about a second (whole-split generation, end-to-end runs); the fast subset is -m \"not slow\""]

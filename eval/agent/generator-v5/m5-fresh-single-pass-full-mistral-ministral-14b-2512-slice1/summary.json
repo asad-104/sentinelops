@@ -1,0 +1,275 @@
+{
+  "counts": {
+    "complete": true,
+    "n": 10,
+    "top1": 9,
+    "top3": 10,
+    "valid_reports": 10
+  },
+  "metadata": {
+    "aborted": null,
+    "attempt": 1,
+    "backend": "mistral",
+    "client": {
+      "api": "openai-compatible",
+      "backend": "mistral",
+      "date_utc": "2026-11-05",
+      "extra": {},
+      "host": "api.mistral.ai",
+      "key_env": "MISTRAL_API_KEY",
+      "max_completion_tokens": 2048,
+      "max_retries": 4,
+      "max_tokens_field": "max_tokens",
+      "max_wait_s": 120.0,
+      "model": "ministral-14b-2512",
+      "pacing": "each attempt reserved as size estimate + max_tokens",
+      "provider_defaults": {
+        "parallel_tool_calls": false,
+        "random_seed": 0
+      },
+      "rate_limits": {
+        "requests_per_minute": 25,
+        "tokens_per_minute": 750000
+      },
+      "temperature": 0,
+      "timeout_s": 180.0,
+      "tool_message_name": true
+    },
+    "generator_version": "5",
+    "git_commit": "cdc6ea2",
+    "manifest_sha256": "574908adb8ecf8dc3932a13539a923602bafa954052c2883a58ad042942307fe",
+    "model": "ministral-14b-2512",
+    "scenarios": [
+      "sc-05c57ba12f",
+      "sc-065074775d",
+      "sc-0aa14e8087",
+      "sc-0d1bfba9dc",
+      "sc-112b0c8f69",
+      "sc-11a73721f7",
+      "sc-1200cd7f9f",
+      "sc-14d713e967",
+      "sc-161173fd11",
+      "sc-1d8e8a8caa"
+    ],
+    "single_pass_sha256": "2bf74a3f683b05653353f3018fe583dd886495f8a3a28b4a7df5885c4a9495da",
+    "slice": 1,
+    "split": "m5fresh",
+    "twins": false,
+    "variant": "full"
+  },
+  "runs": [
+    {
+      "completion_tokens": 1317,
+      "elapsed_s": 22.037061790993903,
+      "estimated_tokens": 6014,
+      "prompt_tokens": 7446,
+      "reductions": [],
+      "report_valid": true,
+      "requests": 1,
+      "run": 1,
+      "scenario_id": "sc-05c57ba12f",
+      "stop_reason": "sufficient_evidence",
+      "tier": "standard",
+      "top": [
+        "auth",
+        "certificate_expiry"
+      ],
+      "top1": true,
+      "top3": true,
+      "trace": "01-sc-05c57ba12f.jsonl",
+      "wait_s": 0.0
+    },
+    {
+      "completion_tokens": 1198,
+      "elapsed_s": 19.295066708000377,
+      "estimated_tokens": 5845,
+      "prompt_tokens": 7271,
+      "reductions": [],
+      "report_valid": true,
+      "requests": 1,
+      "run": 2,
+      "scenario_id": "sc-065074775d",
+      "stop_reason": "sufficient_evidence",
+      "tier": "standard",
+      "top": [
+        "auth",
+        "config_error"
+      ],
+      "top1": true,
+      "top3": true,
+      "trace": "02-sc-065074775d.jsonl",
+      "wait_s": 0.0
+    },
+    {
+      "completion_tokens": 1375,
+      "elapsed_s": 20.48886462500377,
+      "estimated_tokens": 5894,
+      "prompt_tokens": 7355,
+      "reductions": [],
+      "report_valid": true,
+      "requests": 1,
+      "run": 3,
+      "scenario_id": "sc-0aa14e8087",
+      "stop_reason": "sufficient_evidence",
+      "tier": "ambiguous",
+      "top": [
+        "orders",
+        "memory_leak"
+      ],
+      "top1": true,
+      "top3": true,
+      "trace": "03-sc-0aa14e8087.jsonl",
+      "wait_s": 0.0
+    },
+    {
+      "completion_tokens": 1719,
+      "elapsed_s": 30.213963040994713,
+      "estimated_tokens": 5796,
+      "prompt_tokens": 7235,
+      "reductions": [],
+      "report_valid": true,
+      "requests": 1,
+      "run": 4,
+      "scenario_id": "sc-0d1bfba9dc",
+      "stop_reason": "sufficient_evidence",
+      "tier": "ambiguous",
+      "top": [
+        "orders",
+        "certificate_expiry"
+      ],
+      "top1": true,
+      "top3": true,
+      "trace": "04-sc-0d1bfba9dc.jsonl",
+      "wait_s": 0.0
+    },
+    {
+      "completion_tokens": 1482,
+      "elapsed_s": 22.333844667009544,
+      "estimated_tokens": 5561,
+      "prompt_tokens": 6953,
+      "reductions": [],
+      "report_valid": true,
+      "requests": 1,
+      "run": 5,
+      "scenario_id": "sc-112b0c8f69",
+      "stop_reason": "sufficient_evidence",
+      "tier": "missing_evidence",
+      "top": [
+        "orders",
+        "memory_leak"
+      ],
+      "top1": true,
+      "top3": true,
+      "trace": "05-sc-112b0c8f69.jsonl",
+      "wait_s": 0.0
+    },
+    {
+      "completion_tokens": 1388,
+      "elapsed_s": 21.11145533299714,
+      "estimated_tokens": 5370,
+      "prompt_tokens": 6733,
+      "reductions": [],
+      "report_valid": true,
+      "requests": 1,
+      "run": 6,
+      "scenario_id": "sc-11a73721f7",
+      "stop_reason": "sufficient_evidence",
+      "tier": "missing_evidence",
+      "top": [
+        "payments",
+        "config_error"
+      ],
+      "top1": true,
+      "top3": true,
+      "trace": "06-sc-11a73721f7.jsonl",
+      "wait_s": 0.0
+    },
+    {
+      "completion_tokens": 1342,
+      "elapsed_s": 48.063318457992864,
+      "estimated_tokens": 5400,
+      "prompt_tokens": 6758,
+      "reductions": [],
+      "report_valid": true,
+      "requests": 1,
+      "run": 7,
+      "scenario_id": "sc-1200cd7f9f",
+      "stop_reason": "sufficient_evidence",
+      "tier": "missing_evidence",
+      "top": [
+        "auth",
+        "connection_pool_exhaustion"
+      ],
+      "top1": false,
+      "top3": true,
+      "trace": "07-sc-1200cd7f9f.jsonl",
+      "wait_s": 0.0
+    },
+    {
+      "completion_tokens": 1210,
+      "elapsed_s": 24.063725041007274,
+      "estimated_tokens": 5848,
+      "prompt_tokens": 7294,
+      "reductions": [],
+      "report_valid": true,
+      "requests": 1,
+      "run": 8,
+      "scenario_id": "sc-14d713e967",
+      "stop_reason": "sufficient_evidence",
+      "tier": "ambiguous",
+      "top": [
+        "payments",
+        "connection_pool_exhaustion"
+      ],
+      "top1": true,
+      "top3": true,
+      "trace": "08-sc-14d713e967.jsonl",
+      "wait_s": 0.0
+    },
+    {
+      "completion_tokens": 1686,
+      "elapsed_s": 21.193172291998053,
+      "estimated_tokens": 5207,
+      "prompt_tokens": 6501,
+      "reductions": [
+        "message_cap_100",
+        "slices_4"
+      ],
+      "report_valid": true,
+      "requests": 1,
+      "run": 9,
+      "scenario_id": "sc-161173fd11",
+      "stop_reason": "sufficient_evidence",
+      "tier": "missing_evidence",
+      "top": [
+        "payments",
+        "bad_deployment"
+      ],
+      "top1": true,
+      "top3": true,
+      "trace": "09-sc-161173fd11.jsonl",
+      "wait_s": 0.0
+    },
+    {
+      "completion_tokens": 1385,
+      "elapsed_s": 38.00372158299433,
+      "estimated_tokens": 5583,
+      "prompt_tokens": 6962,
+      "reductions": [],
+      "report_valid": true,
+      "requests": 1,
+      "run": 10,
+      "scenario_id": "sc-1d8e8a8caa",
+      "stop_reason": "sufficient_evidence",
+      "tier": "ambiguous",
+      "top": [
+        "api-gateway",
+        "memory_leak"
+      ],
+      "top1": true,
+      "top3": true,
+      "trace": "10-sc-1d8e8a8caa.jsonl",
+      "wait_s": 15.0
+    }
+  ]
+}

@@ -54,6 +54,13 @@ class LLMResponse:
     latency_s: float = 0.0
     thinking_chars: int = 0  # length of any separate reasoning text the backend returned
     load_s: float | None = None  # time the backend spent loading the model for this call, if it reports it
+    prompt_eval_s: float | None = None  # time spent evaluating the prompt (M4: cache reuse is only inferred from it)
+    total_s: float | None = None  # the backend's own total time for the call
+    truncated: bool = False  # generation stopped at the output-token cap (done_reason "length")
+    retries: int = 0  # hosted backends: attempts repeated after a 429 or 5xx before this result
+    wait_s: float = 0.0  # hosted backends: seconds slept for rate-limit pacing and backoff before this result
+    served_model: str | None = None  # hosted backends: the model ID the server says answered
+    attempts: tuple[dict[str, Any], ...] = ()  # hosted: every HTTP attempt of a call that met a 429 or 5xx
 
 
 @dataclass(frozen=True)
@@ -61,6 +68,10 @@ class LLMError:
     code: LLMErrorCode
     message: str
     latency_s: float = 0.0
+    retries: int = 0
+    wait_s: float = 0.0
+    provider_caused: bool = False  # a provider rate limit or outage, not the model: the batch stops as incomplete
+    attempts: tuple[dict[str, Any], ...] = ()  # hosted: every HTTP attempt of a call that met a 429 or 5xx
 
 
 class LLMClient(Protocol):

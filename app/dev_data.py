@@ -157,6 +157,7 @@ def dev_ground_truth(root: Path, scenario_id: str) -> dict[str, Any]:
 PILOT_ROOT = REPO_ROOT / "eval" / "pilot"
 PILOT_ENV = "SENTINELOPS_VIEWER_PILOT"
 _PILOT_RUN = re.compile(r"generator-v\d+/[A-Za-z0-9._-]+")
+FRESH_RUN_PREFIX, FRESH_SPLIT = "m5-fresh", "m5fresh"
 _TRACE_NAME = re.compile(r"\d{2}-sc-[0-9a-f]{10}\.jsonl")
 
 
@@ -166,9 +167,16 @@ def pilot_root() -> Path:
     return root
 
 
+def _refuse_fresh(run: str) -> None:
+    """The M5 fresh split is shown only as aggregate counts (the M5 page), never run by run."""
+    if run.split("/")[-1].startswith(FRESH_RUN_PREFIX):
+        raise ViewerDataError(f"the viewer never shows fresh-split runs: {run}")
+
+
 def _pilot_dir(root: Path, run: str) -> Path:
     if not _PILOT_RUN.fullmatch(run):
         raise ViewerDataError(f"invalid pilot run {run!r}")
+    _refuse_fresh(run)
     path = (root / run).resolve()
     if not path.is_relative_to(root):
         raise ViewerDataError(f"{run!r} escapes the pilot directory")
@@ -179,7 +187,8 @@ def _pilot_dir(root: Path, run: str) -> Path:
 def pilot_runs(root: Path) -> list[str]:
     """Pilot run directories (e.g. "generator-v5/mock-scripted") that have a summary, newest version first."""
     runs = [p.parent.relative_to(root).as_posix() for p in root.glob("generator-v*/*/summary.json")]
-    runs = [r for r in runs if _PILOT_RUN.fullmatch(r)]
+    runs = [r for r in runs if _PILOT_RUN.fullmatch(r) and not r.split("/")[-1].startswith(FRESH_RUN_PREFIX)]
+    runs = [r for r in runs if ((pilot_summary(root, r) or {}).get("metadata") or {}).get("split") != FRESH_SPLIT]
     return sorted(runs, key=lambda r: (-int(r.split("/")[0].removeprefix("generator-v")), r))
 
 
@@ -214,3 +223,58 @@ def pilot_trace(root: Path, run: str, name: str) -> tuple[list[dict[str, Any]], 
         else:
             skipped.append(number)
     return events, skipped
+
+
+AGENT_ROOT = REPO_ROOT / "eval" / "agent"
+AGENT_ENV = "SENTINELOPS_VIEWER_AGENT"
+
+
+def agent_root() -> Path:
+    """The M4 trace directory: the SENTINELOPS_VIEWER_AGENT parameter, defaulting to eval/agent/. Same layout
+    and guards as the pilot readers (pilot_runs, pilot_summary, pilot_traces, pilot_trace take it as root)."""
+    root = Path(os.environ.get(AGENT_ENV) or AGENT_ROOT).resolve()
+    _refuse_heldout(root)
+    return root
+
+
+M5_ANALYSIS = REPO_ROOT / "eval" / "m5" / "generator-v5" / "m5_analysis.json"
+E1_REPORT = REPO_ROOT / "eval" / "safety" / "generator-v5" / "m5-safety-e1-report" / "e1.json"
+M5_ENV, E1_ENV = "SENTINELOPS_VIEWER_M5", "SENTINELOPS_VIEWER_E1"
+_ANY_SCENARIO_ID = re.compile(SCENARIO_ID_PATTERN.strip("^$"))
+
+
+def _aggregate_file(env: str, default: Path) -> dict[str, Any] | None:
+    path = Path(os.environ.get(env) or default).resolve()
+    _refuse_heldout(path)
+    if "traces" in path.parts or path.is_relative_to(REPO_ROOT / "data"):
+        raise ViewerDataError(f"the M5 page reads aggregate files only: {path}")
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ViewerDataError(f"{path.name} is not valid JSON") from exc
+    if not isinstance(data, dict):
+        raise ViewerDataError(f"{path.name} is not an aggregate report")
+    return data
+
+
+def m5_aggregates() -> dict[str, Any] | None:
+    """The M5 headline as aggregate counts only: the analysis output and E1's counts. Per-scenario rows are
+    dropped, and nothing is returned if any scenario ID would remain. None when the analysis has not been run."""
+    analysis = _aggregate_file(M5_ENV, M5_ANALYSIS)
+    if analysis is None:
+        return None
+    if (analysis.get("metadata") or {}).get("split") != FRESH_SPLIT:
+        raise ViewerDataError("m5_analysis.json is not the fresh-split analysis")
+    keep = ("metadata", "primary", "ablation", "arms", "secondary", "natural_exposure")
+    out: dict[str, Any] = {k: analysis.get(k) for k in keep}
+    safety = analysis.get("safety") or {}
+    out["safety"] = {k: safety.get(k) for k in ("exposed_pairs", "counts", "complete")}
+    out["slices"] = {arm: [{k: s.get(k) for k in ("slice", "attempt", "complete", "runs")} for s in rows]
+                     for arm, rows in (analysis.get("slices") or {}).items()}
+    e1 = _aggregate_file(E1_ENV, E1_REPORT)
+    out["e1"] = None if e1 is None else {k: e1.get(k) for k in ("label", "complete", "counts")}
+    if _ANY_SCENARIO_ID.search(json.dumps(out)):
+        raise ViewerDataError("the M5 aggregates contain a scenario ID; the page shows counts only")
+    return out

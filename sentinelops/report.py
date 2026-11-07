@@ -15,7 +15,9 @@ from sentinelops.tools import ToolResult
 
 # A qualitative label, not a calibrated probability.
 Confidence = Literal["high", "medium", "low"]
-StopReason = Literal["sufficient_evidence", "budget_exhausted", "timeout", "no_new_evidence", "error"]
+# context_exhausted (M4): even the pinned content plus a minimal ledger cannot fit the prompt budget.
+StopReason = Literal["sufficient_evidence", "budget_exhausted", "timeout", "no_new_evidence", "error",
+                     "context_exhausted"]
 
 
 class _Model(BaseModel):
@@ -72,10 +74,11 @@ class InvestigationFailed(Exception):
     """Raised by an investigator that stops without a valid report (budget, timeout, no new evidence,
     error). The harness records it as an error row with this stop reason; no report is invented."""
 
-    def __init__(self, stop_reason: StopReason, message: str) -> None:
+    def __init__(self, stop_reason: StopReason, message: str, *, provider_caused: bool = False) -> None:
         super().__init__(message)
         self.stop_reason = stop_reason
         self.message = message
+        self.provider_caused = provider_caused  # a provider limit or outage: the harness aborts the batch
 
 
 class ToolCaller(Protocol):

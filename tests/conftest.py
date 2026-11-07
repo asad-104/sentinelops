@@ -39,6 +39,13 @@ from sentinelops.tools import ToolSet
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Tests on the 200-scenario dataset are slow (about 13 s to generate); the fast subset is -m "not slow"."""
+    for item in items:
+        if "large_dataset" in getattr(item, "fixturenames", ()):
+            item.add_marker(pytest.mark.slow)
+
+
 @pytest.fixture(scope="session")
 def small_dataset() -> list[Scenario]:
     return generate_dataset(seed=1, n=8)

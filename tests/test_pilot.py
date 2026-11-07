@@ -31,6 +31,8 @@ from sentinelops.simulator.datasets import (
 )
 from sentinelops.simulator.profiles import Split
 
+pytestmark = pytest.mark.slow  # module fixtures generate many scenarios; run in the full suite
+
 # Pre-registered in docs/PROGRESS.md on 2026-10-23; duplicated here on purpose.
 PREREGISTERED_CORE = ("sc-06b280fbed", "sc-1499febf6f", "sc-203fe8a4ca", "sc-2d438d4575", "sc-32aaf79bfd")
 PREREGISTERED_PROBE = "sc-4141664f86"

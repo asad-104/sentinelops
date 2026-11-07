@@ -1,0 +1,2 @@
+# Development tools (not needed to run the package or its tests). Pinned.
+ruff==0.17.4

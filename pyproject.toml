@@ -2,7 +2,7 @@
 name = "sentinelops"
 version = "0.1.0"
 description = "Evidence-driven incident investigation agent over simulated e-commerce incidents"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = ["pydantic>=2.7,<3", "httpx==0.28.1"]
@@ -14,3 +14,11 @@ dev = ["pytest>=8"]
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = ["slow: tests over about a second (whole-split generation, end-to-end runs); the fast subset is -m \"not slow\""]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+# Start minimal: syntax errors (E9) and pyflakes (F: undefined names, unused imports and variables).
+select = ["E9", "F"]

@@ -91,7 +91,7 @@ None restarts, rolls back, writes, runs a shell command or makes a network call.
 - **Repository:**
   - `.env` and `data/` are gitignored.
   - Run outputs were scanned for key patterns and account IDs before each commit.
-  - The full history was scanned after the 2026-11-06 rewrite: no key patterns. One `org_…`-shaped value in `tests/test_openai_compat.py` appears to be a hand-written test fixture.
+  - The full history was scanned after the 2026-11-06 rewrite: no key patterns. The one `org_…`-shaped value, in `tests/test_openai_compat.py`, is a fake test fixture (confirmed 2026-11-07).
 
 ## Residual risks
 

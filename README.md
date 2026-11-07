@@ -2,6 +2,13 @@
 
 SentinelOps is an LLM agent that investigates simulated production incidents through bounded, read-only tools, and an evaluation that checks whether the agent does better than simpler alternatives. The incidents come from a seeded simulator of a four-service e-commerce system, with hidden ground truth. The agent is an explicit state machine (TRIAGE → GATHER → HYPOTHESIZE → VERIFY → REPORT). It is compared with a single LLM call over a fixed evidence bundle, a rule-based baseline and trivial floors. The comparison was pre-registered, and every deviation is logged.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/m5-at-a-glance-dark.svg">
+  <img alt="Results at a glance. Left: on 60 paired synthetic scenarios, agent v1 was right where single-pass full was wrong 5 times, and the reverse 16 times (sign test n = 21, p = 0.027). Right: top-1 with Wilson 95% intervals: agent v1 33/60, single-pass full 44/60, single-pass without change records 35/60, rule-based 38/60, keyword-only 34/60, latest-change floor 12/60, alert-service floor 6/60." src="docs/figures/m5-at-a-glance-light.svg" width="860">
+</picture>
+
+*Drawn from [`eval/m5/generator-v5/m5_analysis.json`](eval/m5/generator-v5/m5_analysis.json) by `scripts/make_readme_figure.py`; a test fails if the figure goes stale.*
+
 ## Headline result
 
 **On this benchmark, the agent lost.** On 60 freshly generated synthetic scenarios with one hosted model (`ministral-14b-2512`), a single pass over a fixed evidence bundle beat agent prompt v1 on top-1:

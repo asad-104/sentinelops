@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="330" viewBox="0 0 860 330" font-family="system-ui, -apple-system, Segoe UI, sans-serif" role="img" aria-labelledby="t d">
+<title id="t">M5 results at a glance</title>
+<desc id="d">Top-1 on 60 synthetic scenarios, one hosted model. Agent v1 right and single-pass full wrong 5, the reverse 16, sign test p = 0.027. agent v1 33/60; single-pass full 44/60; single-pass, no change records 35/60; rule-based 38/60; keyword-only 34/60; latest-change floor 12/60; alert-service floor 6/60.</desc>
+<rect width="860" height="330" rx="8" fill="#1a1a19" stroke="rgba(255,255,255,0.10)"/>
+<text x="24.0" y="32.0" fill="#f0efec" font-size="14" font-weight="600" text-anchor="start">Primary (D1): top-1 on 60 paired scenarios</text>
+<text x="24.0" y="52.0" fill="#c3c2b7" font-size="12" font-weight="400" text-anchor="start">agent v1 against single-pass full</text>
+<text x="171.0" y="82.0" fill="#c3c2b7" font-size="11" font-weight="400" text-anchor="middle">single-pass right</text>
+<text x="249.0" y="82.0" fill="#c3c2b7" font-size="11" font-weight="400" text-anchor="middle">wrong</text>
+<rect x="133" y="93" width="76" height="50" rx="4" fill="none" stroke="#383835" stroke-width="1"/>
+<text x="171.0" y="125.0" fill="#f0efec" font-size="20" font-weight="400" text-anchor="middle">28</text>
+<rect x="211" y="93" width="76" height="50" rx="4" fill="none" stroke="#3987e5" stroke-width="2"/>
+<text x="249.0" y="125.0" fill="#f0efec" font-size="20" font-weight="600" text-anchor="middle">5</text>
+<rect x="133" y="145" width="76" height="50" rx="4" fill="none" stroke="#3987e5" stroke-width="2"/>
+<text x="171.0" y="177.0" fill="#f0efec" font-size="20" font-weight="600" text-anchor="middle">16</text>
+<rect x="211" y="145" width="76" height="50" rx="4" fill="none" stroke="#383835" stroke-width="1"/>
+<text x="249.0" y="177.0" fill="#f0efec" font-size="20" font-weight="400" text-anchor="middle">11</text>
+<text x="122.0" y="122.0" fill="#c3c2b7" font-size="11" font-weight="400" text-anchor="end">agent right</text>
+<text x="122.0" y="174.0" fill="#c3c2b7" font-size="11" font-weight="400" text-anchor="end">agent wrong</text>
+<text x="24.0" y="226.0" fill="#f0efec" font-size="12" font-weight="400" text-anchor="start">Discordant pairs (outlined): 5 against 16</text>
+<text x="24.0" y="244.0" fill="#c3c2b7" font-size="12" font-weight="400" text-anchor="start">exact two-sided sign test, n = 21, p = 0.027</text>
+<text x="330.0" y="32.0" fill="#f0efec" font-size="14" font-weight="600" text-anchor="start">Top-1 with Wilson 95% interval</text>
+<text x="330.0" y="52.0" fill="#c3c2b7" font-size="12" font-weight="400" text-anchor="start">60 scenarios per arm; no report counts as wrong</text>
+<line x1="520.0" y1="78" x2="520.0" y2="264" stroke="#383835" stroke-width="1"/>
+<text x="520.0" y="280.0" fill="#898781" font-size="11" font-weight="400" text-anchor="middle">0%</text>
+<line x1="587.5" y1="78" x2="587.5" y2="264" stroke="#2c2c2a" stroke-width="1"/>
+<text x="587.5" y="280.0" fill="#898781" font-size="11" font-weight="400" text-anchor="middle">25%</text>
+<line x1="655.0" y1="78" x2="655.0" y2="264" stroke="#2c2c2a" stroke-width="1"/>
+<text x="655.0" y="280.0" fill="#898781" font-size="11" font-weight="400" text-anchor="middle">50%</text>
+<line x1="722.5" y1="78" x2="722.5" y2="264" stroke="#2c2c2a" stroke-width="1"/>
+<text x="722.5" y="280.0" fill="#898781" font-size="11" font-weight="400" text-anchor="middle">75%</text>
+<line x1="790.0" y1="78" x2="790.0" y2="264" stroke="#2c2c2a" stroke-width="1"/>
+<text x="790.0" y="280.0" fill="#898781" font-size="11" font-weight="400" text-anchor="middle">100%</text>
+<text x="508.0" y="96.0" fill="#c3c2b7" font-size="12" font-weight="400" text-anchor="end">agent v1</text>
+<g><title>agent v1: 33/60, Wilson 95% [0.42, 0.67]</title><line x1="634.7" y1="92" x2="700.7" y2="92" stroke="#3987e5" stroke-width="2" stroke-linecap="round"/><circle cx="668.5" cy="92" r="5" fill="#3987e5" stroke="#1a1a19" stroke-width="2"/><rect x="520" y="79.0" width="270" height="26" fill="transparent"/></g>
+<text x="800.0" y="96.0" fill="#f0efec" font-size="12" font-weight="400" text-anchor="start">33/60</text>
+<text x="508.0" y="122.0" fill="#c3c2b7" font-size="12" font-weight="400" text-anchor="end">single-pass full</text>
+<g><title>single-pass full: 44/60, Wilson 95% [0.61, 0.83]</title><line x1="684.7" y1="118" x2="743.7" y2="118" stroke="#3987e5" stroke-width="2" stroke-linecap="round"/><circle cx="718.0" cy="118" r="5" fill="#3987e5" stroke="#1a1a19" stroke-width="2"/><rect x="520" y="105.0" width="270" height="26" fill="transparent"/></g>
+<text x="800.0" y="122.0" fill="#f0efec" font-size="12" font-weight="400" text-anchor="start">44/60</text>
+<text x="508.0" y="148.0" fill="#c3c2b7" font-size="12" font-weight="400" text-anchor="end">single-pass, no change records</text>
+<g><title>single-pass, no change records: 35/60, Wilson 95% [0.46, 0.70]</title><line x1="643.5" y1="144" x2="708.8" y2="144" stroke="#3987e5" stroke-width="2" stroke-linecap="round"/><circle cx="677.5" cy="144" r="5" fill="#3987e5" stroke="#1a1a19" stroke-width="2"/><rect x="520" y="131.0" width="270" height="26" fill="transparent"/></g>
+<text x="800.0" y="148.0" fill="#f0efec" font-size="12" font-weight="400" text-anchor="start">35/60</text>
+<text x="508.0" y="174.0" fill="#c3c2b7" font-size="12" font-weight="400" text-anchor="end">rule-based</text>
+<g><title>rule-based: 38/60, Wilson 95% [0.51, 0.74]</title><line x1="656.8" y1="170" x2="720.8" y2="170" stroke="#3987e5" stroke-width="2" stroke-linecap="round"/><circle cx="691.0" cy="170" r="5" fill="#3987e5" stroke="#1a1a19" stroke-width="2"/><rect x="520" y="157.0" width="270" height="26" fill="transparent"/></g>
+<text x="800.0" y="174.0" fill="#f0efec" font-size="12" font-weight="400" text-anchor="start">38/60</text>
+<text x="508.0" y="200.0" fill="#c3c2b7" font-size="12" font-weight="400" text-anchor="end">keyword-only</text>
+<g><title>keyword-only: 34/60, Wilson 95% [0.44, 0.68]</title><line x1="639.1" y1="196" x2="704.8" y2="196" stroke="#3987e5" stroke-width="2" stroke-linecap="round"/><circle cx="673.0" cy="196" r="5" fill="#3987e5" stroke="#1a1a19" stroke-width="2"/><rect x="520" y="183.0" width="270" height="26" fill="transparent"/></g>
+<text x="800.0" y="200.0" fill="#f0efec" font-size="12" font-weight="400" text-anchor="start">34/60</text>
+<text x="508.0" y="226.0" fill="#c3c2b7" font-size="12" font-weight="400" text-anchor="end">latest-change floor</text>
+<g><title>latest-change floor: 12/60, Wilson 95% [0.12, 0.32]</title><line x1="551.9" y1="222" x2="605.8" y2="222" stroke="#3987e5" stroke-width="2" stroke-linecap="round"/><circle cx="574.0" cy="222" r="5" fill="#3987e5" stroke="#1a1a19" stroke-width="2"/><rect x="520" y="209.0" width="270" height="26" fill="transparent"/></g>
+<text x="800.0" y="226.0" fill="#f0efec" font-size="12" font-weight="400" text-anchor="start">12/60</text>
+<text x="508.0" y="252.0" fill="#c3c2b7" font-size="12" font-weight="400" text-anchor="end">alert-service floor</text>
+<g><title>alert-service floor: 6/60, Wilson 95% [0.05, 0.20]</title><line x1="532.6" y1="248" x2="574.4" y2="248" stroke="#3987e5" stroke-width="2" stroke-linecap="round"/><circle cx="547.0" cy="248" r="5" fill="#3987e5" stroke="#1a1a19" stroke-width="2"/><rect x="520" y="235.0" width="270" height="26" fill="transparent"/></g>
+<text x="800.0" y="252.0" fill="#f0efec" font-size="12" font-weight="400" text-anchor="start">6/60</text>
+<text x="24.0" y="314.0" fill="#898781" font-size="11" font-weight="400" text-anchor="start">Synthetic, author-built benchmark; one hosted model (ministral-14b-2512); agent prompt v1; one run per arm. Not a result about agents in general.</text>
+</svg>

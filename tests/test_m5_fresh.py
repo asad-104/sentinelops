@@ -82,6 +82,7 @@ def test_the_seed_must_match_its_rule(tmp_path: Path, monkeypatch: pytest.Monkey
         m5_fresh.generate(tmp_path / "out", _manifests(tmp_path / "manifests"))
 
 
+@pytest.mark.slow
 def test_the_collision_check_is_yes_or_no_through_membership(tiny_fresh, tmp_path: Path, capsys) -> None:
     manifests = _manifests(tmp_path / "manifests", dev_ids=("sc-1111111111",), heldout_ids=("sc-2222222222",))
     assert collides_with_frozen_splits(["sc-3333333333"], manifests) is False

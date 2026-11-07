@@ -45,6 +45,7 @@ def test_core_set_is_the_preregistered_one() -> None:
     assert CORE_SCENARIOS == PREREGISTERED_CORE
 
 
+@pytest.mark.slow
 def test_core_set_follows_its_selection_rule() -> None:
     scenarios = build_split(Split.DEV)
     truth = {o.scenario_id: t for o, t in scenarios}

@@ -19,6 +19,8 @@ from sentinelops.simulator.datasets import (
 from sentinelops.simulator.faults import FaultType
 from sentinelops.simulator.profiles import Split, Tier
 
+pytestmark = pytest.mark.slow  # whole-split generation or end-to-end runs; run in the full suite
+
 T, W = ("orders", "bad_deployment"), ("auth", "memory_leak")
 
 

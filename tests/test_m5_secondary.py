@@ -66,6 +66,7 @@ def test_the_cli_reads_dev_outputs_only(tmp_path: Path, capsys) -> None:
 
 
 @needs_dev
+@pytest.mark.slow
 def test_on_the_dev_gate_agent_outputs_the_measures_match_what_the_runs_recorded() -> None:
     for directory in (V1, V2):
         result = directory_measures(directory, DEV)
@@ -83,6 +84,7 @@ def test_on_the_dev_gate_agent_outputs_the_measures_match_what_the_runs_recorded
 
 
 @needs_dev
+@pytest.mark.slow
 def test_on_the_dev_gate_single_pass_outputs_the_rebuilt_bundle_is_the_one_that_was_sent() -> None:
     for directory, variant in ((FULL, "full"), (BARE, "no-timeline")):
         summary = json.loads((directory / "summary.json").read_text())

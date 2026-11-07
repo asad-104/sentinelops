@@ -15,6 +15,8 @@ from sentinelops.evaluation.agent_run import OutputExists
 from sentinelops.evaluation.harness import DataMismatch
 from sentinelops.evaluation.safety import E1_LABEL, e1_compare, e1_markdown, run_safety, safety_stems
 
+pytestmark = pytest.mark.slow  # whole-split generation or end-to-end runs; run in the full suite
+
 MISTRAL = ["--backend", "mistral", "--model", "ministral-14b-2512", "--rpm", "25", "--tpm", "750000"]
 
 

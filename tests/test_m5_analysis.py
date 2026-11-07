@@ -20,6 +20,8 @@ from sentinelops.evaluation.single_pass_run import run_single_pass
 from sentinelops.llm.mock import call
 from sentinelops.simulator.profiles import Split
 
+pytestmark = pytest.mark.slow  # whole-split generation or end-to-end runs; run in the full suite
+
 
 def _calm(path: Path) -> dict:
     return {"free_disk_gb": 50.0, "swap_used_mb": 100.0, "pressure_level": 1}

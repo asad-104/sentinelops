@@ -26,6 +26,8 @@ from sentinelops.simulator.profiles import DEV_PROFILE, FROZEN_SPLITS, HELDOUT_P
 
 from conftest import REPO_ROOT
 
+pytestmark = pytest.mark.slow  # whole-split generation or end-to-end runs; run in the full suite
+
 MANIFEST_DIR = REPO_ROOT / "eval" / "manifests"
 
 

@@ -93,6 +93,7 @@ def test_cli_dev_gate_runs_names_and_options(monkeypatch: pytest.MonkeyPatch, tm
     assert captured["runs"] == [("mistral-ministral-14b-2512", CORE_SCENARIOS, "v1", True)]  # M4 naming unchanged
 
 
+@pytest.mark.slow
 def test_run_agent_without_twins_runs_originals_only(tmp_path: Path) -> None:
     from sentinelops.agent.mock import DemoAgentPolicy
 

@@ -12,6 +12,8 @@ from sentinelops.simulator.generator import alert_threshold
 from sentinelops.simulator.profiles import DECOY_LEAD_MIN, Tier
 from sentinelops.simulator.topology import BASELINES
 
+pytestmark = pytest.mark.slow  # whole-split generation or end-to-end runs; run in the full suite
+
 PAIRS = [(seed, fault) for seed in range(30, 36) for fault in FaultType]
 
 

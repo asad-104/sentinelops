@@ -427,6 +427,18 @@ def test_pilot_readers_refuse_heldout_and_escapes(tmp_path: Path, monkeypatch: p
         pilot_trace(tmp_path, "generator-v5/mock-scripted", "../summary.json")
 
 
+def test_fresh_split_runs_are_never_listed_or_read(tmp_path: Path) -> None:
+    from app.dev_data import pilot_runs, pilot_summary, pilot_traces
+
+    for name, split in (("dev-run", "dev"), ("m5-fresh-mistral-x-slice1", "m5fresh"), ("renamed", "m5fresh")):
+        (tmp_path / "generator-v5" / name / "traces").mkdir(parents=True)
+        (tmp_path / "generator-v5" / name / "summary.json").write_text(json.dumps({"metadata": {"split": split}}))
+    assert pilot_runs(tmp_path) == ["generator-v5/dev-run"]  # by name, and by the summary's split
+    for reader in (pilot_summary, pilot_traces):
+        with pytest.raises(ViewerDataError, match="fresh-split"):
+            reader(tmp_path, "generator-v5/m5-fresh-mistral-x-slice1")
+
+
 @pytest.mark.skipif(not any(COMMITTED_PILOT.glob("generator-v*/*/summary.json")), reason="no committed pilot runs")
 def test_m3_page_renders_every_committed_trace(monkeypatch: pytest.MonkeyPatch) -> None:
     """Render against the real eval/pilot: each trace's steps and stop reason must match its file."""

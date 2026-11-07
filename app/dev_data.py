@@ -157,6 +157,7 @@ def dev_ground_truth(root: Path, scenario_id: str) -> dict[str, Any]:
 PILOT_ROOT = REPO_ROOT / "eval" / "pilot"
 PILOT_ENV = "SENTINELOPS_VIEWER_PILOT"
 _PILOT_RUN = re.compile(r"generator-v\d+/[A-Za-z0-9._-]+")
+FRESH_RUN_PREFIX, FRESH_SPLIT = "m5-fresh", "m5fresh"
 _TRACE_NAME = re.compile(r"\d{2}-sc-[0-9a-f]{10}\.jsonl")
 
 
@@ -166,9 +167,16 @@ def pilot_root() -> Path:
     return root
 
 
+def _refuse_fresh(run: str) -> None:
+    """The M5 fresh split is shown only as aggregate counts (the M5 page), never run by run."""
+    if run.split("/")[-1].startswith(FRESH_RUN_PREFIX):
+        raise ViewerDataError(f"the viewer never shows fresh-split runs: {run}")
+
+
 def _pilot_dir(root: Path, run: str) -> Path:
     if not _PILOT_RUN.fullmatch(run):
         raise ViewerDataError(f"invalid pilot run {run!r}")
+    _refuse_fresh(run)
     path = (root / run).resolve()
     if not path.is_relative_to(root):
         raise ViewerDataError(f"{run!r} escapes the pilot directory")
@@ -179,7 +187,8 @@ def _pilot_dir(root: Path, run: str) -> Path:
 def pilot_runs(root: Path) -> list[str]:
     """Pilot run directories (e.g. "generator-v5/mock-scripted") that have a summary, newest version first."""
     runs = [p.parent.relative_to(root).as_posix() for p in root.glob("generator-v*/*/summary.json")]
-    runs = [r for r in runs if _PILOT_RUN.fullmatch(r)]
+    runs = [r for r in runs if _PILOT_RUN.fullmatch(r) and not r.split("/")[-1].startswith(FRESH_RUN_PREFIX)]
+    runs = [r for r in runs if ((pilot_summary(root, r) or {}).get("metadata") or {}).get("split") != FRESH_SPLIT]
     return sorted(runs, key=lambda r: (-int(r.split("/")[0].removeprefix("generator-v")), r))
 
 

@@ -67,6 +67,15 @@ The viewer's pages: M1 scenario explorer, M2 tiers and dev results, M3 pilot tra
 
 **On-demand run, also offline:** `.venv/bin/python scripts/run_on_demand.py --seed 7 --tier ambiguous --fault config_error` generates one dev-profile scenario. It runs the rule baseline and the agent driven by a **scripted mock policy** (not a model; this checks the mechanics only), and scores both. The same run is available as a manual GitHub workflow ("On-demand run"), with the result in the job summary and an artifact. Seeds that would reproduce a held-out or fresh-split scenario are refused.
 
+## A 30-second look (dev runs only)
+
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/figures/demo-still.png">
+  <img alt="The local viewer replaying two committed dev traces. Run 3: a memory leak in payments; the agent moves through TRIAGE, GATHER, HYPOTHESIZE, VERIFY and REPORT, ranks payments / memory_leak first, and every claim links to the record it cites. Run 12: the real cause is a config change that cut auth's database pool; the agent ranks pool exhaustion first with high confidence, and its tool calls show only log and metric searches, so it never saw the config change." src="docs/figures/demo.gif" width="960">
+</picture>
+
+*A scripted recording of the local viewer (`scripts/record_demo.py`; 34 s). It shows dev runs 3 (right) and 12 (wrong) from the committed M4 traces. With reduced motion on, a still of run 12's ranking is shown instead ([still image](docs/figures/demo-still.png)).*
+
 ## Hosted demo
 
 The viewer is also hosted on Streamlit Community Cloud. **The link is added once the app is public.**

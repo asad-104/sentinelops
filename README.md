@@ -67,6 +67,33 @@ The viewer's pages: M1 scenario explorer, M2 tiers and dev results, M3 pilot tra
 
 **On-demand run, also offline:** `.venv/bin/python scripts/run_on_demand.py --seed 7 --tier ambiguous --fault config_error` generates one dev-profile scenario. It runs the rule baseline and the agent driven by a **scripted mock policy** (not a model; this checks the mechanics only), and scores both. The same run is available as a manual GitHub workflow ("On-demand run"), with the result in the job summary and an artifact. Seeds that would reproduce a held-out or fresh-split scenario are refused.
 
+## Hosted demo
+
+The viewer is also hosted on Streamlit Community Cloud. **The link is added once the app is public.**
+- **What it shows:** dev scenarios, committed dev traces, and the M5 results as aggregate counts only.
+- **What it never does:** call a model, read a secret, list fresh-split runs, or read held-out data.
+- **On a cold start** it generates the synthetic dev split and checks it against the frozen manifest.
+- **It sleeps after 12 hours without traffic,** so the first visit after that takes a moment while it wakes and regenerates the data.
+
+Setup steps and caveats are in [docs/hosting.md](docs/hosting.md).
+
+## Run the live agent locally, with your own key
+
+The hosted demo and the GitHub workflows never run a model and hold no key. To run the agent yourself on the dev smoke scenario:
+
+```bash
+read -rs "MISTRAL_API_KEY?Mistral API key (hidden): " && export MISTRAL_API_KEY && echo   # zsh; in bash: read -rsp
+.venv/bin/python -m sentinelops.evaluation.agent_run --backend mistral --model ministral-14b-2512 \
+    --rpm 25 --tpm 750000 --smoke sc-45fa1390ea --out-root /tmp/sentinelops-agent
+unset MISTRAL_API_KEY
+```
+
+- **The key:** it lives only in the shell's environment. It is never written to a file, a trace or a summary, and error bodies are redacted before anything is stored.
+- **Held-out data is refused in code.**
+- **`--out-root /tmp/...`** keeps the committed outputs in `eval/agent/` untouched.
+- **Without a key, locally:** the same command takes `--backend ollama` with a local Ollama server (loopback only).
+- **The M5 fresh-split outputs are consumed.** Rerunning them would be a new, separately labelled experiment.
+
 ## Architecture
 
 ```mermaid

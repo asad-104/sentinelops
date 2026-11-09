@@ -5,6 +5,8 @@ The hosted demo is the local viewer with one extra step at startup:
 - **What it shows:** dev scenarios, committed dev traces, and the M5 results as aggregate counts only.
 - **What it never does:** list fresh-split runs, read held-out paths, call a model, or use a secret.
 
+**Deployed:** https://sentinelops-h6ojswgwloadsztqq6jltq.streamlit.app, first successful deploy on 2026-11-09.
+
 UI labels below are from the Community Cloud docs, as checked on 2026-11-09. They may change.
 
 ## Steps

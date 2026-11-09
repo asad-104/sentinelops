@@ -1744,8 +1744,9 @@ Each refusal is recorded.
   - **`docs/demo_script.md`:** about 60–90 s, using dev runs 3 (correct) and 12 (config_error ranked as pool exhaustion) and the M5 page.
 - **Publishing (2026-11-09):**
   - **Remote:** private GitHub repo `asad-104/sentinelops`, created by the user. `main` and the tags `m2-complete` to `m5-complete` were pushed, with the commit identity of that time. CI was green on that push (checked by the user).
-  - **Identity rewrite:** on 2026-11-09, the author, committer and tagger email was changed in a separate clone, from a machine-default address to the GitHub noreply address (`docs/history_rewrite.md`). That rewritten history is local only, and the user decides how to publish it.
-  - **Not done yet:** switching the repo to public after a render check, and the user's demo recording.
+  - **Identity rewrite:** on 2026-11-09, the author, committer and tagger email was changed in a separate clone, from a machine-default address to the GitHub noreply address (`docs/history_rewrite.md`). The rewritten history (`main` and the four tags) was then pushed to a new, empty repo of the same name, and the working repo was reset to it. The old local feature branches were renamed `old-*`.
+  - **Public and deployed:** the repo is public, and the viewer is deployed on Streamlit Community Cloud at https://sentinelops-h6ojswgwloadsztqq6jltq.streamlit.app (first successful deploy 2026-11-09).
+  - **M6 is done,** except the optional narrated demo, which the user records.
 
 ## Baseline tuning log
 Every change to the rule baseline's keywords or thresholds after v1 is recorded here with a date and reason. Tuning uses dev data only.

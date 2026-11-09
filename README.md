@@ -78,7 +78,7 @@ The viewer's pages: M1 scenario explorer, M2 tiers and dev results, M3 pilot tra
 
 ## Hosted demo
 
-The viewer is also hosted on Streamlit Community Cloud. **The link is added once the app is public.**
+The viewer is also hosted on Streamlit Community Cloud: **[open the hosted viewer](https://sentinelops-h6ojswgwloadsztqq6jltq.streamlit.app)**.
 - **What it shows:** dev scenarios, committed dev traces, and the M5 results as aggregate counts only.
 - **What it never does:** call a model, read a secret, list fresh-split runs, or read held-out data.
 - **On a cold start** it generates the synthetic dev split and checks it against the frozen manifest.

@@ -1,11 +1,11 @@
 # SentinelOps M4 + M5 report: an explicit-state investigation agent against a single-pass baseline
 
 **Status:** draft, 2026-11-06. Every number here is taken from committed outputs and was checked against them:
-- the M4 core runs (8f327bc)
-- the M5 dev gate (7b826a7, report c1db227)
-- the fresh-split runs (439b5ca) and their analysis (`eval/m5/generator-v5/m5_analysis.json`, 7e10fd5)
-- the safety test (439b5ca)
-- E1 (c1bea45, report 175f3b1)
+- the M4 core runs (f54d0f2)
+- the M5 dev gate (026bb59, report 1736230)
+- the fresh-split runs (6915e0b) and their analysis (`eval/m5/generator-v5/m5_analysis.json`, 2eaf683)
+- the safety test (6915e0b)
+- E1 (282ca60, report 24d829a)
 
 Detailed records live in `docs/PROGRESS.md` and `docs/m5_preregistration.md`.
 
@@ -111,7 +111,7 @@ Detailed records live in `docs/PROGRESS.md` and `docs/m5_preregistration.md`.
 - **The fresh split** (m5fresh): 60 originals, 30 standard, 15 ambiguous and 15 missing-evidence; 12 per fault type.
   - 24 scenarios have a trigger record: the 12 bad_deployment and 12 config_error scenarios.
   - 21 carry injected log lines (about 24 were expected).
-- **All runs:** one attempt each, from code `291311f`, with no provider stop and no rerun.
+- **All runs:** one attempt each, from code `c7cd586`, with no provider stop and no rerun.
 
 | Arm | What it is | Calls |
 |---|---|---|
